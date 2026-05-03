@@ -1,0 +1,443 @@
+# Contributing to OneTerminal
+
+This guide covers how the framework is structured for contribution, with a focus on the scaffolding system — the part most likely to need maintenance as the framework evolves.
+
+---
+
+## Table of Contents
+
+- [Development Setup](#development-setup)
+- [Repo Layout](#repo-layout)
+- [Making Framework Changes](#making-framework-changes)
+  - [Step 1 — Edit the live app](#step-1--edit-the-live-app)
+  - [Step 2 — Re-extract templates](#step-2--re-extract-templates)
+  - [Step 3 — Add a migration (if needed)](#step-3--add-a-migration-if-needed)
+  - [Step 4 — Bump the version](#step-4--bump-the-version)
+  - [Step 5 — Open a PR](#step-5--open-a-pr)
+- [The Template System](#the-template-system)
+  - [How templates are generated](#how-templates-are-generated)
+  - [Substitution table](#substitution-table)
+  - [Conditional lines (`ot:if`)](#conditional-lines-otif)
+  - [Static and binary files](#static-and-binary-files)
+- [Updating the Scaffolder](#updating-the-scaffolder)
+  - [The `create/` module](#the-create-module)
+  - [The `upgrade/` module](#the-upgrade-module)
+  - [The `merge/` module](#the-merge-module)
+- [Migration Reference](#migration-reference)
+  - [`config-merge`](#config-merge)
+  - [`dep-bump`](#dep-bump)
+  - [`structural`](#structural)
+- [Publishing a Release](#publishing-a-release)
+- [Cargo Generate Template](#cargo-generate-template)
+- [CI Workflows](#ci-workflows)
+- [Naming Conventions](#naming-conventions)
+
+---
+
+## Development Setup
+
+### Prerequisites
+
+| Tool | Version |
+|---|---|
+| [Rust](https://rustup.rs) | stable ≥ 1.77 |
+| [Node.js](https://nodejs.org) | ≥ 20 LTS |
+| Xcode Command Line Tools | macOS only — `xcode-select --install` |
+| [cargo-generate](https://github.com/cargo-generate/cargo-generate) | for Cargo template work only |
+
+### Install dependencies
+
+```sh
+npm install
+```
+
+### Verify everything builds
+
+```sh
+cargo check --workspace
+npm run build:scaffolder
+```
+
+---
+
+## Repo Layout
+
+```
+one-terminal/
+├── apps/                              Source-of-truth app code
+│   ├── one-terminal/                  Window manager (Tauri 2)
+│   ├── desktop-agent/                 FDC3 broker + engine launcher (Tauri 2)
+│   ├── tauri-webview-host/            Thin host for pinned WebView2/WKWebView
+│   ├── electron-host/                 Thin Electron host
+│   └── app-directory/                 FDC3 AppD REST API + management UI
+├── packages/
+│   ├── ot-core/                       Shared Rust crate
+│   ├── ot-fdc3/                       Tauri FDC3 spoke plugin
+│   ├── fdc3-plugin/                   Browser FDC3 client JS
+│   ├── fdc3-client/                   TypeScript FDC3 types
+│   └── create-one-terminal/           npm create scaffolder + upgrade tool
+│       ├── src/
+│       │   ├── create/                scaffold new workspace
+│       │   ├── upgrade/               upgrade an existing workspace
+│       │   └── merge/                 JSON + TOML merge helpers
+│       ├── templates/                 ← GENERATED, never hand-edited
+│       └── versions.json              upgrade migration manifest
+├── templates/
+│   └── cargo/
+│       └── tauri-app/                 cargo generate template (Liquid)
+├── scripts/
+│   ├── extract-templates.ts           derives EJS templates from apps/
+│   └── check-template-drift.ts        CI drift check
+└── .github/workflows/
+    ├── template-drift.yml             blocks PRs with stale templates
+    └── publish-scaffolder.yml         publishes on v* tags
+```
+
+**Key rule:** `packages/create-one-terminal/templates/` is always derived from `apps/` by the extractor script. Never edit files inside `templates/` by hand — your changes will be overwritten and the CI drift check will reject the PR.
+
+---
+
+## Making Framework Changes
+
+The apps in `apps/` are the canonical source. When you change app code, the EJS scaffolding templates must be regenerated so that `npm create one-terminal` produces a workspace that reflects your changes.
+
+### Step 1 — Edit the live app
+
+Work directly in `apps/one-terminal/`, `apps/desktop-agent/`, `packages/ot-core/`, etc. as normal. If a new config key, dependency, or file is being introduced that scaffolded projects should receive, make the change in the live app first.
+
+If the new value should be user-customisable at scaffold time (e.g. a port number), add it to:
+
+1. `ScaffoldContext` interface in [packages/create-one-terminal/src/create/context.ts](packages/create-one-terminal/src/create/context.ts)
+2. The prompts in [packages/create-one-terminal/src/create/prompts.ts](packages/create-one-terminal/src/create/prompts.ts)
+3. The substitution table in [scripts/extract-templates.ts](scripts/extract-templates.ts) (see [Substitution table](#substitution-table) below)
+
+### Step 2 — Re-extract templates
+
+```sh
+npm run extract-templates
+```
+
+This re-runs the extractor, walks all source trees, applies the substitution table, and regenerates every `.ejs` file under `packages/create-one-terminal/templates/`. Review the diff to confirm only the expected changes appear:
+
+```sh
+git diff packages/create-one-terminal/templates/
+```
+
+Commit the updated templates together with your app change in the same PR:
+
+```sh
+git add apps/ packages/ot-core/   # your app changes
+git add packages/create-one-terminal/templates/
+git commit -m "feat: <describe change>"
+```
+
+If you forget this step, CI will block the PR (see [CI Workflows](#ci-workflows)).
+
+### Step 3 — Add a migration (if needed)
+
+A migration is needed only when your change should automatically propagate to **already-scaffolded projects** when their owners run `npx create-one-terminal upgrade`.
+
+Ask yourself: if someone scaffolded a workspace last week and upgrades today, what do they need to receive?
+
+- New config key with a default value → `config-merge`
+- Dependency version bump → `dep-bump`
+- New file or structural file edit → `structural`
+- Pure internal refactor with no user-visible surface → no migration needed
+
+See [Migration Reference](#migration-reference) for the full spec and examples.
+
+### Step 4 — Bump the version
+
+In [packages/create-one-terminal/versions.json](packages/create-one-terminal/versions.json), add a new entry at the top of the `versions` array:
+
+```json
+{
+  "version": "0.2.0",
+  "releaseDate": "2026-06-01",
+  "breaking": false,
+  "changelogUrl": "https://github.com/one-terminal/one-terminal/releases/tag/v0.2.0",
+  "migrations": [
+    // paste migration specs here if applicable
+  ]
+}
+```
+
+Set `"breaking": true` if scaffolded projects cannot safely upgrade without manual intervention (e.g. renamed Rust type, removed config field). This will be surfaced as a warning in the upgrade CLI.
+
+Also update `"oneTerminal": { "version": "..." }` in [packages/create-one-terminal/src/create/post-scaffold.ts](packages/create-one-terminal/src/create/post-scaffold.ts) to match, so newly scaffolded projects start on the right version.
+
+### Step 5 — Open a PR
+
+The CI drift check will run automatically and confirm templates are in sync. Once merged, a release is cut by pushing a `v*` tag (see [Publishing a Release](#publishing-a-release)).
+
+---
+
+## The Template System
+
+### How templates are generated
+
+`scripts/extract-templates.ts` walks each source tree in the `SOURCES` array, applies an ordered substitution table to text files, and writes the results as `.ejs` files into `packages/create-one-terminal/templates/`.
+
+When `npm create one-terminal` runs, `packages/create-one-terminal/src/create/render.ts` walks those `.ejs` files, renders them through EJS with a `ScaffoldContext` object, and writes the output to the new workspace directory.
+
+**EJS was chosen over Handlebars** because Rust source files, TOML, and Tauri JSON configs all use `{{` / `}}` extensively. EJS uses `<%= %>` delimiters which have no conflict.
+
+### Substitution table
+
+The substitution table in [scripts/extract-templates.ts](scripts/extract-templates.ts) maps literal strings in the source apps to EJS expressions. Entries are applied in order — more-specific strings must come before less-specific ones.
+
+Example entries:
+
+| Literal in source app | EJS in template |
+|---|---|
+| `com.one-terminal.desktop-agent` | `<%= tauriIdentifier %>.agent` |
+| `com.one-terminal` | `<%= tauriIdentifier %>` |
+| `@one-terminal/desktop-agent` | `@<%= orgScope %>/desktop-agent` |
+| `http://localhost:1422` | `http://localhost:<%= terminalDevPort %>` |
+| `"port": 1421` | `"port": <%= agentDevPort %>` |
+
+To add a new substitutable value:
+
+1. Add a `ScaffoldContext` field in `context.ts`
+2. Add a prompt in `prompts.ts` (or derive it automatically in `buildContext()`)
+3. Add the substitution pair in `SUBSTITUTIONS` in `extract-templates.ts` — longest/most-specific literal first
+4. Run `npm run extract-templates` to verify the output looks correct
+
+### Conditional lines (`ot:if`)
+
+A source line annotated with `# ot:if varName` (shell/TOML) or `// ot:if varName` (JS/Rust/JSON) is wrapped in an EJS `if` block during extraction.
+
+**Source line:**
+```toml
+ot-fdc3 = { workspace = true }  # ot:if includeFdc3
+```
+
+**Generated template:**
+```ejs
+<% if (includeFdc3) { %>
+ot-fdc3 = { workspace = true }
+<% } %>
+```
+
+The variable name after `ot:if` must match a boolean field on `ScaffoldContext`. This is the only mechanism for conditional template content — do not add EJS `if` blocks directly to source files.
+
+### Static and binary files
+
+Some files are always copied verbatim (never templated):
+
+- **Binary extensions** — `.png`, `.ico`, `.icns`, `.svg`
+- **Static filenames** — `build.rs`, `vite-env.d.ts`, `.gitkeep`
+
+To add a file that should always be copied unchanged, add its filename to the `STATIC_FILENAMES` set in [scripts/extract-templates.ts](scripts/extract-templates.ts).
+
+---
+
+## Updating the Scaffolder
+
+### The `create/` module
+
+| File | Responsibility |
+|---|---|
+| `context.ts` | `ScaffoldContext` type + `buildContext()` derivations |
+| `prompts.ts` | Interactive CLI prompts using `@clack/prompts` |
+| `render.ts` | Walks `templates/`, renders `.ejs` files, writes atomically |
+| `post-scaffold.ts` | Injects `oneTerminal.version` into generated `package.json`, prints next-step instructions |
+
+### The `upgrade/` module
+
+| File | Responsibility |
+|---|---|
+| `index.ts` | Orchestrates the 9-step upgrade flow |
+| `detect.ts` | Reads `oneTerminal.version` from target `package.json` |
+| `manifest.ts` | Fetches `versions.json` from the installed package |
+| `chain.ts` | Builds the ordered list of migrations to apply |
+| `backup.ts` | Snapshots affected files to `.one-terminal/upgrade-backup-<ver>/` |
+| `restore.ts` | Restores snapshot on failure |
+| `conflict.ts` | Handles `_managed`-field conflicts: auto / skip / merge |
+| `report.ts` | Writes `.one-terminal/upgrade-report-<ver>.md` |
+| `migrations/types.ts` | `MigrationSpec`, `VersionEntry`, `VersionsManifest` types |
+
+### The `merge/` module
+
+| File | Responsibility |
+|---|---|
+| `json-deep-merge.ts` | Deep merges patch into JSON, respects `_managed` annotations |
+| `toml-dep-bump.ts` | Bumps versions in `Cargo.toml` workspace deps and `package.json` |
+
+---
+
+## Migration Reference
+
+Migrations live in the `migrations` array of a version entry in [packages/create-one-terminal/versions.json](packages/create-one-terminal/versions.json). Each migration has an `id` (unique string, used to skip already-applied migrations on re-runs) and a `target` (relative path from the scaffolded workspace root).
+
+### `config-merge`
+
+Deep-merges a `patch` object into a JSON config file. Only fields listed in the file's `_managed` array will be written; user-modified values outside that array are left untouched.
+
+Use this for: adding a new key to `agent.config.json`, updating a URL default, adding a new section.
+
+```json
+{
+  "type": "config-merge",
+  "id": "0.2.0-add-dacpBridge-port",
+  "target": "apps/desktop-agent/src-tauri/resources/agent.config.json",
+  "description": "Add dacpBridge port to agent config",
+  "patch": {
+    "ports": {
+      "dacpBridge": 4475
+    }
+  }
+}
+```
+
+To make a config field managed (so the upgrade tool may write to it), add its key to the `_managed` array in the source file:
+
+```json
+{
+  "_managed": ["appDirectoryUrl", "engineCatalogUrl", "ports.dacpBridge"],
+  "appDirectoryUrl": "http://localhost:3005"
+}
+```
+
+### `dep-bump`
+
+Bumps a dependency version in `Cargo.toml` (workspace dependencies) or `package.json`.
+
+Use this for: updating `ot-fdc3`, `ot-core`, or any shared package version shipped with the framework.
+
+```json
+{
+  "type": "dep-bump",
+  "id": "0.2.0-bump-ot-fdc3",
+  "target": "Cargo.toml",
+  "description": "Bump ot-fdc3 to 0.2.0",
+  "deps": [
+    { "name": "ot-fdc3", "ecosystem": "cargo", "newVersion": "0.2.0" }
+  ]
+}
+```
+
+```json
+{
+  "type": "dep-bump",
+  "id": "0.2.0-bump-fdc3-client",
+  "target": "package.json",
+  "description": "Bump @one-terminal/fdc3-client to 0.2.0",
+  "deps": [
+    { "name": "@one-terminal/fdc3-client", "ecosystem": "npm", "newVersion": "0.2.0" }
+  ]
+}
+```
+
+### `structural`
+
+Applies line-level patch operations to any file. Use for changes that cannot be expressed as a JSON merge or dep bump — for example, adding a Tauri plugin registration line to `lib.rs`, or inserting a new npm script into `package.json`.
+
+```json
+{
+  "type": "structural",
+  "id": "0.2.0-register-new-plugin",
+  "target": "apps/desktop-agent/src-tauri/src/lib.rs",
+  "description": "Register the new ot-metrics plugin",
+  "operations": [
+    {
+      "op": "insert-after-line-matching",
+      "pattern": ".plugin(ot_fdc3::init())",
+      "content": "        .plugin(ot_metrics::init())"
+    }
+  ]
+}
+```
+
+**Available operations:**
+
+| `op` | Behaviour |
+|---|---|
+| `insert-after-line-matching` | Inserts `content` on the line immediately after the first line matching `pattern` |
+| `replace-line-matching` | Replaces the first line matching `pattern` with `replacement` |
+| `add-file` | Copies `sourcePath` (relative to package root) to `targetPath` in the workspace |
+
+Structural migrations are applied in declaration order. Keep operations minimal and targeted — prefer `config-merge` or `dep-bump` when they cover the use case.
+
+---
+
+## Publishing a Release
+
+Publishing is fully automated once a `v*` tag is pushed. The CI publish workflow ([`.github/workflows/publish-scaffolder.yml`](.github/workflows/publish-scaffolder.yml)):
+
+1. Re-extracts templates from source apps
+2. Asserts `git diff --exit-code` on the templates directory — fails if templates are out of sync (prevents a stale publish)
+3. Builds `create-one-terminal`
+4. Runs `npm publish`
+
+To cut a release:
+
+```sh
+# Ensure main is clean and all changes are merged
+git checkout main
+git pull
+
+# Tag — semver, must start with v
+git tag v0.2.0
+git push origin v0.2.0
+```
+
+> The publish workflow requires `NPM_TOKEN` to be set as a repository secret with publish access to the `create-one-terminal` package.
+
+### Tagging the Cargo template
+
+The Cargo generate template (`templates/cargo/tauri-app/`) is consumed directly from the Git repository. When the template changes materially, tag it separately so users can pin to a known-good version:
+
+```sh
+git tag cargo-template-v0.2.0
+git push origin cargo-template-v0.2.0
+```
+
+Document the new tag in the [Cargo template README](templates/cargo/README.md).
+
+---
+
+## Cargo Generate Template
+
+The Cargo template at `templates/cargo/tauri-app/` uses [Liquid](https://shopify.github.io/liquid/) syntax (`.liquid` files) via `cargo-generate`. It is maintained independently of the EJS template system — edit its `.liquid` files directly when the Tauri crate structure changes.
+
+See [templates/cargo/README.md](templates/cargo/README.md) for usage and [templates/cargo/tauri-app/README.md](templates/cargo/tauri-app/README.md) for the full placeholder and naming convention reference.
+
+**Known limitation:** `cargo generate` has no access to the npm workspace, so `tauri.conf.json.liquid` emits `@YOUR_SCOPE` as a literal placeholder. Document any such limitations in `templates/cargo/tauri-app/README.md` when encountered.
+
+---
+
+## CI Workflows
+
+### Template drift check
+
+**File:** [`.github/workflows/template-drift.yml`](.github/workflows/template-drift.yml)
+
+**Triggers on:** push or PR touching `apps/**`, `packages/ot-*/**`, or `Cargo.toml`
+
+Runs `scripts/extract-templates.ts` into `/tmp`, then diffs the output against the committed templates. Fails with a clear diff if they diverge. The failure message tells the contributor exactly what to do:
+
+> "Run `npm run extract-templates` locally and commit the updated templates."
+
+This is the primary guard against templates drifting out of sync with the live apps. It should never need modification unless new source trees are added to the extractor's `SOURCES` array — in which case also add those paths to the `paths:` filter in this workflow.
+
+### Publish scaffolder
+
+**File:** [`.github/workflows/publish-scaffolder.yml`](.github/workflows/publish-scaffolder.yml)
+
+**Triggers on:** push of any `v*` tag
+
+Re-extracts templates, asserts no drift, builds, and publishes. The double-extraction (developer ran it locally before tagging, workflow runs it again) is intentional — it prevents a tag from being pushed on a branch where the developer forgot to re-extract.
+
+---
+
+## Naming Conventions
+
+- Framework name: **OneTerminal** (not "One Terminal" or "one-terminal" in prose)
+- Container window app: **Terminal** (the `one-terminal` Tauri app)
+- Broker app: **Desktop Agent** (the `desktop-agent` Tauri app)
+- Rust package names: `one-terminal`, `desktop-agent`, `tauri-webview-host`, `ot-core`, `ot-fdc3`
+- npm package names: `@one-terminal/*`
+- All environment variables: `OT_*` prefix
+
+Preserve these in both source app code and in the substitution table in [scripts/extract-templates.ts](scripts/extract-templates.ts). If a name ever changes in the apps, update the substitution table simultaneously so the templates stay consistent.
