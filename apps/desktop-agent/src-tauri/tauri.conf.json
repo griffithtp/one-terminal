@@ -1,0 +1,40 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "desktop-agent",
+  "version": "0.1.0",
+  "identifier": "com.one-terminal.desktop-agent",
+  "build": {
+    "beforeDevCommand": "npm -w @one-terminal/desktop-agent run dev",
+    "devUrl": "http://localhost:1421",
+    "beforeBuildCommand": "npm -w @one-terminal/desktop-agent run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "desktop-agent-dashboard",
+        "title": "OneTerminal Desktop Agent",
+        "width": 1100,
+        "height": 700
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "resources": {
+      "resources/agent.config.json": "resources/agent.config.json",
+      "resources/plugins/**/*": "resources/plugins"
+    }
+  }
+}

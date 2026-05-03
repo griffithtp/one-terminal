@@ -1,0 +1,13 @@
+{
+  "name": "@one-terminal/fdc3-plugin",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Vanilla-JS FDC3 2.2 shim for apps launched by the Central Desktop Agent",
+  "type": "module",
+  "exports": {
+    ".": "./fdc3-plugin.js"
+  },
+  "files": [
+    "fdc3-plugin.js"
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:v2.tauri.app)",
+      "WebFetch(domain:docs.rs)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:tauri.app)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(curl -s https://raw.githubusercontent.com/tauri-apps/tauri/dev/core/tauri/Cargo.toml)",
+      "Bash(curl -s \"https://api.github.com/repos/tauri-apps/wry/releases/latest\")",
+      "WebFetch(domain:crates.io)",
+      "Bash(npm run *)",
+      "Bash(curl -sf http://localhost:3005/health)",
+      "Bash(curl -s http://localhost:3005/v2/engines)",
+      "Bash(python3 -m json.tool)",
+      "Bash(curl -s http://localhost:3005/v2/apps/chart-viewer)",
+      "Bash(python3 -c \"import sys, json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\(d.get\\('engineBindings'\\), indent=2\\)\\)\")",
+      "Bash(curl -s -o /tmp/x.json -w \"HTTP %{http_code}\\\\n\" -X POST http://localhost:3005/v2/apps -H 'Content-Type: application/json' -d '{\"appId\":\"test-bad\",\"name\":\"Test\",\"type\":\"web\",\"details\":{\"url\":\"http://x\"},\"engineBindings\":{\"windows\":{\"family\":\"webview2\",\"version\":\"999.999.0\"}}}')",
+      "Read(//tmp/**)",
+      "Bash(curl -s -o /tmp/y.json -w \"HTTP %{http_code}\\\\n\" -X POST http://localhost:3005/v2/apps -H 'Content-Type: application/json' -d '{\"appId\":\"test-ok\",\"name\":\"Test\",\"type\":\"web\",\"details\":{\"url\":\"http://x\"},\"engineBindings\":{\"macos\":{\"family\":\"electron\",\"version\":\"29.3.0\"}}}')",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\({'appId':d.get\\('appId'\\),'engineBindings':d.get\\('engineBindings'\\)}, indent=2\\)\\)\")",
+      "Bash(curl -s -o /dev/null -w \"DELETE HTTP %{http_code}\\\\n\" -X DELETE http://localhost:3005/v2/apps/test-ok)",
+      "Bash(kill %1)",
+      "Bash(curl -sf http://localhost:5174/)",
+      "Bash(curl -s http://localhost:5174/)",
+      "Bash(lsof -i:5174 -i:3005 -sTCP:LISTEN)",
+      "Bash(cargo metadata *)",
+      "Bash(python3 -c \"import sys, json; d = json.load\\(sys.stdin\\); [print\\(p['name']\\) for p in d['packages']]\")",
+      "Bash(cargo clean *)",
+      "Bash(python3 -c \"import sys,json; [print\\(p['name']\\) for p in json.load\\(sys.stdin\\)['packages']]\")",
+      "Bash(cargo check *)"
+    ]
+  }
+}

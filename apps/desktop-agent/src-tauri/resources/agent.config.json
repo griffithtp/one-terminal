@@ -1,0 +1,20 @@
+{
+  "title": "OneTerminal Desktop Agent",
+  "appDirectoryUrl": "http://localhost:3005",
+  "engineCatalogUrl": "http://localhost:3005",
+  "ports": {
+    "tcpBroker": 7890,
+    "fdc3Bus": 7891,
+    "dacpBridge": 4475
+  },
+  "userChannels": [
+    { "id": "Red",    "displayName": "Red",    "color": "#E74C3C" },
+    { "id": "Orange", "displayName": "Orange", "color": "#E67E22" },
+    { "id": "Yellow", "displayName": "Yellow", "color": "#F1C40F" },
+    { "id": "Green",  "displayName": "Green",  "color": "#2ECC71" },
+    { "id": "Teal",   "displayName": "Teal",   "color": "#1ABC9C" },
+    { "id": "Blue",   "displayName": "Blue",   "color": "#3498DB" },
+    { "id": "Purple", "displayName": "Purple", "color": "#9B59B6" },
+    { "id": "Pink",   "displayName": "Pink",   "color": "#EC407A" }
+  ]
+}

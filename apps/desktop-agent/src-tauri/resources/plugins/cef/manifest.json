@@ -1,0 +1,17 @@
+{
+  "_comment": "Example plugin manifest for Chromium Embedded Framework (CEF).",
+  "_comment2": "Copy this file (without _comment keys) to <engine-cache>/plugins/cef/manifest.json.",
+  "family": "cef",
+  "label": "Chromium Embedded Framework",
+  "supportedPlatforms": ["windows", "macos", "linux"],
+  "launchMode": {
+    "type": "spawnBinary",
+    "binaryName": "cef-host",
+    "envTemplates": [
+      { "key": "CEF_URL",          "value": "{{url}}" },
+      { "key": "CEF_TITLE",        "value": "{{title}}" },
+      { "key": "CEF_APP_ID",       "value": "{{app_id}}" },
+      { "key": "CEF_RUNTIME_PATH", "value": "{{runtime_path}}" }
+    ]
+  }
+}

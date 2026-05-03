@@ -1,0 +1,81 @@
+# @one-terminal/fdc3-plugin
+
+A dependency-free, vanilla-JS FDC3 2.2 Desktop Agent shim for **spoke apps** (browser pages) launched by the OneTerminal Desktop Agent.
+
+## What it does
+
+`fdc3-plugin.js` opens a WebSocket to the Desktop Agent's FDC3 Bus (`ws://localhost:7891/fdc3`) and exposes the full FDC3 2.2 `DesktopAgent` interface. It has no build step and no npm dependencies — it is a single file you serve as a static asset.
+
+When loaded via a `<script>` tag it automatically sets `window.fdc3` and fires `window.fdc3Ready` once the handshake with the Desktop Agent completes.
+
+## Bus URL resolution
+
+The WebSocket URL is resolved in this order:
+
+1. `<meta name="ot-fdc3-bus-url" content="ws://...">` in the page `<head>`
+2. `window.OT_FDC3_BUS_URL`
+3. Fallback: `ws://localhost:7891/fdc3`
+
+## Usage
+
+### As a `<script>` tag (auto-init)
+
+```html
+<!-- Optional: override the default bus URL -->
+<meta name="ot-fdc3-bus-url" content="ws://localhost:7891/fdc3">
+
+<script type="module" src="/fdc3-plugin.js"></script>
+<script type="module">
+  // window.fdc3Ready resolves once the handshake completes
+  const fdc3 = await window.fdc3Ready;
+
+  await fdc3.joinUserChannel('red');
+  await fdc3.broadcast({ type: 'fdc3.instrument', id: { ticker: 'AAPL' } });
+
+  fdc3.addContextListener('fdc3.instrument', (ctx) => {
+    console.log('received instrument', ctx.id.ticker);
+  });
+</script>
+```
+
+### As an ES module import
+
+```js
+import { DesktopAgentClient } from '/fdc3-plugin.js';
+
+const fdc3 = await DesktopAgentClient.connect('my-app-id');
+
+// Join a user channel
+await fdc3.joinUserChannel('green');
+
+// Broadcast context
+await fdc3.broadcast({ type: 'fdc3.instrument', id: { ticker: 'EURUSD' } });
+
+// Listen for context
+const listener = await fdc3.addContextListener('fdc3.instrument', (ctx, meta) => {
+  console.log('instrument from', meta?.source?.appId, '→', ctx.id.ticker);
+});
+
+// Raise an intent
+const resolution = await fdc3.raiseIntent('ViewChart', {
+  type: 'fdc3.instrument',
+  id: { ticker: 'EURUSD' },
+});
+console.log('handled by', resolution.source.appId);
+
+// Clean up
+listener.unsubscribe();
+fdc3.disconnect();
+```
+
+## Serving from a dev server
+
+Both sample apps proxy-serve the file directly from the monorepo, mapping the request path `/fdc3-plugin.js` to `packages/fdc3-plugin/fdc3-plugin.js`. See [apps/sample-ticker/server.js](../../apps/sample-ticker/server.js) for an example.
+
+## Where it is used
+
+| App | How |
+|---|---|
+| `apps/sample-ticker` | Served at `/fdc3-plugin.js` by `server.js`; imported in `index.html` |
+| `apps/sample-chart-viewer` | Served at `/fdc3-plugin.js` by `server.js`; imported in `index.html` |
+| Any third-party spoke app | Copy or serve the file; add a `<script>` tag |

@@ -1,0 +1,31 @@
+[package]
+name = "desktop-agent"
+version = "0.1.0"
+description = "OneTerminal Desktop Agent — FDC3 2.2 centralised hub for all spoke apps"
+authors = ["one-terminal"]
+edition = "2021"
+
+[lib]
+name = "desktop_agent_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri               = { workspace = true, features = ["tray-icon"] }
+tauri-plugin-opener = { workspace = true }
+serde               = { workspace = true }
+serde_json          = { workspace = true }
+tokio               = { workspace = true }
+rand                = { workspace = true }
+dashmap             = { workspace = true }
+axum                = { workspace = true }
+tower-http          = { workspace = true }
+tokio-tungstenite   = { workspace = true }
+futures-util        = { workspace = true }
+reqwest             = { workspace = true }
+sha2                = { workspace = true }
+hex                 = { workspace = true }
+zip                 = { workspace = true }
+ot-core             = { workspace = true }
