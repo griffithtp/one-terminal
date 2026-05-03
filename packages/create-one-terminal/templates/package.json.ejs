@@ -1,0 +1,39 @@
+{
+  "name": "<%= workspaceName %>",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:terminal": "npm -w @<%= orgScope %>/one-terminal run tauri:dev",
+    "build:terminal": "npm -w @<%= orgScope %>/one-terminal run tauri:build",
+    "dev:vite:terminal": "npm -w @<%= orgScope %>/one-terminal run dev",
+    "dev:terminal:pin": "OT_ENGINE_FAMILY=webview2 OT_ENGINE_VERSION=124.0.2478.97 npm -w @<%= orgScope %>/one-terminal run tauri:dev",
+    "dev:terminal:electron": "OT_ELECTRON_HOST_OVERRIDE=$INIT_CWD/apps/electron-host npm -w @<%= orgScope %>/one-terminal run tauri:dev",
+    "dev:desktop-agent": "npm -w @<%= orgScope %>/desktop-agent run tauri:dev",
+    "build:desktop-agent": "npm -w @<%= orgScope %>/desktop-agent run tauri:build",
+    "dev:vite:desktop-agent": "npm -w @<%= orgScope %>/desktop-agent run dev",
+    "dev:desktop-agent:electron": "OT_ELECTRON_HOST_OVERRIDE=$INIT_CWD/apps/electron-host npm -w @<%= orgScope %>/desktop-agent run tauri:dev",
+    "dev:desktop-agent:pin": "OT_ENGINE_FAMILY=webview2 OT_ENGINE_VERSION=124.0.2478.97 npm -w @<%= orgScope %>/desktop-agent run tauri:dev",
+    "dev:sample-ticker": "npm -w @<%= orgScope %>/sample-ticker run dev",
+    "dev:sample-chart-viewer": "npm -w @<%= orgScope %>/sample-chart-viewer run dev",
+    "dev:app-directory": "npm -w @<%= orgScope %>/app-directory run dev",
+    "build:app-directory": "npm -w @<%= orgScope %>/app-directory run build",
+    "start:app-directory": "npm -w @<%= orgScope %>/app-directory run start",
+    "build:tauri-webview-host": "cargo build -p tauri-webview-host",
+    "setup:electron-host": "npm install -w @<%= orgScope %>/electron-host",
+    "start:electron-host": "npm -w @<%= orgScope %>/electron-host start",
+    "build:all": "npm -w @<%= orgScope %>/one-terminal run build && npm -w @<%= orgScope %>/desktop-agent run build && npm -w @<%= orgScope %>/app-directory run build",
+    "extract-templates": "npx tsx scripts/extract-templates.ts",
+    "check-template-drift": "npx tsx scripts/check-template-drift.ts",
+    "build:scaffolder": "npm -w create-one-terminal run build",
+    "scaffold": "node packages/create-one-terminal/dist/index.js"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.4",
+    "typescript": "~5.8.3"
+  }
+}

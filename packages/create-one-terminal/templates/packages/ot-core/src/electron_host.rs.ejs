@@ -1,0 +1,137 @@
+//! Shared launcher for the `apps/electron-host/` shell.
+//!
+//! Both the desktop agent and the Terminal need to spawn the same
+//! Electron-app shell when an app requests the Electron engine. This module
+//! owns the search-and-spawn logic so both call sites stay aligned.
+//!
+//! Resolution order:
+//!
+//! - **Shell folder** (`main.js` + `package.json`):
+//!   1. `OT_ELECTRON_HOST_OVERRIDE` env var — point at `apps/electron-host/`
+//!      during development.
+//!   2. `<exe-dir>/electron-host/` — the ship-alongside layout used in
+//!      release builds.
+//!
+//! - **Electron binary**:
+//!   1. `OT_ELECTRON_BIN` env var — explicit override.
+//!   2. The catalog-installed runtime at
+//!      `<cache-root>/electron/<version>/`.
+//!   3. The shell's own `node_modules/electron/dist/` — populated by
+//!      `npm install -w @<%= orgScope %>/electron-host` during development.
+
+use std::path::{Path, PathBuf};
+
+use crate::engine::{binding_path, EngineBinding};
+
+/// Resolve the directory that contains the electron-host shell entry point.
+pub fn locate_electron_shell() -> Result<PathBuf, String> {
+    if let Ok(raw) = std::env::var("OT_ELECTRON_HOST_OVERRIDE") {
+        let p = PathBuf::from(&raw);
+        if p.is_dir() && p.join("main.js").is_file() {
+            return Ok(p);
+        }
+        eprintln!(
+            "[electron-host] OT_ELECTRON_HOST_OVERRIDE={} is not a usable shell directory; falling back",
+            p.display()
+        );
+    }
+    let exe = std::env::current_exe().map_err(|e| format!("current_exe: {e}"))?;
+    let dir = exe.parent().ok_or_else(|| "exe has no parent dir".to_string())?;
+    let candidate = dir.join("electron-host");
+    if candidate.is_dir() && candidate.join("main.js").is_file() {
+        return Ok(candidate);
+    }
+    Err(format!(
+        "electron-host shell not found — expected {} or set OT_ELECTRON_HOST_OVERRIDE to apps/electron-host",
+        candidate.display(),
+    ))
+}
+
+/// Resolve the Electron executable to launch the shell with.
+pub fn locate_electron_binary(
+    binding: &EngineBinding,
+    cache_root: &Path,
+    shell_dir: &Path,
+) -> Result<PathBuf, String> {
+    if let Ok(raw) = std::env::var("OT_ELECTRON_BIN") {
+        let p = PathBuf::from(&raw);
+        if p.is_file() {
+            return Ok(p);
+        }
+        eprintln!(
+            "[electron-host] OT_ELECTRON_BIN={} is not a file; falling back",
+            p.display()
+        );
+    }
+
+    let cache_dir = binding_path(cache_root, binding);
+    if let Some(bin) = electron_binary_in(&cache_dir) {
+        return Ok(bin);
+    }
+
+    if let Some(bin) = electron_binary_in_node_modules(shell_dir) {
+        return Ok(bin);
+    }
+
+    Err(format!(
+        "Electron binary not found — install it via the engine picker, set OT_ELECTRON_BIN, or run `npm install -w @<%= orgScope %>/electron-host` (cache: {}, shell: {})",
+        cache_dir.display(),
+        shell_dir.display(),
+    ))
+}
+
+/// Find the Electron executable inside an unpacked runtime folder (the
+/// layout produced by extracting an upstream Electron release zip, or by
+/// the npm `electron` package's `dist/` directory).
+pub fn electron_binary_in(dir: &Path) -> Option<PathBuf> {
+    let candidates: Vec<PathBuf> = if cfg!(target_os = "macos") {
+        vec![
+            dir.join("Electron.app/Contents/MacOS/Electron"),
+            dir.join("Electron"),
+        ]
+    } else if cfg!(target_os = "windows") {
+        vec![dir.join("electron.exe")]
+    } else {
+        vec![dir.join("electron")]
+    };
+    candidates.into_iter().find(|p| p.is_file())
+}
+
+fn electron_binary_in_node_modules(shell_dir: &Path) -> Option<PathBuf> {
+    // Walk up ancestor directories to find electron/dist — npm workspaces
+    // hoist the package to the monorepo root, so it won't be under shell_dir.
+    let mut dir = shell_dir;
+    loop {
+        let dist = dir.join("node_modules").join("electron").join("dist");
+        if let Some(bin) = electron_binary_in(&dist) {
+            return Some(bin);
+        }
+        match dir.parent() {
+            Some(parent) => dir = parent,
+            None => return None,
+        }
+    }
+}
+
+/// Spawn the electron-host shell pointed at `url`. The Electron binary is
+/// invoked as `<bin> <shell-folder>` with `OT_URL` / `OT_TITLE` / `OT_APP_ID`
+/// passed via env. Returns once the child is launched (Electron's own
+/// startup is async and not awaited here — the Terminal/desktop-agent do not block on it).
+pub fn spawn_electron_app(
+    binding: &EngineBinding,
+    cache_root: &Path,
+    app_id: &str,
+    url: &str,
+    title: &str,
+) -> Result<(), String> {
+    let shell = locate_electron_shell()?;
+    let bin = locate_electron_binary(binding, cache_root, &shell)?;
+    let mut cmd = std::process::Command::new(&bin);
+    cmd.arg(&shell)
+        .env("OT_APP_ID", app_id)
+        .env("OT_URL", url)
+        .env("OT_TITLE", title);
+    cmd.spawn()
+        .map(|_| ())
+        .map_err(|e| format!("spawn electron {}: {e}", bin.display()))
+}
