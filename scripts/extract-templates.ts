@@ -25,7 +25,7 @@ const BINARY_EXTENSIONS = new Set([".png", ".ico", ".icns", ".svg"]);
 
 // ── Static files — copied verbatim, no .ejs extension ────────────────────────
 // Matched against the filename (basename) only
-const STATIC_FILENAMES = new Set(["build.rs", "vite-env.d.ts"]);
+const STATIC_FILENAMES = new Set(["build.rs", "vite-env.d.ts", ".gitkeep"]);
 
 // ── Directories to skip entirely ──────────────────────────────────────────────
 const SKIP_DIRS = new Set(["node_modules", "target", "dist", "gen", ".git"]);
@@ -148,7 +148,18 @@ async function walkAndProcess(srcDir: string, destDir: string): Promise<void> {
   }
 
   for (const item of items) {
-    if (SKIP_DIRS.has(item)) continue;
+    if (SKIP_DIRS.has(item)) {
+      // Allow a dist/ directory that contains only .gitkeep (stub for frontendDist)
+      const srcPath = join(srcDir, item);
+      const info = await stat(srcPath);
+      if (info.isDirectory()) {
+        const children = await readdir(srcPath);
+        if (children.length === 1 && children[0] === ".gitkeep") {
+          await walkAndProcess(srcPath, join(destDir, item));
+        }
+      }
+      continue;
+    }
     const srcPath = join(srcDir, item);
     const destPath = join(destDir, item);
     const info = await stat(srcPath);

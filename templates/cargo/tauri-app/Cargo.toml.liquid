@@ -1,0 +1,22 @@
+[package]
+name = "{{app_name}}"
+version = "0.1.0"
+description = "{{app_name}} — OneTerminal Tauri app"
+edition = "2021"
+
+[lib]
+name = "{{app_name | replace: '-', '_'}}_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri      = { workspace = true }
+serde      = { workspace = true }
+serde_json = { workspace = true }
+tokio      = { workspace = true }
+ot-core    = { workspace = true }
+{% if include_fdc3 %}
+ot-fdc3    = { workspace = true }
+{% endif %}

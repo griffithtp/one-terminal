@@ -1,0 +1,23 @@
+[template]
+cargo_generate_version = ">=0.20"
+
+[placeholders.app_name]
+type = "string"
+prompt = "App name (kebab-case, e.g. order-blotter)"
+regex = "^[a-z][a-z0-9-]+$"
+
+[placeholders.org_identifier]
+type = "string"
+prompt = "Reverse-domain identifier prefix (e.g. com.acme.trading)"
+regex = "^[a-z][a-z0-9]*(\\.[a-z][a-z0-9]*)+$"
+
+[placeholders.dev_port]
+type = "string"
+prompt = "Vite dev server port"
+default = "1423"
+regex = "^[0-9]{4,5}$"
+
+[placeholders.include_fdc3]
+type = "bool"
+prompt = "Include ot-fdc3 FDC3 spoke dependency?"
+default = true

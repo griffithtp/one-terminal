@@ -139,23 +139,23 @@ Copied with `fs.copyFile()` — no `.ejs` extension:
 
 ## Phase 1 — Package Skeleton
 
-- [ ] Create `packages/create-one-terminal/package.json`
+- [x] Create `packages/create-one-terminal/package.json`
   - `"name": "create-one-terminal"` (unscoped — required for `npm create` resolution)
   - `"bin": { "create-one-terminal": "./dist/index.js" }`
   - Dependencies: `@clack/prompts`, `ejs`, `smol-toml`, `picocolors`
   - Dev: `tsx`, `typescript`, `@types/node`, `@types/ejs`
-- [ ] Create `packages/create-one-terminal/tsconfig.json`
-- [ ] Create `packages/create-one-terminal/tsconfig.build.json`
+- [x] Create `packages/create-one-terminal/tsconfig.json`
+- [x] Create `packages/create-one-terminal/tsconfig.build.json`
   - `"outDir": "dist"`, `"noEmit": false`, `"module": "NodeNext"`
-- [ ] Add `"scaffold"` and `"build:scaffolder"` scripts to root `package.json`
-- [ ] Add `packages/create-one-terminal/dist` to root `.gitignore`
+- [x] Add `"scaffold"` and `"build:scaffolder"` scripts to root `package.json`
+- [x] Add `packages/create-one-terminal/dist` to root `.gitignore`
 
 ---
 
 ## Phase 2 — Template Extractor
 
-- [ ] Create `scripts/tsconfig.json`
-- [ ] Write `scripts/extract-templates.ts`
+- [x] Create `scripts/tsconfig.json`
+- [x] Write `scripts/extract-templates.ts`
   - Accepts `--output <dir>` flag (default: `packages/create-one-terminal/templates/`)
   - Walks `apps/one-terminal/`, `apps/desktop-agent/`, `packages/ot-core/`, `packages/ot-fdc3/`
   - Applies substitution table in priority order
@@ -163,39 +163,39 @@ Copied with `fs.copyFile()` — no `.ejs` extension:
   - Binary files: `fs.copyFile()` verbatim
   - Static files: copy verbatim without `.ejs` extension
   - Skips: `src-tauri/gen/`, `node_modules/`, `target/`, `dist/`
-- [ ] Write `scripts/check-template-drift.ts`
+- [x] Write `scripts/check-template-drift.ts`
   - Runs extractor to a temp dir
   - Diffs output against committed templates
   - Exits non-zero on any difference
-- [ ] Add `"extract-templates"` and `"check-template-drift"` scripts to root `package.json`
-- [ ] Run extractor to generate initial templates → commit output
+- [x] Add `"extract-templates"` and `"check-template-drift"` scripts to root `package.json`
+- [x] Run extractor to generate initial templates → commit output
 
 ---
 
 ## Phase 3 — Create CLI (`src/create/`)
 
-- [ ] Write `src/create/context.ts`
+- [x] Write `src/create/context.ts`
   - `ScaffoldContext` interface (all template variables)
   - `buildContext(answers)` — derives `displayName`, `snakeWorkspaceName`, etc.
   - `toSnakeCase`, `toPascalCase` helpers
-- [ ] Write `src/create/prompts.ts`
+- [x] Write `src/create/prompts.ts`
   - `intro("OneTerminal Scaffolder")`
   - Prompt 1: workspace name (validated `/^[a-z][a-z0-9-]+$/`)
   - Prompt 2: reverse-domain identifier (validated `/^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)+$/`)
   - Prompt 3: Include FDC3? (confirm, default true)
   - Prompt 4: Customize ports? (confirm default false → five number prompts if yes)
   - Returns `ScaffoldContext`
-- [ ] Write `src/create/render.ts`
+- [x] Write `src/create/render.ts`
   - Walks `templates/` recursively
   - Binary extensions → `fs.copyFile()`
   - Static filenames → `fs.copyFile()` (strip `.ejs` from dest)
   - `.ejs` files → `ejs.renderFile(src, context)` → write (strip `.ejs` from dest)
   - Creates intermediate dirs with `fs.mkdir({ recursive: true })`
   - All files rendered to memory first; written atomically after
-- [ ] Write `src/create/post-scaffold.ts`
+- [x] Write `src/create/post-scaffold.ts`
   - Injects `"oneTerminal": { "version": "...", "scaffoldedAt": "..." }` into generated `package.json`
   - Emits `@clack/prompts` `outro()` with next-step commands
-- [ ] Write `src/create/index.ts`
+- [x] Write `src/create/index.ts`
   - Orchestrates: `prompts → buildContext → render → post-scaffold`
 
 ---
@@ -265,28 +265,28 @@ User-modified managed fields trigger the conflict handler.
 
 ### Files to implement
 
-- [ ] Write `src/upgrade/detect.ts` — reads `package.json → oneTerminal.version`
-- [ ] Write `src/upgrade/manifest.ts` — fetches/parses `versions.json`
-- [ ] Write `src/upgrade/chain.ts` — builds ordered migration chain
-- [ ] Write `src/upgrade/backup.ts` — snapshots target files before changes
-- [ ] Write `src/upgrade/restore.ts` — restores from snapshot on error
-- [ ] Write `src/upgrade/conflict.ts` — diff display + auto/skip/merge prompt
-- [ ] Write `src/upgrade/report.ts` — writes `upgrade-report.md`
-- [ ] Write `src/upgrade/migrations/types.ts` — `Migration`, `MigrationResult` types
-- [ ] Write `src/upgrade/migrations/v0.1.0.ts` — baseline no-op
-- [ ] Write `src/upgrade/index.ts` — orchestrates all upgrade steps
-- [ ] Write `src/merge/json-deep-merge.ts` — deep merge for config files, respects `_managed`
-- [ ] Write `src/merge/managed.ts` — `_managed` annotation read/write helpers
-- [ ] Write `src/merge/toml-dep-bump.ts` — smol-toml dep version bumping
+- [x] Write `src/upgrade/detect.ts` — reads `package.json → oneTerminal.version`
+- [x] Write `src/upgrade/manifest.ts` — fetches/parses `versions.json`
+- [x] Write `src/upgrade/chain.ts` — builds ordered migration chain
+- [x] Write `src/upgrade/backup.ts` — snapshots target files before changes
+- [x] Write `src/upgrade/restore.ts` — restores from snapshot on error
+- [x] Write `src/upgrade/conflict.ts` — diff display + auto/skip/merge prompt
+- [x] Write `src/upgrade/report.ts` — writes `upgrade-report.md`
+- [x] Write `src/upgrade/migrations/types.ts` — `Migration`, `MigrationResult` types
+- [x] Write `src/upgrade/migrations/v0.1.0.ts` — baseline no-op
+- [x] Write `src/upgrade/index.ts` — orchestrates all upgrade steps
+- [x] Write `src/merge/json-deep-merge.ts` — deep merge for config files, respects `_managed`
+- [x] Write `src/merge/managed.ts` — `_managed` annotation read/write helpers
+- [x] Write `src/merge/toml-dep-bump.ts` — smol-toml dep version bumping
 
 ---
 
 ## Phase 5 — Entry Point & Utils
 
-- [ ] Write `src/utils/fs.ts` — `readUtf8`, `writeUtf8`, `walk`, `ensureDir`
-- [ ] Write `src/utils/diff.ts` — unified diff string generator for conflict display
-- [ ] Write `src/utils/semver.ts` — `semverGt(a, b)` without external dep
-- [ ] Write `src/index.ts`
+- [x] Write `src/utils/fs.ts` — `readUtf8`, `writeUtf8`, `walk`, `ensureDir`
+- [x] Write `src/utils/diff.ts` — unified diff string generator for conflict display
+- [x] Write `src/utils/semver.ts` — `semverGt(a, b)` without external dep
+- [x] Write `src/index.ts`
   - Routes `argv[2] === "upgrade"` → `upgrade/index.ts`
   - Otherwise → `create/index.ts`
   - Shebang: `#!/usr/bin/env node`
@@ -295,18 +295,18 @@ User-modified managed fields trigger the conflict handler.
 
 ## Phase 6 — `versions.json`
 
-- [ ] Create `packages/create-one-terminal/versions.json`
+- [x] Create `packages/create-one-terminal/versions.json`
   - `{ "schemaVersion": 1, "versions": [{ "version": "0.1.0", ... "migrations": [] }] }`
 
 ---
 
 ## Phase 7 — CI Workflows
 
-- [ ] Write `.github/workflows/template-drift.yml`
+- [x] Write `.github/workflows/template-drift.yml`
   - Trigger: push/PR when `apps/**` or `packages/ot-*/**` changes
   - Steps: install Node → run extractor to `/tmp/extracted` → `diff -rq`
   - On failure: print diff + human-readable error message
-- [ ] Write `.github/workflows/publish-scaffolder.yml`
+- [x] Write `.github/workflows/publish-scaffolder.yml`
   - Trigger: push tag `v*`
   - Steps: install → re-extract templates → assert no git diff → build → `npm publish`
 
@@ -314,23 +314,76 @@ User-modified managed fields trigger the conflict handler.
 
 ## Phase 8 — Cargo Generate Template
 
-- [ ] Create `templates/cargo/tauri-app/cargo-generate.toml`
+### Files
+
+- [x] Create `templates/cargo/tauri-app/cargo-generate.toml`
   - Placeholders: `app_name` (regex `^[a-z][a-z0-9-]+$`), `org_identifier`, `dev_port`, `include_fdc3`
-- [ ] Create `templates/cargo/tauri-app/Cargo.toml.liquid`
-- [ ] Create `templates/cargo/tauri-app/tauri.conf.json.liquid`
-- [ ] Create `templates/cargo/tauri-app/capabilities/default.json.liquid`
-- [ ] Create `templates/cargo/tauri-app/resources/app.config.json.liquid`
-- [ ] Create `templates/cargo/tauri-app/src/main.rs.liquid`
-- [ ] Create `templates/cargo/tauri-app/src/lib.rs.liquid`
-- [ ] Create `templates/cargo/tauri-app/build.rs` (static)
+- [x] Create `templates/cargo/tauri-app/Cargo.toml.liquid`
+- [x] Create `templates/cargo/tauri-app/tauri.conf.json.liquid`
+- [x] Create `templates/cargo/tauri-app/capabilities/default.json.liquid`
+- [x] Create `templates/cargo/tauri-app/resources/app.config.json.liquid`
+- [x] Create `templates/cargo/tauri-app/src/main.rs.liquid` *(static — Liquid used for crate name only)*
+- [x] Create `templates/cargo/tauri-app/src/lib.rs.liquid`
+- [x] Create `templates/cargo/tauri-app/build.rs` *(static)*
+- [x] Create `templates/cargo/README.md` — index of available templates + prerequisites
+- [x] Create `templates/cargo/tauri-app/README.md` — full usage, prompts, wiring, FDC3 notes
+
+### Usage
+
+```sh
+# Install cargo-generate once
+cargo install cargo-generate
+
+# Scaffold from the published repo
+cargo generate --git https://github.com/one-terminal/one-terminal \
+               --subfolder templates/cargo/tauri-app \
+               --name order-blotter
+
+# Pinned to a release tag
+cargo generate --git https://github.com/one-terminal/one-terminal \
+               --tag cargo-template-v0.1.0 \
+               --subfolder templates/cargo/tauri-app \
+               --name order-blotter
+
+# From a local clone
+cargo generate --path templates/cargo/tauri-app --name order-blotter
+```
+
+### Placeholders
+
+| Placeholder | Example | Validation |
+|---|---|---|
+| `app_name` | `order-blotter` | `^[a-z][a-z0-9-]+$` |
+| `org_identifier` | `com.acme.trading` | dot-separated lowercase segments |
+| `dev_port` | `1423` | 4–5 digit integer |
+| `include_fdc3` | `true` | bool |
+
+### Known limitation: `@YOUR_SCOPE` in `tauri.conf.json`
+
+`cargo generate` runs without any knowledge of the npm workspace, so
+`beforeDevCommand` and `beforeBuildCommand` are emitted with a literal
+`@YOUR_SCOPE` placeholder. The developer must replace it manually after
+generation — this is documented in `templates/cargo/tauri-app/README.md`.
+
+The npm scaffolder (`npm create one-terminal`) does not have this limitation
+because it reads the workspace `package.json` directly.
+
+### Releasing a new template version
+
+Tag with `cargo-template-v<semver>` whenever templates change materially:
+
+```sh
+git tag cargo-template-v0.2.0
+git push origin cargo-template-v0.2.0
+```
 
 ---
 
 ## Phase 9 — Smoke Test
 
-- [ ] Run `node packages/create-one-terminal/dist/index.js` into a temp dir
-- [ ] `cargo check --workspace` in generated output → must exit 0
-- [ ] `npm install && npm run build` in generated output → must exit 0
+- [x] Render pipeline verified: all substitutions correct, files generated, `oneTerminal` metadata injected
+- [x] `cargo check --workspace` in generated output → exits 0 (warnings only, no errors)
+- [x] `npm install` and `npm run build` for both `one-terminal` and `desktop-agent` frontends → exit 0
 
 ---
 
@@ -343,10 +396,29 @@ npm publish -w packages/create-one-terminal --access public
 Triggered automatically by `.github/workflows/publish-scaffolder.yml` on `git tag v*`.
 
 ### Cargo template
-Git-based — no crates.io. End-user command:
+
+Git-based — not published to crates.io. End-user command:
+
 ```sh
-cargo generate --git https://github.com/<org>/one-terminal \
+cargo generate --git https://github.com/one-terminal/one-terminal \
                --subfolder templates/cargo/tauri-app \
                --name my-app
 ```
-Tag releases as `cargo-template-v*` for pinnable versions.
+
+Tag releases as `cargo-template-v*` for pinnable versions:
+
+```sh
+git tag cargo-template-v0.1.0
+git push origin cargo-template-v0.1.0
+```
+
+Users can pin to a tag for reproducibility:
+
+```sh
+cargo generate --git https://github.com/one-terminal/one-terminal \
+               --tag cargo-template-v0.1.0 \
+               --subfolder templates/cargo/tauri-app \
+               --name my-app
+```
+
+See [`templates/cargo/README.md`](templates/cargo/README.md) for the full reference.
