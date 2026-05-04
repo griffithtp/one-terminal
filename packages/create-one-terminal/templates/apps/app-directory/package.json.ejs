@@ -1,0 +1,36 @@
+{
+  "name": "@<%= orgScope %>/app-directory",
+  "version": "1.0.0",
+  "description": "FDC3 2.2 App Directory REST service + management UI",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev:api": "tsx watch src/index.ts",
+    "dev:ui": "vite --config vite.config.ts",
+    "dev": "concurrently \"npm run dev:api\" \"npm run dev:ui\"",
+    "build:api": "tsc",
+    "build:ui": "vite build --config vite.config.ts",
+    "build": "npm run build:api && npm run build:ui",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.17",
+    "@types/express": "^5.0.3",
+    "@types/node": "^22",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.2",
+    "tsx": "^4.19.4",
+    "typescript": "~5.8.3",
+    "vite": "^5.4.11"
+  }
+}

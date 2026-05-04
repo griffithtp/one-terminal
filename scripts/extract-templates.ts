@@ -35,11 +35,24 @@ const SOURCES: Array<{ src: string; templateBase: string }> = [
   { src: join(ROOT, "apps/one-terminal"),        templateBase: "apps/one-terminal" },
   { src: join(ROOT, "apps/desktop-agent"),       templateBase: "apps/desktop-agent" },
   { src: join(ROOT, "apps/tauri-webview-host"),  templateBase: "apps/tauri-webview-host" },
+  { src: join(ROOT, "apps/app-directory"),       templateBase: "apps/app-directory" },
+  { src: join(ROOT, "apps/sample-ticker"),       templateBase: "apps/sample-ticker" },
+  { src: join(ROOT, "apps/sample-chart-viewer"), templateBase: "apps/sample-chart-viewer" },
+  { src: join(ROOT, "apps/electron-host"),       templateBase: "apps/electron-host" },
   { src: join(ROOT, "packages/ot-core"),    templateBase: "packages/ot-core" },
   { src: join(ROOT, "packages/ot-fdc3"),    templateBase: "packages/ot-fdc3" },
   { src: join(ROOT, "packages/fdc3-plugin"),templateBase: "packages/fdc3-plugin" },
   { src: join(ROOT, "packages/fdc3-client"),templateBase: "packages/fdc3-client" },
 ];
+
+// ── Scripts to strip from the root package.json template ─────────────────────
+// These are framework development scripts — not applicable to scaffolded workspaces.
+const ROOT_PACKAGE_SCRIPTS_OMIT = new Set([
+  "extract-templates",
+  "check-template-drift",
+  "build:scaffolder",
+  "scaffold",
+]);
 
 // Root-level files that also become templates
 const ROOT_FILES = [
@@ -193,6 +206,15 @@ async function processFile(src: string, destWithoutEjs: string): Promise<void> {
     content = await readFile(src, "utf8");
   } catch {
     return;
+  }
+
+  // Strip framework-internal scripts from the root package.json before templating
+  if (src === join(ROOT, "package.json")) {
+    const parsed = JSON.parse(content);
+    for (const key of ROOT_PACKAGE_SCRIPTS_OMIT) {
+      delete parsed.scripts?.[key];
+    }
+    content = JSON.stringify(parsed, null, 2) + "\n";
   }
 
   content = applySubstitutions(content);

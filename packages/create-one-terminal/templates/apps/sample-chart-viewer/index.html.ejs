@@ -1,0 +1,466 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Chart-Viewer</title>
+  <style>
+    :root {
+      --bg:      #0d1117;
+      --surface: #161b22;
+      --border:  #30363d;
+      --text:    #e6edf3;
+      --muted:   #8b949e;
+      --accent:  #388bfd;
+      --green:   #3fb950;
+      --red:     #f85149;
+      --amber:   #f0a040;
+      --radius:  6px;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: ui-monospace, "Cascadia Code", "Fira Code", monospace;
+      font-size: 13px;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .app-name  { font-weight: 700; font-size: 15px; }
+    .app-badge {
+      font-size: 10px;
+      background: rgba(63,185,80,0.12);
+      color: var(--green);
+      border: 1px solid rgba(63,185,80,0.3);
+      border-radius: 10px;
+      padding: 2px 8px;
+    }
+    #status {
+      margin-left: auto;
+      font-size: 11px;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    #status-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--muted);
+      flex-shrink: 0;
+    }
+    #status-dot.connected { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    #status-dot.error     { background: var(--red); }
+
+    /* ── Main ── */
+    main { padding: 16px 20px; display: flex; flex-direction: column; gap: 16px; }
+
+    /* ── Intent listener badge ── */
+    .listeners {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      font-size: 11px;
+    }
+    .listener-badge {
+      background: rgba(63,185,80,0.1);
+      color: var(--green);
+      border: 1px solid rgba(63,185,80,0.3);
+      border-radius: 10px;
+      padding: 3px 10px;
+    }
+    .listener-badge.context {
+      background: rgba(56,139,253,0.1);
+      color: var(--accent);
+      border-color: rgba(56,139,253,0.3);
+    }
+
+    /* ── Instrument display ── */
+    .instrument-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      transition: border-color 0.3s;
+    }
+    .instrument-card.highlight { border-color: var(--accent); }
+
+    .instrument-header {
+      display: flex;
+      align-items: baseline;
+      gap: 16px;
+    }
+    #symbol-display {
+      font-size: 32px;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: 0.02em;
+    }
+    #symbol-display.empty { color: var(--muted); font-size: 20px; }
+    #source-badge {
+      font-size: 11px;
+      color: var(--muted);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 2px 8px;
+    }
+
+    /* prices */
+    .price-row { display: flex; gap: 24px; }
+    .price-cell { display: flex; flex-direction: column; gap: 2px; }
+    .price-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+    .price-value { font-size: 18px; font-variant-numeric: tabular-nums; color: var(--text); }
+    .price-value.green { color: var(--green); }
+    .price-value.red   { color: var(--red); }
+
+    /* ── Mini chart (CSS candlesticks) ── */
+    .chart-section { display: flex; flex-direction: column; gap: 6px; }
+    .chart-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+    #chart-canvas {
+      width: 100%;
+      height: 120px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+    }
+
+    .timeframes {
+      display: flex;
+      gap: 4px;
+    }
+    .tf-btn {
+      background: none;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      border-radius: 4px;
+      padding: 2px 8px;
+      font-size: 11px;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .tf-btn.active, .tf-btn:hover { border-color: var(--accent); color: var(--accent); background: rgba(56,139,253,0.08); }
+
+    /* ── Event log ── */
+    .section-title {
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      margin-bottom: 8px;
+    }
+    #log {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 10px 12px;
+      max-height: 160px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .log-entry { font-size: 11px; color: var(--muted); line-height: 1.4; }
+    .log-entry .ts     { color: rgba(139,148,158,0.6); margin-right: 6px; }
+    .log-entry .intent { color: var(--green); margin-right: 4px; }
+    .log-entry .ctx    { color: var(--accent); margin-right: 4px; }
+    .log-entry .sym    { color: var(--text); font-weight: 600; }
+    .log-entry .src    { color: rgba(139,148,158,0.5); }
+  </style>
+</head>
+<body>
+
+<header>
+  <span class="app-name">Chart-Viewer</span>
+  <span class="app-badge">FDC3 2.2</span>
+  <div id="status">
+    <span id="status-dot"></span>
+    <span id="status-text">Connecting…</span>
+  </div>
+</header>
+
+<main>
+
+  <!-- Active listeners -->
+  <div class="listeners">
+    <span class="listener-badge">Intent: ViewChart</span>
+    <span class="listener-badge">Intent: ViewQuote</span>
+    <span class="listener-badge context">Context: fdc3.instrument</span>
+  </div>
+
+  <!-- Instrument card -->
+  <div class="instrument-card" id="instrument-card">
+    <div class="instrument-header">
+      <span id="symbol-display" class="empty">Awaiting instrument…</span>
+      <span id="source-badge"></span>
+    </div>
+
+    <div class="price-row" id="price-row" style="display:none">
+      <div class="price-cell">
+        <span class="price-label">Bid</span>
+        <span class="price-value" id="bid-display">—</span>
+      </div>
+      <div class="price-cell">
+        <span class="price-label">Ask</span>
+        <span class="price-value" id="ask-display">—</span>
+      </div>
+      <div class="price-cell">
+        <span class="price-label">Mid</span>
+        <span class="price-value" id="mid-display">—</span>
+      </div>
+    </div>
+
+    <!-- Timeframe selector -->
+    <div class="chart-section">
+      <div style="display:flex;align-items:center;justify-content:space-between;">
+        <span class="chart-label">Price Chart</span>
+        <div class="timeframes" id="tf-row">
+          <button class="tf-btn active">1M</button>
+          <button class="tf-btn">5M</button>
+          <button class="tf-btn">15M</button>
+          <button class="tf-btn">1H</button>
+          <button class="tf-btn">4H</button>
+          <button class="tf-btn">1D</button>
+        </div>
+      </div>
+      <canvas id="chart-canvas"></canvas>
+    </div>
+  </div>
+
+  <!-- Event log -->
+  <div>
+    <div class="section-title">Received Events</div>
+    <div id="log">
+      <div class="log-entry">
+        <span class="ts">--:--:--</span>Waiting for FDC3 events…
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<script type="module">
+import { DesktopAgentClient } from '/fdc3-plugin.js';
+
+// ── DOM refs ─────────────────────────────────────────────────────────────────
+const statusDot    = document.getElementById('status-dot');
+const statusText   = document.getElementById('status-text');
+const symbolEl     = document.getElementById('symbol-display');
+const sourceBadge  = document.getElementById('source-badge');
+const priceRow     = document.getElementById('price-row');
+const bidEl        = document.getElementById('bid-display');
+const askEl        = document.getElementById('ask-display');
+const midEl        = document.getElementById('mid-display');
+const canvas       = document.getElementById('chart-canvas');
+const card         = document.getElementById('instrument-card');
+const logEl        = document.getElementById('log');
+const tfRow        = document.getElementById('tf-row');
+
+// ── Mini chart ───────────────────────────────────────────────────────────────
+
+let chartData = [];  // array of { open, high, low, close }
+
+function generateCandles(seed = 1.0842, count = 40) {
+  const arr = [];
+  let price = seed;
+  for (let i = 0; i < count; i++) {
+    const open  = price;
+    const move  = (Math.random() - 0.48) * seed * 0.003;
+    const close = +(open + move).toFixed(5);
+    const wick  = Math.abs(move) * (0.5 + Math.random());
+    const high  = Math.max(open, close) + wick * 0.5;
+    const low   = Math.min(open, close) - wick * 0.5;
+    arr.push({ open, high, low, close });
+    price = close;
+  }
+  return arr;
+}
+
+function drawChart(data) {
+  const dpr  = window.devicePixelRatio || 1;
+  const w    = canvas.clientWidth;
+  const h    = canvas.clientHeight;
+  canvas.width  = w * dpr;
+  canvas.height = h * dpr;
+  const ctx  = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+
+  if (!data.length) return;
+
+  const min  = Math.min(...data.map(d => d.low));
+  const max  = Math.max(...data.map(d => d.high));
+  const range = max - min || 0.001;
+  const pad  = { top: 8, bottom: 8, left: 4, right: 4 };
+  const cw   = (w - pad.left - pad.right) / data.length;
+
+  ctx.clearRect(0, 0, w, h);
+
+  function yScale(price) {
+    return pad.top + (1 - (price - min) / range) * (h - pad.top - pad.bottom);
+  }
+
+  // Grid lines
+  ctx.strokeStyle = 'rgba(48,54,61,0.6)';
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const y = pad.top + (i / 4) * (h - pad.top - pad.bottom);
+    ctx.beginPath();
+    ctx.moveTo(pad.left, y);
+    ctx.lineTo(w - pad.right, y);
+    ctx.stroke();
+  }
+
+  // Candles
+  data.forEach((d, i) => {
+    const x     = pad.left + i * cw + cw * 0.1;
+    const cBody = cw * 0.8;
+    const bull  = d.close >= d.open;
+    const color = bull ? '#3fb950' : '#f85149';
+
+    ctx.fillStyle   = color;
+    ctx.strokeStyle = color;
+    ctx.lineWidth   = 1;
+
+    // Wick
+    const cx = x + cBody / 2;
+    ctx.beginPath();
+    ctx.moveTo(cx, yScale(d.high));
+    ctx.lineTo(cx, yScale(d.low));
+    ctx.stroke();
+
+    // Body
+    const yTop = yScale(Math.max(d.open, d.close));
+    const yBot = yScale(Math.min(d.open, d.close));
+    ctx.fillRect(x, yTop, cBody, Math.max(1, yBot - yTop));
+  });
+}
+
+// ── Timeframe buttons ────────────────────────────────────────────────────────
+
+tfRow.addEventListener('click', (e) => {
+  const btn = e.target.closest('.tf-btn');
+  if (!btn) return;
+  tfRow.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  // Re-draw with freshly generated candles for the selected timeframe
+  if (currentMid > 0) {
+    chartData = generateCandles(currentMid, 40);
+    drawChart(chartData);
+  }
+});
+
+// ── State ────────────────────────────────────────────────────────────────────
+
+let currentMid = 0;
+
+function updateInstrument(context, source, via) {
+  const ticker = context.id?.ticker ?? context.name ?? '?';
+  symbolEl.textContent  = ticker;
+  symbolEl.className    = '';
+  sourceBadge.textContent = `via ${via}  ·  from ${source}`;
+
+  const market = context.market;
+  if (market) {
+    priceRow.style.display = 'flex';
+    bidEl.textContent = market.bid?.toFixed(5) ?? '—';
+    askEl.textContent = market.ask?.toFixed(5) ?? '—';
+    midEl.textContent = market.mid?.toFixed(5) ?? '—';
+    currentMid = market.mid ?? 0;
+  } else {
+    priceRow.style.display = 'none';
+    currentMid = 1.08;
+  }
+
+  // Draw a fresh chart
+  chartData = generateCandles(currentMid || 1.0842, 40);
+  drawChart(chartData);
+
+  // Flash the card border
+  card.classList.add('highlight');
+  setTimeout(() => card.classList.remove('highlight'), 600);
+}
+
+function addLog(via, intent, symbol, appId) {
+  const ts  = new Date().toTimeString().slice(0, 8);
+  const el  = document.createElement('div');
+  el.className = 'log-entry';
+  const cls  = via === 'intent' ? 'intent' : 'ctx';
+  const label = via === 'intent' ? `↗ ${intent}` : `⬤ ${intent}`;
+  el.innerHTML =
+    `<span class="ts">${ts}</span>` +
+    `<span class="${cls}">${label}</span>` +
+    `<span class="sym">${symbol}</span>` +
+    `  <span class="src">← ${appId}</span>`;
+  logEl.prepend(el);
+  while (logEl.children.length > 50) logEl.removeChild(logEl.lastChild);
+}
+
+// ── FDC3 init ────────────────────────────────────────────────────────────────
+
+function setStatus(text, cls) {
+  statusText.textContent = text;
+  statusDot.className = cls ?? '';
+}
+
+setStatus('Connecting to CDA…', '');
+
+try {
+  const fdc3 = await DesktopAgentClient.connect('chart-viewer');
+  setStatus(`Connected  ·  instance: ${fdc3.getIdentity().instanceId.slice(0, 8)}`, 'connected');
+
+  // Join Green channel to receive context broadcasts
+  await fdc3.joinUserChannel('Green');
+
+  // ── Intent: ViewChart ──────────────────────────────────────────────────────
+  await fdc3.addIntentListener('ViewChart', (context, meta) => {
+    const ticker = context.id?.ticker ?? context.name ?? '?';
+    const src    = meta?.source?.appId ?? 'unknown';
+    updateInstrument(context, src, 'ViewChart intent');
+    addLog('intent', 'ViewChart', ticker, src);
+  });
+
+  // ── Intent: ViewQuote ─────────────────────────────────────────────────────
+  await fdc3.addIntentListener('ViewQuote', (context, meta) => {
+    const ticker = context.id?.ticker ?? context.name ?? '?';
+    const src    = meta?.source?.appId ?? 'unknown';
+    updateInstrument(context, src, 'ViewQuote intent');
+    addLog('intent', 'ViewQuote', ticker, src);
+  });
+
+  // ── Context: fdc3.instrument (broadcast on channel) ───────────────────────
+  await fdc3.addContextListener('fdc3.instrument', (context, meta) => {
+    const ticker = context.id?.ticker ?? context.name ?? '?';
+    const src    = meta?.source?.appId ?? 'unknown';
+    updateInstrument(context, src, 'fdc3.instrument broadcast');
+    addLog('context', 'fdc3.instrument', ticker, src);
+  });
+
+  // Draw empty placeholder chart
+  chartData = generateCandles(1.0842, 40);
+  drawChart(chartData);
+
+} catch (e) {
+  setStatus('CDA unavailable', 'error');
+  const el = document.createElement('div');
+  el.className = 'log-entry';
+  el.innerHTML = `<span class="ts">${new Date().toTimeString().slice(0,8)}</span><span style="color:var(--red)">✗ ${e.message}</span>`;
+  logEl.prepend(el);
+}
+
+// Redraw chart on resize
+new ResizeObserver(() => { if (chartData.length) drawChart(chartData); }).observe(canvas);
+</script>
+
+</body>
+</html>

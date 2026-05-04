@@ -26,11 +26,7 @@
     "build:tauri-webview-host": "cargo build -p tauri-webview-host",
     "setup:electron-host": "npm install -w @<%= orgScope %>/electron-host",
     "start:electron-host": "npm -w @<%= orgScope %>/electron-host start",
-    "build:all": "npm -w @<%= orgScope %>/one-terminal run build && npm -w @<%= orgScope %>/desktop-agent run build && npm -w @<%= orgScope %>/app-directory run build",
-    "extract-templates": "npx tsx scripts/extract-templates.ts",
-    "check-template-drift": "npx tsx scripts/check-template-drift.ts",
-    "build:scaffolder": "npm -w create-one-terminal run build",
-    "scaffold": "node packages/create-one-terminal/dist/index.js"
+    "build:all": "npm -w @<%= orgScope %>/one-terminal run build && npm -w @<%= orgScope %>/desktop-agent run build && npm -w @<%= orgScope %>/app-directory run build"
   },
   "devDependencies": {
     "tsx": "^4.19.4",

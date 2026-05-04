@@ -70,8 +70,10 @@ one-terminal/
 │   ├── one-terminal/                  Window manager (Tauri 2)
 │   ├── desktop-agent/                 FDC3 broker + engine launcher (Tauri 2)
 │   ├── tauri-webview-host/            Thin host for pinned WebView2/WKWebView
-│   ├── electron-host/                 Thin Electron host
-│   └── app-directory/                 FDC3 AppD REST API + management UI
+│   ├── electron-host/                 Thin Electron host (optional, requires setup)
+│   ├── app-directory/                 FDC3 AppD REST API + management UI
+│   ├── sample-ticker/                 Demo browser app — broadcasts fx.rate context
+│   └── sample-chart-viewer/           Demo browser app — handles ViewChart intent
 ├── packages/
 │   ├── ot-core/                       Shared Rust crate
 │   ├── ot-fdc3/                       Tauri FDC3 spoke plugin
@@ -228,6 +230,12 @@ Some files are always copied verbatim (never templated):
 - **Static filenames** — `build.rs`, `vite-env.d.ts`, `.gitkeep`
 
 To add a file that should always be copied unchanged, add its filename to the `STATIC_FILENAMES` set in [scripts/extract-templates.ts](scripts/extract-templates.ts).
+
+### Stripping scripts from the root `package.json`
+
+The root `package.json` in the framework repo contains scripts that are only meaningful when working on the framework itself (`extract-templates`, `check-template-drift`, `build:scaffolder`, `scaffold`). These are stripped from the scaffolded workspace template by `ROOT_PACKAGE_SCRIPTS_OMIT` in [scripts/extract-templates.ts](scripts/extract-templates.ts).
+
+If you add a new framework-internal script to the root `package.json` that should not appear in scaffolded workspaces, add its key to `ROOT_PACKAGE_SCRIPTS_OMIT`. Conversely, app-level scripts (`dev:*`, `build:*`) should remain — they belong in every scaffolded workspace.
 
 ---
 
@@ -413,10 +421,17 @@ Run the local scaffolder from the repo root:
 node packages/create-one-terminal/dist/index.js
 ```
 
-Answer the prompts, then move into the output directory:
+The prompts are:
+1. **Workspace name** — kebab-case, e.g. `acme-trading`
+2. **Output folder** — defaults to `./<workspace-name>`, accept or change it
+3. **Reverse-domain identifier** — e.g. `com.acme.trading`
+4. **Include FDC3?** — defaults to yes
+5. **Customize ports?** — defaults to no
+
+After confirming, move into the output folder:
 
 ```sh
-cd <your-workspace-name>
+cd <output-folder>
 ```
 
 **Step 3 — Verify the Rust workspace compiles**
