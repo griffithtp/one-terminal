@@ -72,7 +72,7 @@ one-terminal/
 │   ├── electron-host/                 Thin Electron host (optional, requires setup)
 │   ├── app-directory/                 FDC3 AppD REST API + management UI
 │   ├── sample-ticker/                 Demo browser app — broadcasts fx.rate context
-│   └── sample-chart-viewer/           Demo browser app — handles ViewChart intent
+│   └── sample-chart/                  Demo browser app — handles ViewChart intent
 ├── packages/
 │   ├── ot-core/                       Shared Rust crate
 │   ├── ot-fdc3/                       Tauri FDC3 spoke plugin
@@ -391,7 +391,7 @@ npm run dev:terminal
 
 # Optional — sample apps to load inside the Terminal
 npm run dev:sample-ticker          # http://localhost:3010
-npm run dev:sample-chart-viewer    # http://localhost:3011
+npm run dev:sample-chart           # http://localhost:3011
 ```
 
 **Expected:** Desktop Agent connects to App Directory on startup. Terminal window opens and loads the app list. Sample apps appear as launchable entries.

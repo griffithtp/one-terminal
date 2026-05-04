@@ -1,0 +1,30 @@
+# sample-ticker
+
+Demo FDC3 spoke app — market data ticker plant.
+
+Served at **http://localhost:3010** via `npm run dev:sample-ticker`.
+
+## What it does
+
+- Connects to the Desktop Agent over FDC3 2.2 (WebSocket)
+- Joins the **Green** user channel on startup
+- Periodically broadcasts a mock `fx.rate` context object with a simulated EUR/USD mid price
+- Raises **ViewChart** and **ViewQuote** intents when the user clicks on a rate row
+
+## Running
+
+```sh
+# From the workspace root
+npm run dev:sample-ticker
+```
+
+The app proxies `/fdc3-plugin.js` from `packages/fdc3-plugin/fdc3-plugin.js` so no separate build step is needed.
+
+## FDC3 integration points
+
+| Mechanism | Detail |
+|---|---|
+| Broadcast: fdc3.instrument | Sent on the Green channel every ~2 s |
+| Intent: ViewChart | Raised on row click; target: any app handling ViewChart |
+| Intent: ViewQuote | Raised on row click; target: any app handling ViewQuote |
+| Channel | Green (joined on startup) |

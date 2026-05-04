@@ -1,5 +1,5 @@
 {
-  "name": "@<%= orgScope %>/sample-chart-viewer",
+  "name": "@one-terminal/sample-chart",
   "version": "0.1.0",
   "private": true,
   "type": "module",

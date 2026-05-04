@@ -19,7 +19,7 @@
     "dev:desktop-agent:electron": "OT_ELECTRON_HOST_OVERRIDE=$INIT_CWD/apps/electron-host npm -w @one-terminal/desktop-agent run tauri:dev",
     "dev:desktop-agent:pin": "OT_ENGINE_FAMILY=webview2 OT_ENGINE_VERSION=124.0.2478.97 npm -w @one-terminal/desktop-agent run tauri:dev",
     "dev:sample-ticker": "npm -w @one-terminal/sample-ticker run dev",
-    "dev:sample-chart-viewer": "npm -w @one-terminal/sample-chart-viewer run dev",
+    "dev:sample-chart": "npm -w @one-terminal/sample-chart run dev",
     "dev:app-directory": "npm -w @one-terminal/app-directory run dev",
     "build:app-directory": "npm -w @one-terminal/app-directory run build",
     "start:app-directory": "npm -w @one-terminal/app-directory run start",

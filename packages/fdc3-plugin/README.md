@@ -77,5 +77,5 @@ Both sample apps proxy-serve the file directly from the monorepo, mapping the re
 | App | How |
 |---|---|
 | `apps/sample-ticker` | Served at `/fdc3-plugin.js` by `server.js`; imported in `index.html` |
-| `apps/sample-chart-viewer` | Served at `/fdc3-plugin.js` by `server.js`; imported in `index.html` |
+| `apps/sample-chart` | Served at `/fdc3-plugin.js` by `server.js`; imported in `index.html` |
 | Any third-party spoke app | Copy or serve the file; add a `<script>` tag |

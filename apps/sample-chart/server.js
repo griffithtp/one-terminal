@@ -1,5 +1,5 @@
 /**
- * Chart-Viewer dev server — port 3011
+ * Sample-Chart dev server — port 3011
  *
  * Serves:
  *   /            → index.html
@@ -42,5 +42,5 @@ http.createServer((req, res) => {
     res.end(data);
   });
 }).listen(PORT, () => {
-  console.log(`[chart-viewer] http://localhost:${PORT}`);
+  console.log(`[sample-chart] http://localhost:${PORT}`);
 });

@@ -25,7 +25,7 @@ packages/ot-fdc3/             — shared Tauri plugin: FDC3 2.2 TCP spoke client
 packages/fdc3-plugin/         — browser FDC3 agent (fdc3-plugin.js)
 packages/fdc3-client/         — TypeScript FDC3 types + Fdc3Agent (requires ot-fdc3)
 apps/sample-ticker/           — demo browser app, port 3010
-apps/sample-chart-viewer/     — demo browser app, port 3011
+apps/sample-chart/            — demo browser app, port 3011
 ```
 
 ## Key port defaults (all overridable via env vars)
@@ -37,7 +37,7 @@ apps/sample-chart-viewer/     — demo browser app, port 3011
 | FDC3 Bus WS | 7891 | `OT_FDC3_BUS_PORT` |
 | DACP Bridge | 4475 | `OT_DACP_PORT` |
 | sample-ticker | 3010 | — |
-| sample-chart-viewer | 3011 | — |
+| sample-chart | 3011 | — |
 
 ## Engine families
 
