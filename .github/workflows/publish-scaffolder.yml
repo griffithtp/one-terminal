@@ -35,6 +35,6 @@ jobs:
         run: npm run build:scaffolder
 
       - name: Publish to npm
-        run: npm publish -w packages/create-one-terminal --access public
+        run: npm publish -w packages/create-one-terminal --access public --ignore-scripts
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

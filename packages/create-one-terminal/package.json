@@ -21,7 +21,7 @@
     "versions.json"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && node -e \"import('node:fs').then(fs => fs.cpSync('src/templates', 'dist/templates', { recursive: true }))\" 2>/dev/null || true",
+    "build": "tsc -p tsconfig.build.json && node -e \"import('node:fs').then(fs => fs.cpSync('templates', 'dist/templates', { recursive: true }))\"",
     "dev": "tsc -p tsconfig.build.json --watch",
     "prepublishOnly": "npm run build"
   },
