@@ -131,7 +131,7 @@ async function applyStructural(
   migration: Extract<MigrationSpec, { type: "structural" }>,
   _version: string,
 ): Promise<MigrationResult> {
-  const templatesDir = join(fileURLToPath(import.meta.url), "../../..", "templates");
+  const templatesDir = join(fileURLToPath(import.meta.url), "../..", "templates");
 
   // add-file ops create new files — handle them before any readFile on migration.target
   for (const op of migration.operations) {

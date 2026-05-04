@@ -1,7 +1,17 @@
 {
   "name": "create-one-terminal",
   "version": "0.1.0",
-  "description": "Scaffold a new OneTerminal workspace",
+  "description": "Scaffold and upgrade OneTerminal workspaces — a Tauri 2 + FDC3 window-manager framework for financial desktop applications",
+  "keywords": [
+    "onetiminal",
+    "one-terminal",
+    "tauri",
+    "fdc3",
+    "financial-desktop",
+    "scaffolder",
+    "create",
+    "workspace"
+  ],
   "type": "module",
   "bin": {
     "create-one-terminal": "./dist/index.js"

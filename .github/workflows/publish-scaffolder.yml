@@ -26,6 +26,11 @@ jobs:
       - name: Assert no template drift after re-extract
         run: git diff --exit-code packages/create-one-terminal/templates/
 
+      - name: Stamp version from git tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          npm pkg set version="$VERSION" -w packages/create-one-terminal
+
       - name: Build create-one-terminal
         run: npm run build:scaffolder
 
