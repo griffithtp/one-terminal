@@ -1,4 +1,4 @@
-import { writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { MigrationResult } from "./migrations/types.js";
 
@@ -52,13 +52,17 @@ export async function writeReport(
     lines.push("");
   }
 
+  const reportPath = join(".one-terminal", `upgrade-report-${toVersion}.md`);
+
   lines.push(
     "## Next Steps",
     "",
     "1. Resolve any `.merge` files.",
     "2. Run `cargo check --workspace` and `npm install` to verify.",
-    "3. Delete `upgrade-report.md` when done.",
+    `3. Delete \`${reportPath}\` when done.`,
   );
 
-  await writeFile(join(cwd, "upgrade-report.md"), lines.join("\n"), "utf8");
+  const reportFile = join(cwd, reportPath);
+  await mkdir(join(cwd, ".one-terminal"), { recursive: true });
+  await writeFile(reportFile, lines.join("\n"), "utf8");
 }
