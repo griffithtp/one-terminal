@@ -39,7 +39,7 @@ export function buildContext(answers: {
     dacpBridgePort: answers.dacpBridgePort ?? 4475,
     appDirectoryPort: answers.appDirectoryPort ?? 3005,
     includeFdc3: answers.includeFdc3,
-    scaffoldVersion: "0.1.0",
+    scaffoldVersion: "0.1.1",
     scaffoldedAt: new Date().toISOString().slice(0, 10),
   };
 }

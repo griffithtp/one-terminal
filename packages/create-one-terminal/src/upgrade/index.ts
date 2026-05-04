@@ -1,5 +1,6 @@
-import { join } from "node:path";
-import { readFile, writeFile } from "node:fs/promises";
+import { join, dirname } from "node:path";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import * as p from "@clack/prompts";
 import { detectProject } from "./detect.js";
 import { fetchManifest } from "./manifest.js";
@@ -130,11 +131,45 @@ async function applyStructural(
   migration: Extract<MigrationSpec, { type: "structural" }>,
   _version: string,
 ): Promise<MigrationResult> {
+  const templatesDir = join(fileURLToPath(import.meta.url), "../../..", "templates");
+
+  // add-file ops create new files — handle them before any readFile on migration.target
+  for (const op of migration.operations) {
+    if (op.op !== "add-file") continue;
+
+    let srcContent: string;
+    try {
+      // Templates are stored with a .ejs extension; the rendered name has none
+      srcContent = await readFile(join(templatesDir, op.sourcePath + ".ejs"), "utf8");
+    } catch {
+      try {
+        srcContent = await readFile(join(templatesDir, op.sourcePath), "utf8");
+      } catch {
+        return {
+          id: migration.id,
+          description: migration.description,
+          status: "needs-manual",
+          detail: `Template source not found: ${op.sourcePath}`,
+        };
+      }
+    }
+
+    const destPath = join(cwd, op.targetPath);
+    await mkdir(dirname(destPath), { recursive: true });
+    await writeFile(destPath, srcContent, "utf8");
+  }
+
+  const patchOps = migration.operations.filter((op) => op.op !== "add-file");
+  if (patchOps.length === 0) {
+    return { id: migration.id, description: migration.description, status: "applied" };
+  }
+
+  // Patch ops modify an existing file — read it once, then apply all ops in order
   const filePath = join(cwd, migration.target);
   let content = await readFile(filePath, "utf8");
   let changed = false;
 
-  for (const op of migration.operations) {
+  for (const op of patchOps) {
     if (op.op === "insert-after-line-matching") {
       const lines = content.split("\n");
       const idx = lines.findIndex((l) => l.includes(op.pattern));
@@ -163,8 +198,6 @@ async function applyStructural(
       lines[idx] = op.replacement;
       content = lines.join("\n");
       changed = true;
-    } else if (op.op === "add-file") {
-      // Bundled asset copy — deferred to future implementation
     }
   }
 

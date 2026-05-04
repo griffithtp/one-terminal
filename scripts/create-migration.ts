@@ -31,7 +31,8 @@ const CONTEXT_TS = join(ROOT, "packages/create-one-terminal/src/create/context.t
 
 type PatchOperation =
   | { op: "insert-after-line-matching"; pattern: string; content: string }
-  | { op: "replace-line-matching"; pattern: string; replacement: string };
+  | { op: "replace-line-matching"; pattern: string; replacement: string }
+  | { op: "add-file"; sourcePath: string; targetPath: string };
 
 type MigrationSpec =
   | { type: "config-merge"; id: string; target: string; description: string; patch: Record<string, unknown> }
@@ -335,11 +336,17 @@ async function promptDepBump(change: FileChange, version: string): Promise<Migra
 }
 
 async function promptStructural(change: FileChange, version: string): Promise<MigrationSpec | null> {
-  p.log.message(pc.dim(getLineDiff(change.oldContent ?? "", change.newContent)));
+  const isNewFile = change.oldContent === null;
+
+  if (isNewFile) {
+    p.log.message(pc.green("(new file)") + "\n" + pc.dim(change.newContent.split("\n").slice(0, 8).map(l => `+ ${l}`).join("\n")));
+  } else {
+    p.log.message(pc.dim(getLineDiff(change.oldContent ?? "", change.newContent)));
+  }
 
   const include = await p.confirm({
     message: "Include a structural migration for this file?",
-    initialValue: false,
+    initialValue: isNewFile,
   });
   if (p.isCancel(include) || !include) return null;
 
@@ -354,27 +361,33 @@ async function promptStructural(change: FileChange, version: string): Promise<Mi
   const description = await p.text({ message: "Description" });
   if (p.isCancel(description)) return null;
 
-  const opType = await p.select({
-    message: "Operation type",
-    options: [
-      { value: "insert-after-line-matching", label: "Insert a line after a matching line" },
-      { value: "replace-line-matching",       label: "Replace a matching line" },
-    ],
-  });
+  const opTypeOptions = [
+    { value: "insert-after-line-matching", label: "Insert a line after a matching line" },
+    { value: "replace-line-matching",       label: "Replace a matching line" },
+    ...(isNewFile ? [{ value: "add-file", label: "Add new file (copy from bundled template)" }] : []),
+  ];
+
+  const opType = await p.select({ message: "Operation type", options: opTypeOptions });
   if (p.isCancel(opType)) return null;
 
-  const pattern = await p.text({
-    message: "Pattern — unique substring of the line to anchor on",
-    placeholder: "e.g. .plugin(ot_fdc3::init())",
-  });
-  if (p.isCancel(pattern)) return null;
-
   let op: PatchOperation;
-  if (opType === "insert-after-line-matching") {
+  if (opType === "add-file") {
+    op = { op: "add-file", sourcePath: target, targetPath: target };
+  } else if (opType === "insert-after-line-matching") {
+    const pattern = await p.text({
+      message: "Pattern — unique substring of the line to anchor on",
+      placeholder: "e.g. .plugin(ot_fdc3::init())",
+    });
+    if (p.isCancel(pattern)) return null;
     const content = await p.text({ message: "Line content to insert (exact indentation included)" });
     if (p.isCancel(content)) return null;
     op = { op: "insert-after-line-matching", pattern: pattern as string, content: content as string };
   } else {
+    const pattern = await p.text({
+      message: "Pattern — unique substring of the line to anchor on",
+      placeholder: "e.g. .plugin(ot_fdc3::init())",
+    });
+    if (p.isCancel(pattern)) return null;
     const replacement = await p.text({ message: "Replacement line (exact indentation included)" });
     if (p.isCancel(replacement)) return null;
     op = { op: "replace-line-matching", pattern: pattern as string, replacement: replacement as string };
