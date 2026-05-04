@@ -90,3 +90,30 @@ cargo test -p desktop-agent engines::router
 npm run build:app-directory      # rebuilds apps/app-directory/dist
 npm run build:all                # all Tauri apps
 ```
+
+## Scaffolder commands
+
+```sh
+npm run extract-templates        # re-derive EJS templates from apps/ (run after any app change)
+npm run build:scaffolder         # compile create-one-terminal to packages/create-one-terminal/dist/
+npm run check-template-drift     # CI drift check — exits 1 if templates are out of sync
+node packages/create-one-terminal/dist/index.js   # run scaffolder locally
+```
+
+Templates at `packages/create-one-terminal/templates/` are always generated — never hand-edit them.
+
+## Testing a scaffolded workspace locally
+
+After changing app source or templates, scaffold a test workspace and verify it builds:
+
+```sh
+npm run extract-templates
+npm run build:scaffolder
+node packages/create-one-terminal/dist/index.js   # answer prompts, note output dir
+cd <workspace-name>
+cargo check --workspace          # must exit 0
+npm install
+npm run build:app-directory
+```
+
+Then start the services in order: `dev:app-directory` → `dev:desktop-agent` → `dev:terminal`.

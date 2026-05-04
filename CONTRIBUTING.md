@@ -27,6 +27,10 @@ This guide covers how the framework is structured for contribution, with a focus
   - [`config-merge`](#config-merge)
   - [`dep-bump`](#dep-bump)
   - [`structural`](#structural)
+- [Testing Changes Locally](#testing-changes-locally)
+  - [Test the framework itself](#test-the-framework-itself)
+  - [Test a scaffolded workspace](#test-a-scaffolded-workspace)
+  - [Test the upgrade path](#test-the-upgrade-path)
 - [Publishing a Release](#publishing-a-release)
 - [CI Workflows](#ci-workflows)
 - [Naming Conventions](#naming-conventions)
@@ -353,6 +357,125 @@ Applies line-level patch operations to any file. Use for changes that cannot be 
 | `add-file` | Copies `sourcePath` (relative to package root) to `targetPath` in the workspace |
 
 Structural migrations are applied in declaration order. Keep operations minimal and targeted — prefer `config-merge` or `dep-bump` when they cover the use case.
+
+---
+
+## Testing Changes Locally
+
+Run these checks after any framework change before opening a PR.
+
+### Test the framework itself
+
+Verify the Rust workspace and scaffolder compile cleanly:
+
+```sh
+cargo check --workspace
+npm run build:scaffolder
+```
+
+Then start all services to confirm everything connects end-to-end:
+
+```sh
+# Terminal 1 — App Directory (must start first)
+npm run dev:app-directory       # http://localhost:3005
+
+# Terminal 2 — Desktop Agent (FDC3 broker)
+npm run dev:desktop-agent
+
+# Terminal 3 — Terminal window manager
+npm run dev:terminal
+
+# Optional — sample apps to load inside the Terminal
+npm run dev:sample-ticker          # http://localhost:3010
+npm run dev:sample-chart-viewer    # http://localhost:3011
+```
+
+**Expected:** Desktop Agent connects to App Directory on startup. Terminal window opens and loads the app list. Sample apps appear as launchable entries.
+
+---
+
+### Test a scaffolded workspace
+
+This confirms that `npm create one-terminal` produces a working workspace from the current templates. Run this after any change to `apps/`, `packages/ot-*`, or the extractor.
+
+**Step 1 — Rebuild templates and scaffolder**
+
+```sh
+npm run extract-templates    # re-derive EJS templates from apps/
+npm run build:scaffolder     # compile create-one-terminal to dist/
+```
+
+**Step 2 — Scaffold a test workspace**
+
+Run the local scaffolder from the repo root:
+
+```sh
+node packages/create-one-terminal/dist/index.js
+```
+
+Answer the prompts, then move into the output directory:
+
+```sh
+cd <your-workspace-name>
+```
+
+**Step 3 — Verify the Rust workspace compiles**
+
+```sh
+cargo check --workspace
+```
+
+Should exit 0. Warnings are fine; errors indicate a broken template.
+
+**Step 4 — Install JS dependencies and build the App Directory**
+
+```sh
+npm install
+npm run build:app-directory
+```
+
+**Step 5 — Run the scaffolded framework**
+
+```sh
+# Terminal 1
+npm run dev:app-directory
+
+# Terminal 2
+npm run dev:desktop-agent
+
+# Terminal 3
+npm run dev:terminal
+```
+
+**Passing signal:**
+
+| Check | Expected |
+|---|---|
+| `cargo check --workspace` | exits 0 |
+| `npm install` | no peer dep errors |
+| App Directory starts | responds at `http://localhost:<port>` |
+| Desktop Agent starts | connects to App Directory, no crash |
+| Terminal starts | window opens, app list loads |
+
+---
+
+### Test the upgrade path
+
+Run this when you have added a migration to `versions.json` and want to confirm it applies correctly to an existing scaffolded workspace.
+
+From inside a scaffolded workspace that is on the previous version:
+
+```sh
+npx create-one-terminal upgrade
+```
+
+Check the generated report for confirmation:
+
+```sh
+cat .one-terminal/upgrade-report-<ver>.md
+```
+
+All migrations should show status `applied`. A status of `needs-manual` means the migration detected a conflict and left a note for the user — verify the note is accurate and actionable.
 
 ---
 

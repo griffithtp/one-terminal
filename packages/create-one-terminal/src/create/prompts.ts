@@ -1,7 +1,13 @@
 import * as p from "@clack/prompts";
+import { resolve } from "node:path";
 import { buildContext, type ScaffoldContext } from "./context.js";
 
-export async function runPrompts(outputDir: string): Promise<ScaffoldContext> {
+export interface PromptsResult {
+  ctx: ScaffoldContext;
+  outputDir: string;
+}
+
+export async function runPrompts(): Promise<PromptsResult> {
   p.intro("OneTerminal Scaffolder");
 
   const workspaceName = await p.text({
@@ -13,6 +19,17 @@ export async function runPrompts(outputDir: string): Promise<ScaffoldContext> {
     },
   });
   if (p.isCancel(workspaceName)) cancel();
+
+  const outputDirInput = await p.text({
+    message: "Output folder",
+    initialValue: `./${workspaceName as string}`,
+    validate: (v) => {
+      if (!v.trim()) return "Folder path cannot be empty";
+    },
+  });
+  if (p.isCancel(outputDirInput)) cancel();
+
+  const outputDir = resolve(outputDirInput as string);
 
   const tauriIdentifier = await p.text({
     message: "Reverse-domain identifier (used for Tauri bundle ID)",
@@ -91,7 +108,7 @@ export async function runPrompts(outputDir: string): Promise<ScaffoldContext> {
   const go = await p.confirm({ message: "Generate workspace?", initialValue: true });
   if (p.isCancel(go) || !go) cancel();
 
-  return ctx;
+  return { ctx, outputDir };
 }
 
 function validatePort(v: string): string | undefined {

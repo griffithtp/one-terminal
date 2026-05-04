@@ -7,5 +7,5 @@ const cmd = process.argv[2];
 if (cmd === "upgrade") {
   await runUpgrade();
 } else {
-  await runCreate(cmd === "create" ? process.argv[3] : cmd);
+  await runCreate();
 }
