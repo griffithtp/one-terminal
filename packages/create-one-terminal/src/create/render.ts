@@ -12,7 +12,7 @@ const STATIC_FILENAMES = new Set(["build.rs", "vite-env.d.ts"]);
 const SKIP_DIRS = ["node_modules", "target", "dist", "gen", ".git"];
 
 export async function renderWorkspace(ctx: ScaffoldContext, outputDir: string): Promise<void> {
-  const templatesDir = join(fileURLToPath(import.meta.url), "../../..", "templates");
+  const templatesDir = join(fileURLToPath(import.meta.url), "../..", "templates");
   const entries = await walk(templatesDir, SKIP_DIRS);
 
   // Collect all renders into memory before writing (atomic: no partial writes on error)
