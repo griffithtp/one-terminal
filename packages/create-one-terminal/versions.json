@@ -2,6 +2,40 @@
   "schemaVersion": 1,
   "versions": [
     {
+      "version": "0.1.2",
+      "releaseDate": "2026-05-04",
+      "breaking": false,
+      "changelogUrl": "https://github.com/one-terminal/one-terminal/releases/tag/v0.1.2",
+      "migrations": [
+        {
+          "type": "dep-bump",
+          "id": "0.1.2-dep-bump-npm",
+          "target": "apps/app-directory/package.json",
+          "description": "Bump vite",
+          "deps": [
+            {
+              "name": "vite",
+              "ecosystem": "npm",
+              "newVersion": "8.0.10"
+            }
+          ]
+        },
+        {
+          "type": "dep-bump",
+          "id": "0.1.2-dep-bump-npm",
+          "target": "apps/electron-host/package.json",
+          "description": "Bump electron",
+          "deps": [
+            {
+              "name": "electron",
+              "ecosystem": "npm",
+              "newVersion": "41.5.0"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "version": "0.1.1",
       "releaseDate": "2026-05-04",
       "breaking": true,
