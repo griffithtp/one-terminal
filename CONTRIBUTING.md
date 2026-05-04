@@ -10,10 +10,9 @@ This guide covers how the framework is structured for contribution, with a focus
 - [Repo Layout](#repo-layout)
 - [Making Framework Changes](#making-framework-changes)
   - [Step 1 — Edit the live app](#step-1--edit-the-live-app)
-  - [Step 2 — Re-extract templates](#step-2--re-extract-templates)
-  - [Step 3 — Add a migration (if needed)](#step-3--add-a-migration-if-needed)
-  - [Step 4 — Bump the version](#step-4--bump-the-version)
-  - [Step 5 — Open a PR](#step-5--open-a-pr)
+  - [Step 2 — Run the migration wizard](#step-2--run-the-migration-wizard)
+  - [Step 3 — Build and test](#step-3--build-and-test)
+  - [Step 4 — Open a PR](#step-4--open-a-pr)
 - [The Template System](#the-template-system)
   - [How templates are generated](#how-templates-are-generated)
   - [Substitution table](#substitution-table)
@@ -88,6 +87,7 @@ one-terminal/
 │       └── versions.json              upgrade migration manifest
 ├── scripts/
 │   ├── extract-templates.ts           derives EJS templates from apps/
+│   ├── create-migration.ts            interactive wizard: extract + diff + author migrations
 │   └── check-template-drift.ts        CI drift check
 └── .github/workflows/
     ├── template-drift.yml             blocks PRs with stale templates
@@ -102,72 +102,68 @@ one-terminal/
 
 The apps in `apps/` are the canonical source. When you change app code, the EJS scaffolding templates must be regenerated so that `npm create one-terminal` produces a workspace that reflects your changes.
 
+The `create-migration` wizard handles template extraction, diff analysis, migration authoring, version bumping, and `context.ts` updates in a single interactive session. Manual edits to `versions.json`, `context.ts`, or the templates directory are no longer needed for the common upgrade path.
+
 ### Step 1 — Edit the live app
 
 Work directly in `apps/one-terminal/`, `apps/desktop-agent/`, `packages/ot-core/`, etc. as normal. If a new config key, dependency, or file is being introduced that scaffolded projects should receive, make the change in the live app first.
 
-If the new value should be user-customisable at scaffold time (e.g. a port number), add it to:
+If the new value should be user-customisable at scaffold time (e.g. a port number), you must also:
 
-1. `ScaffoldContext` interface in [packages/create-one-terminal/src/create/context.ts](packages/create-one-terminal/src/create/context.ts)
-2. The prompts in [packages/create-one-terminal/src/create/prompts.ts](packages/create-one-terminal/src/create/prompts.ts)
-3. The substitution table in [scripts/extract-templates.ts](scripts/extract-templates.ts) (see [Substitution table](#substitution-table) below)
+1. Add a field to `ScaffoldContext` in [packages/create-one-terminal/src/create/context.ts](packages/create-one-terminal/src/create/context.ts)
+2. Add a prompt in [packages/create-one-terminal/src/create/prompts.ts](packages/create-one-terminal/src/create/prompts.ts)
+3. Add the substitution pair in `SUBSTITUTIONS` in [scripts/extract-templates.ts](scripts/extract-templates.ts) — longest/most-specific literal first (see [Substitution table](#substitution-table))
 
-### Step 2 — Re-extract templates
+Do those scaffolder-side changes before running the wizard so they are reflected in the extracted templates.
+
+### Step 2 — Run the migration wizard
 
 ```sh
-npm run extract-templates
+npm run create-migration
 ```
 
-This re-runs the extractor, walks all source trees, applies the substitution table, and regenerates every `.ejs` file under `packages/create-one-terminal/templates/`. Review the diff to confirm only the expected changes appear:
+The wizard runs end-to-end:
+
+1. **Extracts templates** to a temp directory — same logic as `npm run extract-templates`
+2. **Diffs** the fresh extraction against the committed templates in `packages/create-one-terminal/templates/`
+3. **Reports changed files** and classifies each automatically:
+   - `Cargo.toml` / `package.json` → `dep-bump` (auto-detected crate and npm version changes)
+   - `*.json` config files → `config-merge` (deep diff with auto-filled patch)
+   - Everything else → `structural` (shows a unified diff, prompts for anchor pattern and insertion content)
+4. **Prompts for version bump** — patch / minor / major, with the resulting semver shown
+5. **Writes** the new `versions.json` entry (prepended to the `versions` array)
+6. **Updates** `scaffoldVersion` in `context.ts` to the new version
+7. **Copies** the fresh templates to `packages/create-one-terminal/templates/`
+
+At the end, review what was generated:
 
 ```sh
 git diff packages/create-one-terminal/templates/
+git diff packages/create-one-terminal/versions.json
+git diff packages/create-one-terminal/src/create/context.ts
 ```
 
-Commit the updated templates together with your app change in the same PR:
+Then commit everything together:
 
 ```sh
-git add apps/ packages/ot-core/   # your app changes
+git add apps/ packages/ot-core/                          # your app changes
 git add packages/create-one-terminal/templates/
+git add packages/create-one-terminal/versions.json
+git add packages/create-one-terminal/src/create/context.ts
 git commit -m "feat: <describe change>"
 ```
 
-If you forget this step, CI will block the PR (see [CI Workflows](#ci-workflows)).
+> **When no migration is needed** (pure internal refactor with no user-visible surface): decline all migration prompts in the wizard, or run `npm run extract-templates` directly and skip `create-migration`. In that case, manually bump `scaffoldVersion` in `context.ts` only if scaffolded projects need to be made aware of the change.
 
-### Step 3 — Add a migration (if needed)
+### Step 3 — Build and test
 
-A migration is needed only when your change should automatically propagate to **already-scaffolded projects** when their owners run `npx create-one-terminal upgrade`.
-
-Ask yourself: if someone scaffolded a workspace last week and upgrades today, what do they need to receive?
-
-- New config key with a default value → `config-merge`
-- Dependency version bump → `dep-bump`
-- New file or structural file edit → `structural`
-- Pure internal refactor with no user-visible surface → no migration needed
-
-See [Migration Reference](#migration-reference) for the full spec and examples.
-
-### Step 4 — Bump the version
-
-In [packages/create-one-terminal/versions.json](packages/create-one-terminal/versions.json), add a new entry at the top of the `versions` array:
-
-```json
-{
-  "version": "0.2.0",
-  "releaseDate": "2026-06-01",
-  "breaking": false,
-  "changelogUrl": "https://github.com/one-terminal/one-terminal/releases/tag/v0.2.0",
-  "migrations": [
-    // paste migration specs here if applicable
-  ]
-}
+```sh
+npm run build:scaffolder
 ```
 
-Set `"breaking": true` if scaffolded projects cannot safely upgrade without manual intervention (e.g. renamed Rust type, removed config field). This will be surfaced as a warning in the upgrade CLI.
+Then follow [Test a scaffolded workspace](#test-a-scaffolded-workspace) to confirm the scaffolded output builds and runs. If you added a migration, also follow [Test the upgrade path](#test-the-upgrade-path).
 
-Also update `"oneTerminal": { "version": "..." }` in [packages/create-one-terminal/src/create/post-scaffold.ts](packages/create-one-terminal/src/create/post-scaffold.ts) to match, so newly scaffolded projects start on the right version.
-
-### Step 5 — Open a PR
+### Step 4 — Open a PR
 
 The CI drift check will run automatically and confirm templates are in sync. Once merged, a release is cut by pushing a `v*` tag (see [Publishing a Release](#publishing-a-release)).
 
@@ -233,7 +229,7 @@ To add a file that should always be copied unchanged, add its filename to the `S
 
 ### Stripping scripts from the root `package.json`
 
-The root `package.json` in the framework repo contains scripts that are only meaningful when working on the framework itself (`extract-templates`, `check-template-drift`, `build:scaffolder`, `scaffold`). These are stripped from the scaffolded workspace template by `ROOT_PACKAGE_SCRIPTS_OMIT` in [scripts/extract-templates.ts](scripts/extract-templates.ts).
+The root `package.json` in the framework repo contains scripts that are only meaningful when working on the framework itself (`extract-templates`, `check-template-drift`, `create-migration`, `build:scaffolder`, `scaffold`). These are stripped from the scaffolded workspace template by `ROOT_PACKAGE_SCRIPTS_OMIT` in [scripts/extract-templates.ts](scripts/extract-templates.ts).
 
 If you add a new framework-internal script to the root `package.json` that should not appear in scaffolded workspaces, add its key to `ROOT_PACKAGE_SCRIPTS_OMIT`. Conversely, app-level scripts (`dev:*`, `build:*`) should remain — they belong in every scaffolded workspace.
 
@@ -476,21 +472,43 @@ npm run dev:terminal
 
 ### Test the upgrade path
 
-Run this when you have added a migration to `versions.json` and want to confirm it applies correctly to an existing scaffolded workspace.
+Run this after `npm run create-migration` has written a new version entry and you want to confirm the migrations apply correctly to an existing workspace.
 
-From inside a scaffolded workspace that is on the previous version:
+**Step 1 — Scaffold a workspace on the previous version**
+
+Before running the wizard, scaffold a test workspace so it starts on the old version. After the wizard runs and bumps the version, that test workspace is now "behind" and can be upgraded.
+
+Alternatively, if you already have a scaffolded workspace from before your change, use that.
+
+**Step 2 — Rebuild the scaffolder**
 
 ```sh
-npx create-one-terminal upgrade
+npm run build:scaffolder
 ```
 
-Check the generated report for confirmation:
+**Step 3 — Run the upgrade command from inside the scaffolded workspace**
+
+```sh
+cd <your-scaffolded-workspace>
+node /path/to/framework/packages/create-one-terminal/dist/index.js upgrade
+```
+
+**Step 4 — Check the upgrade report**
 
 ```sh
 cat .one-terminal/upgrade-report-<ver>.md
 ```
 
 All migrations should show status `applied`. A status of `needs-manual` means the migration detected a conflict and left a note for the user — verify the note is accurate and actionable.
+
+**Step 5 — Verify the workspace still builds**
+
+```sh
+cargo check --workspace
+npm install
+```
+
+The upgraded workspace should compile cleanly. Any build error points to a missing or incorrect migration operation.
 
 ---
 

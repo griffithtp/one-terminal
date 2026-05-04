@@ -50,6 +50,7 @@ const SOURCES: Array<{ src: string; templateBase: string }> = [
 const ROOT_PACKAGE_SCRIPTS_OMIT = new Set([
   "extract-templates",
   "check-template-drift",
+  "create-migration",
   "build:scaffolder",
   "scaffold",
 ]);

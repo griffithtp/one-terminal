@@ -1,11 +1,11 @@
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { VersionsManifest } from "./migrations/types.js";
 
 const BUNDLED_PATH = join(
-  fileURLToPath(import.meta.url),
-  "../../../../versions.json",
+  dirname(fileURLToPath(import.meta.url)),
+  "../../versions.json",
 );
 
 export async function fetchManifest(): Promise<VersionsManifest> {

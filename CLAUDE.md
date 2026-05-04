@@ -94,26 +94,36 @@ npm run build:all                # all Tauri apps
 ## Scaffolder commands
 
 ```sh
-npm run extract-templates        # re-derive EJS templates from apps/ (run after any app change)
+npm run create-migration         # interactive wizard: extract + diff + author migrations + bump version
+npm run extract-templates        # re-derive EJS templates only (no migration prompts)
 npm run build:scaffolder         # compile create-one-terminal to packages/create-one-terminal/dist/
 npm run check-template-drift     # CI drift check — exits 1 if templates are out of sync
-node packages/create-one-terminal/dist/index.js   # run scaffolder locally
+node packages/create-one-terminal/dist/index.js            # scaffold a new workspace locally
+node packages/create-one-terminal/dist/index.js upgrade    # run upgrade against current directory
 ```
 
 Templates at `packages/create-one-terminal/templates/` are always generated — never hand-edit them.
 
+## Upgrading the framework (developer workflow)
+
+1. Edit the live app in `apps/` or `packages/ot-*`
+2. Run `npm run create-migration` — the wizard extracts templates, diffs against committed ones, prompts for migration specs per changed file, bumps the version, updates `context.ts`, and copies the new templates
+3. Review: `git diff packages/create-one-terminal/`
+4. Run `npm run build:scaffolder` and test with a scaffolded workspace
+
 ## Testing a scaffolded workspace locally
 
-After changing app source or templates, scaffold a test workspace and verify it builds:
+After changing app source or running the migration wizard, scaffold a test workspace and verify it builds:
 
 ```sh
-npm run extract-templates
 npm run build:scaffolder
 node packages/create-one-terminal/dist/index.js   # answer prompts, note output dir
-cd <workspace-name>
+cd <output-dir>
 cargo check --workspace          # must exit 0
 npm install
 npm run build:app-directory
 ```
 
 Then start the services in order: `dev:app-directory` → `dev:desktop-agent` → `dev:terminal`.
+
+To test the upgrade path, scaffold a workspace _before_ running the wizard (so it starts on the old version), then after the wizard runs: `node /path/to/framework/packages/create-one-terminal/dist/index.js upgrade` from inside that workspace.
