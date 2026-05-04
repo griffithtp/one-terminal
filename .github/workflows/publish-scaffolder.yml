@@ -1,0 +1,35 @@
+name: Publish Scaffolder
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  publish:
+    name: Build and publish create-one-terminal
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Re-extract templates from source apps
+        run: npm run extract-templates
+
+      - name: Assert no template drift after re-extract
+        run: git diff --exit-code packages/create-one-terminal/templates/
+
+      - name: Build create-one-terminal
+        run: npm run build:scaffolder
+
+      - name: Publish to npm
+        run: npm publish -w packages/create-one-terminal --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

@@ -1,0 +1,50 @@
+name: Template Drift Check
+
+on:
+  push:
+    paths:
+      - "apps/**"
+      - "packages/ot-core/**"
+      - "packages/ot-fdc3/**"
+      - "packages/fdc3-plugin/**"
+      - "packages/fdc3-client/**"
+      - "Cargo.toml"
+  pull_request:
+    paths:
+      - "apps/**"
+      - "packages/ot-core/**"
+      - "packages/ot-fdc3/**"
+      - "packages/fdc3-plugin/**"
+      - "packages/fdc3-client/**"
+      - "Cargo.toml"
+
+jobs:
+  check-drift:
+    name: Check template drift
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install root devDependencies
+        run: npm ci --ignore-scripts
+
+      - name: Run template extractor to temp dir
+        run: npx tsx scripts/extract-templates.ts --output /tmp/extracted-templates
+
+      - name: Diff extracted templates against committed templates
+        run: |
+          diff -rq /tmp/extracted-templates packages/create-one-terminal/templates
+        id: diff
+
+      - name: Show diff on failure
+        if: failure() && steps.diff.outcome == 'failure'
+        run: |
+          diff -r /tmp/extracted-templates packages/create-one-terminal/templates || true
+          echo ""
+          echo "Templates are out of sync with the source apps."
+          echo "Run 'npm run extract-templates' locally and commit the updated templates."
+        shell: bash

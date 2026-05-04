@@ -1,0 +1,20 @@
+{
+  "title": "<%= displayName %> Desktop Agent",
+  "appDirectoryUrl": "http://localhost:<%= appDirectoryPort %>",
+  "engineCatalogUrl": "http://localhost:<%= appDirectoryPort %>",
+  "ports": {
+    "tcpBroker": <%= tcpBrokerPort %>,
+    "fdc3Bus": <%= fdc3BusPort %>,
+    "dacpBridge": <%= dacpBridgePort %>
+  },
+  "userChannels": [
+    { "id": "Red",    "displayName": "Red",    "color": "#E74C3C" },
+    { "id": "Orange", "displayName": "Orange", "color": "#E67E22" },
+    { "id": "Yellow", "displayName": "Yellow", "color": "#F1C40F" },
+    { "id": "Green",  "displayName": "Green",  "color": "#2ECC71" },
+    { "id": "Teal",   "displayName": "Teal",   "color": "#1ABC9C" },
+    { "id": "Blue",   "displayName": "Blue",   "color": "#3498DB" },
+    { "id": "Purple", "displayName": "Purple", "color": "#9B59B6" },
+    { "id": "Pink",   "displayName": "Pink",   "color": "#EC407A" }
+  ]
+}

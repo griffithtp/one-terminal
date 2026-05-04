@@ -48,7 +48,7 @@ A reusable desktop container framework built on [Tauri 2](https://tauri.app) tha
 | Path | Port | Description |
 |---|---|---|
 | `apps/sample-ticker` | 3010 | Market data ticker — broadcasts `fx.rate` on the Green channel |
-| `apps/sample-chart-viewer` | 3011 | Candlestick chart — mock EUR/USD stream, handles `ViewChart`/`ViewQuote` intents |
+| `apps/sample-chart` | 3011 | Candlestick chart — mock EUR/USD stream, handles `ViewChart`/`ViewQuote` intents |
 
 ---
 
@@ -73,7 +73,7 @@ npm run dev:app-directory        # http://localhost:3005
 
 # 3. Sample apps (optional)
 npm run dev:sample-ticker          # http://localhost:3010
-npm run dev:sample-chart-viewer    # http://localhost:3011
+npm run dev:sample-chart           # http://localhost:3011
 
 # 4. Desktop Agent (separate terminal)
 npm run dev:desktop-agent
@@ -380,9 +380,8 @@ one-terminal/
 │   ├── app-directory/         FDC3 AppD REST API + management UI (Express + React)
 │   ├── tauri-webview-host/    Minimal Tauri host for pinned WebView2/WKWebView apps
 │   ├── electron-host/         Minimal Electron host for Electron-engine apps
-│   ├── sample-chart/          Sample: candlestick chart (Tauri spoke)
 │   ├── sample-ticker/         Sample: ticker plant browser app (port 3010)
-│   └── sample-chart-viewer/   Sample: chart viewer browser app (port 3011)
+│   └── sample-chart/          Sample: candlestick chart viewer browser app (port 3011)
 ├── packages/
 │   ├── ot-core/               Shared Rust crate (engine abstraction, plugin manifests)
 │   ├── fdc3-plugin/           Browser FDC3 client (WebSocket transport)

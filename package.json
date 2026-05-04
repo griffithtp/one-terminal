@@ -19,16 +19,22 @@
     "dev:desktop-agent:electron": "OT_ELECTRON_HOST_OVERRIDE=$INIT_CWD/apps/electron-host npm -w @one-terminal/desktop-agent run tauri:dev",
     "dev:desktop-agent:pin": "OT_ENGINE_FAMILY=webview2 OT_ENGINE_VERSION=124.0.2478.97 npm -w @one-terminal/desktop-agent run tauri:dev",
     "dev:sample-ticker": "npm -w @one-terminal/sample-ticker run dev",
-    "dev:sample-chart-viewer": "npm -w @one-terminal/sample-chart-viewer run dev",
+    "dev:sample-chart": "npm -w @one-terminal/sample-chart run dev",
     "dev:app-directory": "npm -w @one-terminal/app-directory run dev",
     "build:app-directory": "npm -w @one-terminal/app-directory run build",
     "start:app-directory": "npm -w @one-terminal/app-directory run start",
     "build:tauri-webview-host": "cargo build -p tauri-webview-host",
     "setup:electron-host": "npm install -w @one-terminal/electron-host",
     "start:electron-host": "npm -w @one-terminal/electron-host start",
-    "build:all": "npm -w @one-terminal/one-terminal run build && npm -w @one-terminal/desktop-agent run build && npm -w @one-terminal/app-directory run build"
+    "build:all": "npm -w @one-terminal/one-terminal run build && npm -w @one-terminal/desktop-agent run build && npm -w @one-terminal/app-directory run build",
+    "extract-templates": "npx tsx scripts/extract-templates.ts",
+    "check-template-drift": "npx tsx scripts/check-template-drift.ts",
+    "create-migration": "npx tsx scripts/create-migration.ts",
+    "build:scaffolder": "npm -w create-one-terminal run build",
+    "scaffold": "node packages/create-one-terminal/dist/index.js"
   },
   "devDependencies": {
+    "tsx": "^4.19.4",
     "typescript": "~5.8.3"
   }
 }

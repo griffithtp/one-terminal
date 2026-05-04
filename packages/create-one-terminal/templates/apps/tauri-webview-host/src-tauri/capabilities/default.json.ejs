@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Host permissions: create one external-URL webview window on startup",
+  "windows": ["*"],
+  "permissions": [
+    "core:default",
+    "core:webview:allow-create-webview",
+    "core:window:default",
+    "core:window:allow-create",
+    "core:window:allow-close"
+  ]
+}

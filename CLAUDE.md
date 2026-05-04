@@ -25,7 +25,7 @@ packages/ot-fdc3/             — shared Tauri plugin: FDC3 2.2 TCP spoke client
 packages/fdc3-plugin/         — browser FDC3 agent (fdc3-plugin.js)
 packages/fdc3-client/         — TypeScript FDC3 types + Fdc3Agent (requires ot-fdc3)
 apps/sample-ticker/           — demo browser app, port 3010
-apps/sample-chart-viewer/     — demo browser app, port 3011
+apps/sample-chart/            — demo browser app, port 3011
 ```
 
 ## Key port defaults (all overridable via env vars)
@@ -37,7 +37,7 @@ apps/sample-chart-viewer/     — demo browser app, port 3011
 | FDC3 Bus WS | 7891 | `OT_FDC3_BUS_PORT` |
 | DACP Bridge | 4475 | `OT_DACP_PORT` |
 | sample-ticker | 3010 | — |
-| sample-chart-viewer | 3011 | — |
+| sample-chart | 3011 | — |
 
 ## Engine families
 
@@ -90,3 +90,40 @@ cargo test -p desktop-agent engines::router
 npm run build:app-directory      # rebuilds apps/app-directory/dist
 npm run build:all                # all Tauri apps
 ```
+
+## Scaffolder commands
+
+```sh
+npm run create-migration         # interactive wizard: extract + diff + author migrations + bump version
+npm run extract-templates        # re-derive EJS templates only (no migration prompts)
+npm run build:scaffolder         # compile create-one-terminal to packages/create-one-terminal/dist/
+npm run check-template-drift     # CI drift check — exits 1 if templates are out of sync
+node packages/create-one-terminal/dist/index.js            # scaffold a new workspace locally
+node packages/create-one-terminal/dist/index.js upgrade    # run upgrade against current directory
+```
+
+Templates at `packages/create-one-terminal/templates/` are always generated — never hand-edit them.
+
+## Upgrading the framework (developer workflow)
+
+1. Edit the live app in `apps/` or `packages/ot-*`
+2. Run `npm run create-migration` — the wizard extracts templates, diffs against committed ones, prompts for migration specs per changed file, bumps the version, updates `context.ts`, and copies the new templates
+3. Review: `git diff packages/create-one-terminal/`
+4. Run `npm run build:scaffolder` and test with a scaffolded workspace
+
+## Testing a scaffolded workspace locally
+
+After changing app source or running the migration wizard, scaffold a test workspace and verify it builds:
+
+```sh
+npm run build:scaffolder
+node packages/create-one-terminal/dist/index.js   # answer prompts, note output dir
+cd <output-dir>
+cargo check --workspace          # must exit 0
+npm install
+npm run build:app-directory
+```
+
+Then start the services in order: `dev:app-directory` → `dev:desktop-agent` → `dev:terminal`.
+
+To test the upgrade path, scaffold a workspace _before_ running the wizard (so it starts on the old version), then after the wizard runs: `node /path/to/framework/packages/create-one-terminal/dist/index.js upgrade` from inside that workspace.

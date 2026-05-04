@@ -1,0 +1,100 @@
+# ot-fdc3
+
+Tauri 2 plugin that gives any OneTerminal spoke app a complete FDC3 2.2 Desktop Agent over the CDA TCP transport.
+
+## What it does
+
+- Connects to the Desktop Agent's TCP broker (port 7890, `OT_TCP_PORT`) using the newline-delimited JSON protocol
+- Auto-reconnects on disconnect
+- Registers all `fdc3_*` Tauri IPC commands that `@<%= orgScope %>/fdc3-client` calls
+- Emits `fdc3:context`, `fdc3:intent`, `fdc3:channel_joined`, `fdc3:channel_left`, and `fdc3:ready` Tauri events that the TS frontend listens for
+- TCP client starts lazily on the first `fdc3_register` call — no hardcoded app ID in Rust
+
+## Adding to a Tauri spoke app
+
+### 1. `Cargo.toml`
+
+```toml
+[dependencies]
+ot-fdc3 = { workspace = true }
+```
+
+### 2. `src-tauri/src/lib.rs`
+
+```rust
+pub fn run() {
+    tauri::Builder::default()
+        .plugin(ot_fdc3::init())   // ← one line
+        // ...your other plugins and commands...
+        .run(tauri::generate_context!())
+        .expect("error while running app");
+}
+```
+
+### 3. TypeScript frontend
+
+```ts
+import { initFdc3 } from '@<%= orgScope %>/fdc3-client';
+
+// Call once before rendering.  Starts the TCP connection, waits for Welcome.
+const fdc3 = await initFdc3('my-app-id');
+
+await fdc3.joinUserChannel('Green');
+await fdc3.broadcast({ type: 'fdc3.instrument', id: { ticker: 'AAPL' } });
+
+fdc3.addContextListener('fdc3.instrument', (ctx) => {
+  console.log('received', ctx.id.ticker);
+});
+```
+
+## Accessing state from Rust (e.g. a mock streamer)
+
+```rust
+use ot_fdc3::{OtFdc3State, FdcContextEvent};
+
+// In your app's setup closure:
+let fdc = ot_fdc3::get_state(app.handle());
+
+// In a background task:
+if fdc.is_connected() {
+    fdc.join_channel_raw("Green").await?;
+    fdc.broadcast_raw("Green", serde_json::json!({ "type": "fx.rate" })).await?;
+}
+
+// Emit directly to local frontend (bypasses CDA, works offline):
+app.emit("fdc3:context", FdcContextEvent {
+    channel_id: "Green".to_string(),
+    context: ctx,
+    source_app_id: "my-app".to_string(),
+    source_instance_id: fdc.get_instance_id().unwrap_or_default(),
+})?;
+```
+
+## IPC commands
+
+All commands are registered by the plugin — do not add them to `invoke_handler` manually.
+
+| Command | Description |
+|---|---|
+| `fdc3_register(appId, windowLabel)` | Connect to CDA, returns `{ appId, instanceId }` |
+| `fdc3_get_system_channels()` | List user channels from CDA Welcome |
+| `fdc3_join_user_channel(instanceId, channelId)` | Join a channel, emits `fdc3:channel_joined` |
+| `fdc3_leave_current_channel(instanceId)` | Leave current channel |
+| `fdc3_get_current_channel(instanceId)` | Current channel or `null` |
+| `fdc3_broadcast(instanceId, context)` | Broadcast on current channel |
+| `fdc3_add_intent_listener(instanceId, intent)` | Register intent handler with CDA |
+| `fdc3_remove_intent_listener(instanceId, intent)` | Deregister intent handler |
+| `fdc3_raise_intent(sourceInstanceId, intent, context, target)` | Raise intent, blocks until resolved |
+| `fdc3_get_registered_apps()` | Stub — returns `[]` |
+| `fdc3_get_current_context(channelId, contextType)` | Stub — returns `null` |
+| `fdc3_find_intent(intent, contextType)` | Stub — returns empty app list |
+| `fdc3_find_intents_for_context(contextType)` | Stub — returns `[]` |
+| `fdc3_raise_intent_for_context(…)` | Stub — returns error |
+| `fdc3_get_or_create_channel(id)` | Looks up known channels, or returns a plain `Channel` |
+| `fdc3_create_private_channel()` | Returns a stub private channel with a random ID |
+
+## Notes
+
+- **Single TCP connection per app process.** All Tauri windows in the same app share one `instanceId`. Multi-window per-instance support would require a per-window state map.
+- **`fdc3_register` blocks** up to 10 seconds waiting for the CDA `Welcome`. Ensure the Desktop Agent is running before the frontend calls `initFdc3()`.
+- The TCP port is read from `OT_TCP_PORT` at connect time, defaulting to `7890`.
