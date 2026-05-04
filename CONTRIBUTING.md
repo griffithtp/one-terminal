@@ -28,7 +28,6 @@ This guide covers how the framework is structured for contribution, with a focus
   - [`dep-bump`](#dep-bump)
   - [`structural`](#structural)
 - [Publishing a Release](#publishing-a-release)
-- [Cargo Generate Template](#cargo-generate-template)
 - [CI Workflows](#ci-workflows)
 - [Naming Conventions](#naming-conventions)
 
@@ -43,7 +42,6 @@ This guide covers how the framework is structured for contribution, with a focus
 | [Rust](https://rustup.rs) | stable ≥ 1.77 |
 | [Node.js](https://nodejs.org) | ≥ 20 LTS |
 | Xcode Command Line Tools | macOS only — `xcode-select --install` |
-| [cargo-generate](https://github.com/cargo-generate/cargo-generate) | for Cargo template work only |
 
 ### Install dependencies
 
@@ -82,9 +80,6 @@ one-terminal/
 │       │   └── merge/                 JSON + TOML merge helpers
 │       ├── templates/                 ← GENERATED, never hand-edited
 │       └── versions.json              upgrade migration manifest
-├── templates/
-│   └── cargo/
-│       └── tauri-app/                 cargo generate template (Liquid)
 ├── scripts/
 │   ├── extract-templates.ts           derives EJS templates from apps/
 │   └── check-template-drift.ts        CI drift check
@@ -383,27 +378,6 @@ git push origin v0.2.0
 ```
 
 > The publish workflow requires `NPM_TOKEN` to be set as a repository secret with publish access to the `create-one-terminal` package.
-
-### Tagging the Cargo template
-
-The Cargo generate template (`templates/cargo/tauri-app/`) is consumed directly from the Git repository. When the template changes materially, tag it separately so users can pin to a known-good version:
-
-```sh
-git tag cargo-template-v0.2.0
-git push origin cargo-template-v0.2.0
-```
-
-Document the new tag in the [Cargo template README](templates/cargo/README.md).
-
----
-
-## Cargo Generate Template
-
-The Cargo template at `templates/cargo/tauri-app/` uses [Liquid](https://shopify.github.io/liquid/) syntax (`.liquid` files) via `cargo-generate`. It is maintained independently of the EJS template system — edit its `.liquid` files directly when the Tauri crate structure changes.
-
-See [templates/cargo/README.md](templates/cargo/README.md) for usage and [templates/cargo/tauri-app/README.md](templates/cargo/tauri-app/README.md) for the full placeholder and naming convention reference.
-
-**Known limitation:** `cargo generate` has no access to the npm workspace, so `tauri.conf.json.liquid` emits `@YOUR_SCOPE` as a literal placeholder. Document any such limitations in `templates/cargo/tauri-app/README.md` when encountered.
 
 ---
 

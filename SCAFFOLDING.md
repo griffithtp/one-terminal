@@ -2,10 +2,9 @@
 
 ## Overview
 
-Two scaffolding tools:
+One scaffolding tool:
 
 1. **`npm create one-terminal`** — scaffolds a complete OneTerminal monorepo workspace
-2. **`cargo generate` template** — Rust-side companion for adding new Tauri crates
 
 Templates are **never hand-edited**. A `scripts/extract-templates.ts` extractor derives all
 `.ejs` template files from the live apps. CI enforces this: any PR that modifies `apps/` must
@@ -312,74 +311,7 @@ User-modified managed fields trigger the conflict handler.
 
 ---
 
-## Phase 8 — Cargo Generate Template
-
-### Files
-
-- [x] Create `templates/cargo/tauri-app/cargo-generate.toml`
-  - Placeholders: `app_name` (regex `^[a-z][a-z0-9-]+$`), `org_identifier`, `dev_port`, `include_fdc3`
-- [x] Create `templates/cargo/tauri-app/Cargo.toml.liquid`
-- [x] Create `templates/cargo/tauri-app/tauri.conf.json.liquid`
-- [x] Create `templates/cargo/tauri-app/capabilities/default.json.liquid`
-- [x] Create `templates/cargo/tauri-app/resources/app.config.json.liquid`
-- [x] Create `templates/cargo/tauri-app/src/main.rs.liquid` *(static — Liquid used for crate name only)*
-- [x] Create `templates/cargo/tauri-app/src/lib.rs.liquid`
-- [x] Create `templates/cargo/tauri-app/build.rs` *(static)*
-- [x] Create `templates/cargo/README.md` — index of available templates + prerequisites
-- [x] Create `templates/cargo/tauri-app/README.md` — full usage, prompts, wiring, FDC3 notes
-
-### Usage
-
-```sh
-# Install cargo-generate once
-cargo install cargo-generate
-
-# Scaffold from the published repo
-cargo generate --git https://github.com/one-terminal/one-terminal \
-               --subfolder templates/cargo/tauri-app \
-               --name order-blotter
-
-# Pinned to a release tag
-cargo generate --git https://github.com/one-terminal/one-terminal \
-               --tag cargo-template-v0.1.0 \
-               --subfolder templates/cargo/tauri-app \
-               --name order-blotter
-
-# From a local clone
-cargo generate --path templates/cargo/tauri-app --name order-blotter
-```
-
-### Placeholders
-
-| Placeholder | Example | Validation |
-|---|---|---|
-| `app_name` | `order-blotter` | `^[a-z][a-z0-9-]+$` |
-| `org_identifier` | `com.acme.trading` | dot-separated lowercase segments |
-| `dev_port` | `1423` | 4–5 digit integer |
-| `include_fdc3` | `true` | bool |
-
-### Known limitation: `@YOUR_SCOPE` in `tauri.conf.json`
-
-`cargo generate` runs without any knowledge of the npm workspace, so
-`beforeDevCommand` and `beforeBuildCommand` are emitted with a literal
-`@YOUR_SCOPE` placeholder. The developer must replace it manually after
-generation — this is documented in `templates/cargo/tauri-app/README.md`.
-
-The npm scaffolder (`npm create one-terminal`) does not have this limitation
-because it reads the workspace `package.json` directly.
-
-### Releasing a new template version
-
-Tag with `cargo-template-v<semver>` whenever templates change materially:
-
-```sh
-git tag cargo-template-v0.2.0
-git push origin cargo-template-v0.2.0
-```
-
----
-
-## Phase 9 — Smoke Test
+## Phase 8 — Smoke Test
 
 - [x] Render pipeline verified: all substitutions correct, files generated, `oneTerminal` metadata injected
 - [x] `cargo check --workspace` in generated output → exits 0 (warnings only, no errors)
@@ -395,30 +327,3 @@ npm publish -w packages/create-one-terminal --access public
 ```
 Triggered automatically by `.github/workflows/publish-scaffolder.yml` on `git tag v*`.
 
-### Cargo template
-
-Git-based — not published to crates.io. End-user command:
-
-```sh
-cargo generate --git https://github.com/one-terminal/one-terminal \
-               --subfolder templates/cargo/tauri-app \
-               --name my-app
-```
-
-Tag releases as `cargo-template-v*` for pinnable versions:
-
-```sh
-git tag cargo-template-v0.1.0
-git push origin cargo-template-v0.1.0
-```
-
-Users can pin to a tag for reproducibility:
-
-```sh
-cargo generate --git https://github.com/one-terminal/one-terminal \
-               --tag cargo-template-v0.1.0 \
-               --subfolder templates/cargo/tauri-app \
-               --name my-app
-```
-
-See [`templates/cargo/README.md`](templates/cargo/README.md) for the full reference.
