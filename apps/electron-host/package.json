@@ -8,6 +8,9 @@
     "start": "electron ."
   },
   "devDependencies": {
-    "electron": "^29.3.0"
+    "electron": "^41.5.0"
+  },
+  "dependencies": {
+    "vite": "8.0.10"
   }
 }
