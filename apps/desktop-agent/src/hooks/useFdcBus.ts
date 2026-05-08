@@ -70,14 +70,13 @@ export function useFdcBus() {
 
     // Relay intent deliveries to the correct bus app window
     const unlistenIntent = listen<CdaIntentEvent>("cda:intent", (event) => {
-      const { intent, handlerInstanceId, sourceInstanceId, requestId } =
-        event.payload;
+      const { intent, handlerInstanceId, sourceInstanceId, requestId } = event.payload;
       // Only relay if the handler is a bus-connected instance
       if (instances.current.has(handlerInstanceId)) {
         bus.publish({
           type: "fdc3:intentDelivery",
           intent,
-          context: {},        // backend event does not carry context; full delivery comes from TCP
+          context: {}, // backend event does not carry context; full delivery comes from TCP
           sourceInstanceId,
           targetInstanceId: handlerInstanceId,
           deliveryId: requestId,
@@ -89,15 +88,24 @@ export function useFdcBus() {
 
     function handleInbound(msg: InboundBusMessage) {
       switch (msg.type) {
-        case "fdc3:hello":       return onHello(msg, bus);
-        case "fdc3:broadcast":   return onBroadcast(msg);
-        case "fdc3:raiseIntent": return onRaiseIntent(msg, bus);
-        case "fdc3:joinChannel": return onJoinChannel(msg, bus);
-        case "fdc3:leaveChannel":return onLeaveChannel(msg);
-        case "fdc3:addIntentListener":    return onAddIntentListener(msg);
-        case "fdc3:removeIntentListener": return onRemoveIntentListener(msg);
-        case "fdc3:open":        return onOpen(msg, bus);
-        case "fdc3:goodbye":     return onGoodbye(msg);
+        case "fdc3:hello":
+          return onHello(msg, bus);
+        case "fdc3:broadcast":
+          return onBroadcast(msg);
+        case "fdc3:raiseIntent":
+          return onRaiseIntent(msg, bus);
+        case "fdc3:joinChannel":
+          return onJoinChannel(msg, bus);
+        case "fdc3:leaveChannel":
+          return onLeaveChannel(msg);
+        case "fdc3:addIntentListener":
+          return onAddIntentListener(msg);
+        case "fdc3:removeIntentListener":
+          return onRemoveIntentListener(msg);
+        case "fdc3:open":
+          return onOpen(msg, bus);
+        case "fdc3:goodbye":
+          return onGoodbye(msg);
       }
     }
 
@@ -199,9 +207,9 @@ export function useFdcBus() {
 
     function onOpen(msg: BusOpen, bus: FdcBus) {
       // Resolve appId → URL + type via the app directory cache, then launch
-      invoke<{ appId: string; type: string; name: string; title?: string; details?: { url?: string } }[]>(
-        "cda_list_app_directory"
-      )
+      invoke<
+        { appId: string; type: string; name: string; title?: string; details?: { url?: string } }[]
+      >("cda_list_app_directory")
         .then((apps) => {
           const app = apps.find((a) => a.appId === msg.appId);
           const url = app?.details?.url;

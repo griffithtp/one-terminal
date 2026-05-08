@@ -54,9 +54,7 @@ export async function initFdc3(
       const url = bridgeUrl ?? "ws://127.0.0.1:4000/v2/bridge";
       const proxy = await BridgeAgentProxy.connect(agent, url);
       window.fdc3 = proxy;
-      console.info(
-        `[fdc3] Bridge connected — desktopAgentId: ${proxy.desktopAgentId}`
-      );
+      console.info(`[fdc3] Bridge connected — desktopAgentId: ${proxy.desktopAgentId}`);
       return proxy;
     } catch (e) {
       console.warn("[fdc3] Bridge unavailable, using local agent only:", e);

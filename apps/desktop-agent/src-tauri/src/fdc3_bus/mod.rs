@@ -19,28 +19,26 @@
 //! (camelCase) before writing to the WebSocket sink.
 
 use axum::{
-    Router,
     extract::{
-        State,
-        WebSocketUpgrade,
         ws::{Message, WebSocket},
+        State, WebSocketUpgrade,
     },
     response::IntoResponse,
     routing::get,
+    Router,
 };
 use futures_util::{SinkExt, StreamExt};
-use serde_json::{Value, json};
+use serde_json::{json, Value};
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::net::TcpListener;
 use tokio::sync::mpsc;
 
 use crate::app_dir::AppDirectoryCache;
 use crate::broker::{
-    CdaConnectedEvent, CdaDisconnectedEvent,
-    ChannelManager, IntentRegistry, WindowManager, now_ms,
+    now_ms, CdaConnectedEvent, CdaDisconnectedEvent, ChannelManager, IntentRegistry, WindowManager,
 };
 use crate::dacp::PeerRegistry;
-use crate::tcp::handler::{fan_out_broadcast, deliver_intent};
+use crate::tcp::handler::{deliver_intent, fan_out_broadcast};
 
 // ── Axum shared state ─────────────────────────────────────────────────────────
 
@@ -90,10 +88,7 @@ pub async fn start(
 
 // ── WebSocket upgrade handler ─────────────────────────────────────────────────
 
-async fn ws_handler(
-    ws: WebSocketUpgrade,
-    State(state): State<BusState>,
-) -> impl IntoResponse {
+async fn ws_handler(ws: WebSocketUpgrade, State(state): State<BusState>) -> impl IntoResponse {
     ws.on_upgrade(|socket| handle_connection(socket, state))
 }
 
@@ -106,7 +101,9 @@ async fn handle_connection(socket: WebSocket, state: BusState) {
     let (instance_id, app_id, hello_request_id, mut rx) = loop {
         match stream.next().await {
             Some(Ok(Message::Text(txt))) => {
-                let Ok(v) = serde_json::from_str::<Value>(&txt) else { continue };
+                let Ok(v) = serde_json::from_str::<Value>(&txt) else {
+                    continue;
+                };
                 if v.get("type").and_then(|t| t.as_str()) != Some("fdc3:hello") {
                     continue;
                 }
@@ -132,8 +129,8 @@ async fn handle_connection(socket: WebSocket, state: BusState) {
     };
 
     // Send fdc3:welcome  (channels serialise camelCase via ChannelInfoSummary)
-    let channels =
-        serde_json::to_value(state.channel_manager.list_summaries()).unwrap_or(Value::Array(vec![]));
+    let channels = serde_json::to_value(state.channel_manager.list_summaries())
+        .unwrap_or(Value::Array(vec![]));
     let welcome = json!({
         "type":       "fdc3:welcome",
         "instanceId": instance_id,
@@ -141,7 +138,9 @@ async fn handle_connection(socket: WebSocket, state: BusState) {
         "requestId":  hello_request_id,
     });
     if sink
-        .send(Message::Text(serde_json::to_string(&welcome).unwrap_or_default()))
+        .send(Message::Text(
+            serde_json::to_string(&welcome).unwrap_or_default(),
+        ))
         .await
         .is_err()
     {
@@ -152,8 +151,8 @@ async fn handle_connection(socket: WebSocket, state: BusState) {
     let _ = state.app.emit(
         "cda:connected",
         CdaConnectedEvent {
-            instance_id:  instance_id.clone(),
-            app_id:       app_id.clone(),
+            instance_id: instance_id.clone(),
+            app_id: app_id.clone(),
             display_name: None,
             connected_at: now_ms(),
         },
@@ -355,7 +354,7 @@ async fn handle_connection(socket: WebSocket, state: BusState) {
         "cda:disconnected",
         CdaDisconnectedEvent {
             instance_id: instance_id.clone(),
-            app_id:      app_id.clone(),
+            app_id: app_id.clone(),
         },
     );
     println!("[fdc3-bus] disconnected: {app_id} ({instance_id})");
@@ -365,7 +364,10 @@ async fn handle_connection(socket: WebSocket, state: BusState) {
 
 /// Extract a string field from a JSON object, returning "" if absent.
 fn str_field(v: &Value, key: &str) -> String {
-    v.get(key).and_then(|x| x.as_str()).unwrap_or("").to_string()
+    v.get(key)
+        .and_then(|x| x.as_str())
+        .unwrap_or("")
+        .to_string()
 }
 
 /// Convert a `CdaResponse` JSON string (snake_case fields, snake_case type tag)

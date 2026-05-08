@@ -13,21 +13,17 @@ use super::HEADER_HEIGHT;
 
 /// Hit-test the N-ary tree at the given window-space coordinates. Returns the
 /// label of the leaf whose rect contains the point, if any.
-fn hit_test(
-    node: &LayoutNode,
-    px: f64,
-    py: f64,
-    x: f64,
-    y: f64,
-    w: f64,
-    h: f64,
-) -> Option<String> {
+fn hit_test(node: &LayoutNode, px: f64, py: f64, x: f64, y: f64, w: f64, h: f64) -> Option<String> {
     if px < x || px >= x + w || py < y || py >= y + h {
         return None;
     }
     match node {
         LayoutNode::Leaf { label, .. } => Some(label.clone()),
-        LayoutNode::Splitter { direction, children, .. } => {
+        LayoutNode::Splitter {
+            direction,
+            children,
+            ..
+        } => {
             let total: f64 = children.iter().map(|c| c.weight().max(0.0)).sum();
             if total <= 0.0 {
                 return None;
@@ -49,7 +45,9 @@ fn hit_test(
             }
             None
         }
-        LayoutNode::Stack { active, children, .. } => {
+        LayoutNode::Stack {
+            active, children, ..
+        } => {
             if children.is_empty() {
                 return None;
             }
@@ -80,9 +78,13 @@ pub fn wm_drag_move(
     let content_h = (h - HEADER_HEIGHT).max(0.0);
 
     let target = tree.with_root(|root| {
-        hit_test(root, window_x, window_y, content_x, content_y, content_w, content_h)
+        hit_test(
+            root, window_x, window_y, content_x, content_y, content_w, content_h,
+        )
     });
-    let Some(Some(target)) = target else { return Ok(()) };
+    let Some(Some(target)) = target else {
+        return Ok(());
+    };
     if target == panel_id {
         return Ok(());
     }

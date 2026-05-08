@@ -5,15 +5,14 @@ mod layout;
 
 use config::TerminalConfig;
 use engine::WmHostIdentity;
-use ot_core::engine::{is_system_version, EngineBinding, EngineFamily};
 use layout::commands::{
-    close_tab, update_layout, wm_begin_tab_drag, wm_close_leaf, wm_close_stack,
-    wm_end_tab_drag, wm_rename_tab, wm_set_active_tab, wm_splitter_drag,
-    wm_toggle_maximize_stack,
+    close_tab, update_layout, wm_begin_tab_drag, wm_close_leaf, wm_close_stack, wm_end_tab_drag,
+    wm_rename_tab, wm_set_active_tab, wm_splitter_drag, wm_toggle_maximize_stack,
 };
 use layout::drag::wm_drag_move;
 use layout::store::LayoutTree;
 use layout::{LayoutSnapshot, SplitDir};
+use ot_core::engine::{is_system_version, EngineBinding, EngineFamily};
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Manager, State, WebviewBuilder, WebviewUrl};
 use tauri::{Emitter, LogicalPosition, LogicalSize};
@@ -162,8 +161,14 @@ fn locate_host_binary() -> Result<std::path::PathBuf, String> {
         return Ok(std::path::PathBuf::from(path));
     }
     let exe = std::env::current_exe().map_err(|e| format!("current_exe: {e}"))?;
-    let dir = exe.parent().ok_or_else(|| "exe has no parent dir".to_string())?;
-    let name = if cfg!(windows) { "tauri-webview-host.exe" } else { "tauri-webview-host" };
+    let dir = exe
+        .parent()
+        .ok_or_else(|| "exe has no parent dir".to_string())?;
+    let name = if cfg!(windows) {
+        "tauri-webview-host.exe"
+    } else {
+        "tauri-webview-host"
+    };
     let candidate = dir.join(name);
     if !candidate.exists() {
         return Err(format!(
@@ -258,7 +263,9 @@ async fn wm_open(
             Ok(())
         })();
         match &result {
-            Ok(_) => eprintln!("[wm_open] add_child -> Ok (panel={panel_id_for_main}, url={url_for_main})"),
+            Ok(_) => eprintln!(
+                "[wm_open] add_child -> Ok (panel={panel_id_for_main}, url={url_for_main})"
+            ),
             Err(e) => eprintln!("[wm_open] add_child -> Err: {e}"),
         }
         let _ = tx.send(result);
@@ -338,7 +345,9 @@ async fn wm_engine_install(
     app: AppHandle,
     cfg: State<'_, TerminalConfig>,
 ) -> Result<(), String> {
-    engines::engine_install(&binding, &app, &cfg.engine_catalog_url).await.map(|_| ())
+    engines::engine_install(&binding, &app, &cfg.engine_catalog_url)
+        .await
+        .map(|_| ())
 }
 
 // ── Overlay webview commands ──────────────────────────────────────────────────
@@ -386,7 +395,6 @@ async fn wm_ctx_menu_open(
         }
     };
     if must_recreate {
-
         let (create_tx, create_rx) = std::sync::mpsc::channel::<Result<(), String>>();
         let app_for_main = app.clone();
         app.run_on_main_thread(move || {
@@ -394,20 +402,16 @@ async fn wm_ctx_menu_open(
                 if let Some(old) = app_for_main.get_webview(OVERLAY) {
                     old.close().map_err(|e| e.to_string())?;
                 }
-                let win = app_for_main
-                    .get_window(WIN)
-                    .ok_or("wm window not found")?;
+                let win = app_for_main.get_window(WIN).ok_or("wm window not found")?;
                 let sf = win.scale_factor().unwrap_or(1.0);
-                let sz = win
-                    .inner_size()
-                    .unwrap_or(tauri::PhysicalSize { width: 1600, height: 900 });
+                let sz = win.inner_size().unwrap_or(tauri::PhysicalSize {
+                    width: 1600,
+                    height: 900,
+                });
                 let (w, h) = (sz.width as f64 / sf, sz.height as f64 / sf);
                 win.add_child(
-                    WebviewBuilder::new(
-                        OVERLAY,
-                        WebviewUrl::App("index.html#overlay".into()),
-                    )
-                    .transparent(true),
+                    WebviewBuilder::new(OVERLAY, WebviewUrl::App("index.html#overlay".into()))
+                        .transparent(true),
                     LogicalPosition::new(-20000.0, -20000.0),
                     LogicalSize::new(w, h),
                 )
@@ -443,9 +447,10 @@ async fn wm_ctx_menu_open(
     // outside-clicks and the menu renders at the correct cursor position.
     let win = app.get_window(WIN).ok_or("wm window not found")?;
     let sf = win.scale_factor().unwrap_or(1.0);
-    let sz = win
-        .inner_size()
-        .unwrap_or(tauri::PhysicalSize { width: 1600, height: 900 });
+    let sz = win.inner_size().unwrap_or(tauri::PhysicalSize {
+        width: 1600,
+        height: 900,
+    });
     let (w, h) = (sz.width as f64 / sf, sz.height as f64 / sf);
     if let Some(wv) = app.get_webview(OVERLAY) {
         wv.set_bounds(tauri::Rect {
@@ -558,7 +563,10 @@ pub fn run() {
             // Added FIRST → lowest z-order.  Panel webviews added later sit
             // on top, leaving the header and splitter gaps exposed.
             let (init_w, init_h) = {
-                let sz = win.inner_size().unwrap_or(tauri::PhysicalSize { width: cfg.window.width as u32, height: cfg.window.height as u32 });
+                let sz = win.inner_size().unwrap_or(tauri::PhysicalSize {
+                    width: cfg.window.width as u32,
+                    height: cfg.window.height as u32,
+                });
                 let sf = win.scale_factor().unwrap_or(1.0);
                 (sz.width as f64 / sf, sz.height as f64 / sf)
             };
@@ -577,11 +585,8 @@ pub fn run() {
             // control itself is transparent; CSS `background: transparent`
             // alone only removes the HTML layer.
             win.add_child(
-                WebviewBuilder::new(
-                    OVERLAY,
-                    WebviewUrl::App("index.html#overlay".into()),
-                )
-                .transparent(true),
+                WebviewBuilder::new(OVERLAY, WebviewUrl::App("index.html#overlay".into()))
+                    .transparent(true),
                 LogicalPosition::new(-20000.0, -20000.0),
                 LogicalSize::new(init_w, init_h),
             )?;

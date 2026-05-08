@@ -47,7 +47,9 @@ pub fn set_active_tab(tree: &mut Option<LayoutNode>, path: &[usize], index: usiz
         return false;
     };
     match node {
-        LayoutNode::Stack { active, children, .. } if !children.is_empty() => {
+        LayoutNode::Stack {
+            active, children, ..
+        } if !children.is_empty() => {
             *active = index.min(children.len() - 1);
             true
         }
@@ -158,7 +160,9 @@ pub fn is_stack_at(root: &LayoutNode, path: &[usize]) -> bool {
     for &i in path {
         match node {
             LayoutNode::Splitter { children, .. } | LayoutNode::Stack { children, .. } => {
-                let Some(next) = children.get(i) else { return false };
+                let Some(next) = children.get(i) else {
+                    return false;
+                };
                 node = next;
             }
             LayoutNode::Leaf { .. } => return false,
@@ -170,9 +174,13 @@ pub fn is_stack_at(root: &LayoutNode, path: &[usize]) -> bool {
 /// Append `leaf` as a new child of the Stack at `path` and make it active.
 /// Returns `true` if the node at `path` is a Stack and was mutated.
 pub fn append_to_stack_at(root: &mut LayoutNode, path: &[usize], leaf: LayoutNode) -> bool {
-    let Some(node) = walk_mut(root, path, 0) else { return false };
+    let Some(node) = walk_mut(root, path, 0) else {
+        return false;
+    };
     match node {
-        LayoutNode::Stack { children, active, .. } => {
+        LayoutNode::Stack {
+            children, active, ..
+        } => {
             let new_idx = children.len();
             children.push(reset_weight(leaf));
             *active = new_idx;
@@ -302,10 +310,7 @@ fn extract_leaf_by_label(
     }
 }
 
-fn walk_extract(
-    children: Vec<LayoutNode>,
-    label: &str,
-) -> (Vec<LayoutNode>, Option<LayoutNode>) {
+fn walk_extract(children: Vec<LayoutNode>, label: &str) -> (Vec<LayoutNode>, Option<LayoutNode>) {
     let mut kept = Vec::with_capacity(children.len());
     let mut extracted = None;
     for child in children {
@@ -343,8 +348,7 @@ fn simplify(node: LayoutNode) -> Option<LayoutNode> {
         } => {
             // Simplify each child bottom-up so when we inspect them for
             // same-direction flattening they're already normalized.
-            let simplified: Vec<LayoutNode> =
-                children.into_iter().filter_map(simplify).collect();
+            let simplified: Vec<LayoutNode> = children.into_iter().filter_map(simplify).collect();
 
             let mut kids: Vec<LayoutNode> = Vec::with_capacity(simplified.len());
             for c in simplified {
@@ -359,8 +363,7 @@ fn simplify(node: LayoutNode) -> Option<LayoutNode> {
                         // their sum equals the child's weight (`cw`). That
                         // preserves relative sizing across the flatten.
                         let cw = cw.max(0.0);
-                        let gc_total: f64 =
-                            gc.iter().map(|g| g.weight().max(0.0)).sum();
+                        let gc_total: f64 = gc.iter().map(|g| g.weight().max(0.0)).sum();
                         if gc_total <= 0.0 || cw <= 0.0 {
                             // Degenerate weights — splice with uniform share.
                             let fallback = if gc.is_empty() {

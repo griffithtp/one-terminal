@@ -31,10 +31,23 @@
     "check-template-drift": "npx tsx scripts/check-template-drift.ts",
     "create-migration": "npx tsx scripts/create-migration.ts",
     "build:scaffolder": "npm -w create-one-terminal run build",
-    "scaffold": "node packages/create-one-terminal/dist/index.js"
+    "scaffold": "node packages/create-one-terminal/dist/index.js",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "fmt:rust": "cargo fmt --all",
+    "lint:rust": "cargo fmt --check --all"
   },
   "devDependencies": {
+    "eslint": "^9.39.4",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "prettier": "^3.8.3",
     "tsx": "^4.19.4",
-    "typescript": "~5.8.3"
+    "typescript": "~5.8.3",
+    "typescript-eslint": "^8.59.2"
   }
 }

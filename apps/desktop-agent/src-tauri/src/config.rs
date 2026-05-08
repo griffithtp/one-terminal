@@ -54,14 +54,46 @@ impl AgentConfig {
 
     fn default_channels() -> Vec<UserChannel> {
         vec![
-            UserChannel { id: "Red".into(),    display_name: "Red".into(),    color: "#E74C3C".into() },
-            UserChannel { id: "Orange".into(),  display_name: "Orange".into(),  color: "#E67E22".into() },
-            UserChannel { id: "Yellow".into(),  display_name: "Yellow".into(),  color: "#F1C40F".into() },
-            UserChannel { id: "Green".into(),   display_name: "Green".into(),   color: "#2ECC71".into() },
-            UserChannel { id: "Teal".into(),    display_name: "Teal".into(),    color: "#1ABC9C".into() },
-            UserChannel { id: "Blue".into(),    display_name: "Blue".into(),    color: "#3498DB".into() },
-            UserChannel { id: "Purple".into(),  display_name: "Purple".into(),  color: "#9B59B6".into() },
-            UserChannel { id: "Pink".into(),    display_name: "Pink".into(),    color: "#EC407A".into() },
+            UserChannel {
+                id: "Red".into(),
+                display_name: "Red".into(),
+                color: "#E74C3C".into(),
+            },
+            UserChannel {
+                id: "Orange".into(),
+                display_name: "Orange".into(),
+                color: "#E67E22".into(),
+            },
+            UserChannel {
+                id: "Yellow".into(),
+                display_name: "Yellow".into(),
+                color: "#F1C40F".into(),
+            },
+            UserChannel {
+                id: "Green".into(),
+                display_name: "Green".into(),
+                color: "#2ECC71".into(),
+            },
+            UserChannel {
+                id: "Teal".into(),
+                display_name: "Teal".into(),
+                color: "#1ABC9C".into(),
+            },
+            UserChannel {
+                id: "Blue".into(),
+                display_name: "Blue".into(),
+                color: "#3498DB".into(),
+            },
+            UserChannel {
+                id: "Purple".into(),
+                display_name: "Purple".into(),
+                color: "#9B59B6".into(),
+            },
+            UserChannel {
+                id: "Pink".into(),
+                display_name: "Pink".into(),
+                color: "#EC407A".into(),
+            },
         ]
     }
 
@@ -75,7 +107,10 @@ impl AgentConfig {
                             println!("[desktop-agent] config loaded from {}", path.display());
                             return Some(cfg);
                         }
-                        Err(e) => eprintln!("[desktop-agent] config parse error at {}: {e}", path.display()),
+                        Err(e) => eprintln!(
+                            "[desktop-agent] config parse error at {}: {e}",
+                            path.display()
+                        ),
                     },
                     Err(_) => {}
                 }
@@ -96,23 +131,39 @@ impl AgentConfig {
         // Tauri dev: cwd/src-tauri/resources.
         if let Ok(cwd) = std::env::current_dir() {
             paths.push(cwd.join("resources").join("agent.config.json"));
-            paths.push(cwd.join("src-tauri").join("resources").join("agent.config.json"));
+            paths.push(
+                cwd.join("src-tauri")
+                    .join("resources")
+                    .join("agent.config.json"),
+            );
         }
         paths
     }
 
     fn apply_env_overrides(mut cfg: Self) -> Self {
-        if let Ok(v) = std::env::var("OT_TITLE") { cfg.title = v; }
-        if let Ok(v) = std::env::var("OT_APP_DIR_URL") { cfg.app_directory_url = v; }
-        if let Ok(v) = std::env::var("OT_CATALOG_URL") { cfg.engine_catalog_url = v; }
+        if let Ok(v) = std::env::var("OT_TITLE") {
+            cfg.title = v;
+        }
+        if let Ok(v) = std::env::var("OT_APP_DIR_URL") {
+            cfg.app_directory_url = v;
+        }
+        if let Ok(v) = std::env::var("OT_CATALOG_URL") {
+            cfg.engine_catalog_url = v;
+        }
         if let Ok(v) = std::env::var("OT_TCP_PORT") {
-            if let Ok(p) = v.parse() { cfg.ports.tcp_broker = p; }
+            if let Ok(p) = v.parse() {
+                cfg.ports.tcp_broker = p;
+            }
         }
         if let Ok(v) = std::env::var("OT_FDC3_BUS_PORT") {
-            if let Ok(p) = v.parse() { cfg.ports.fdc3_bus = p; }
+            if let Ok(p) = v.parse() {
+                cfg.ports.fdc3_bus = p;
+            }
         }
         if let Ok(v) = std::env::var("OT_DACP_PORT") {
-            if let Ok(p) = v.parse() { cfg.ports.dacp_bridge = p; }
+            if let Ok(p) = v.parse() {
+                cfg.ports.dacp_bridge = p;
+            }
         }
         cfg
     }

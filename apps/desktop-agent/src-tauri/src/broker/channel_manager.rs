@@ -25,13 +25,15 @@ impl ChannelManager {
 
     /// Insert a channel. No-op if a channel with this id already exists.
     pub fn create(&self, id: &str, display_name: &str, color: &str) {
-        self.inner.entry(id.to_string()).or_insert_with(|| ChannelInfo {
-            channel_id: id.to_string(),
-            display_name: display_name.to_string(),
-            color: color.to_string(),
-            members: Vec::new(),
-            last_context: HashMap::new(),
-        });
+        self.inner
+            .entry(id.to_string())
+            .or_insert_with(|| ChannelInfo {
+                channel_id: id.to_string(),
+                display_name: display_name.to_string(),
+                color: color.to_string(),
+                members: Vec::new(),
+                last_context: HashMap::new(),
+            });
     }
 
     /// Join a spoke to a channel, removing it from its previous channel first.
@@ -80,12 +82,7 @@ impl ChannelManager {
     }
 
     /// Update the last-value cache for a channel.
-    pub fn set_last_context(
-        &self,
-        channel_id: &str,
-        context_type: &str,
-        value: serde_json::Value,
-    ) {
+    pub fn set_last_context(&self, channel_id: &str, context_type: &str, value: serde_json::Value) {
         if let Some(mut ch) = self.inner.get_mut(channel_id) {
             ch.last_context.insert(context_type.to_string(), value);
         }
@@ -121,8 +118,7 @@ impl ChannelManager {
 
     /// Full `ChannelInfo` snapshots for Tauri commands.
     pub fn list_all(&self) -> Vec<ChannelInfo> {
-        let mut channels: Vec<ChannelInfo> =
-            self.inner.iter().map(|e| e.value().clone()).collect();
+        let mut channels: Vec<ChannelInfo> = self.inner.iter().map(|e| e.value().clone()).collect();
         channels.sort_by(|a, b| a.channel_id.cmp(&b.channel_id));
         channels
     }

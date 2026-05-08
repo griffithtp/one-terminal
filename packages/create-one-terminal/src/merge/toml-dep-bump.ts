@@ -8,7 +8,7 @@ export async function applyDepBump(
   target: string,
   deps: Array<{ name: string; ecosystem: "cargo" | "npm"; newVersion: string }>,
   migrationId: string,
-  description: string,
+  description: string
 ): Promise<MigrationResult> {
   const filePath = join(cwd, target);
   const raw = await readFile(filePath, "utf8");

@@ -1,12 +1,7 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { handleConflict } from "../upgrade/conflict.js";
-import {
-  addManagedPath,
-  getManagedPaths,
-  getNestedValue,
-  setNestedValue,
-} from "./managed.js";
+import { addManagedPath, getManagedPaths, getNestedValue, setNestedValue } from "./managed.js";
 import type { MigrationResult } from "../upgrade/migrations/types.js";
 
 export async function applyConfigMerge(
@@ -15,7 +10,7 @@ export async function applyConfigMerge(
   patch: Record<string, unknown>,
   migrationId: string,
   description: string,
-  frameworkVersion: string,
+  frameworkVersion: string
 ): Promise<MigrationResult> {
   const filePath = join(cwd, target);
   const raw = await readFile(filePath, "utf8");
@@ -62,10 +57,7 @@ export async function applyConfigMerge(
   return { id: migrationId, description, status: "applied" };
 }
 
-function flattenObject(
-  obj: Record<string, unknown>,
-  prefix = "",
-): Array<[string, unknown]> {
+function flattenObject(obj: Record<string, unknown>, prefix = ""): Array<[string, unknown]> {
   const result: Array<[string, unknown]> = [];
   for (const [key, value] of Object.entries(obj)) {
     const dotPath = prefix ? `${prefix}.${key}` : key;

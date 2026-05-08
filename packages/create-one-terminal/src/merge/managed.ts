@@ -13,10 +13,7 @@ export function addManagedPath(config: Record<string, unknown>, path: string): v
   }
 }
 
-export function getNestedValue(
-  obj: Record<string, unknown>,
-  dotPath: string,
-): unknown {
+export function getNestedValue(obj: Record<string, unknown>, dotPath: string): unknown {
   return dotPath.split(".").reduce<unknown>((cur, key) => {
     if (cur && typeof cur === "object") return (cur as Record<string, unknown>)[key];
     return undefined;
@@ -26,7 +23,7 @@ export function getNestedValue(
 export function setNestedValue(
   obj: Record<string, unknown>,
   dotPath: string,
-  value: unknown,
+  value: unknown
 ): void {
   const keys = dotPath.split(".");
   let cur: Record<string, unknown> = obj;

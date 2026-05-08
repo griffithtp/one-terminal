@@ -36,7 +36,9 @@ pub fn locate_electron_shell() -> Result<PathBuf, String> {
         );
     }
     let exe = std::env::current_exe().map_err(|e| format!("current_exe: {e}"))?;
-    let dir = exe.parent().ok_or_else(|| "exe has no parent dir".to_string())?;
+    let dir = exe
+        .parent()
+        .ok_or_else(|| "exe has no parent dir".to_string())?;
     let candidate = dir.join("electron-host");
     if candidate.is_dir() && candidate.join("main.js").is_file() {
         return Ok(candidate);

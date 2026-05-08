@@ -35,6 +35,10 @@ export default function App() {
   if (window.location.hash === "#overlay") {
     return <OverlayApp />;
   }
+  return <ChromeApp />;
+}
+
+function ChromeApp() {
   const { layout, openPanel, closePanel } = useLayout();
   const { host: hostLayout, removeTab } = useHostLayout();
   const tabDrag = useTabDrag();
@@ -51,14 +55,14 @@ export default function App() {
       e.preventDefault();
       tabDrag.arm(tab.label, stack.path, tabIndex, tab.label, e.clientX, e.clientY);
     },
-    [tabDrag],
+    [tabDrag]
   );
 
   const handleTabPointerMove = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
       tabDrag.update(e.clientX, e.clientY, hostLayout ?? null);
     },
-    [tabDrag, hostLayout],
+    [tabDrag, hostLayout]
   );
 
   const handleTabPointerUp = useCallback(
@@ -73,26 +77,24 @@ export default function App() {
         }).catch(console.error);
       }
     },
-    [tabDrag],
+    [tabDrag]
   );
 
-  const handleTabClose = useCallback((stack: StackHeader, tabIndex: number) => {
-    const tab = stack.tabs[tabIndex];
-    if (!tab) return;
-    // Optimistic: drop the tab from local state immediately so it disappears
-    // on the same frame as the click. Rust's next `wm:host-layout` emit
-    // (after close_tab → reflow → emit_host) overwrites this with the truth.
-    removeTab(tab.label);
-    invoke("close_tab", { label: tab.label }).catch(console.error);
-  }, [removeTab]);
+  const handleTabClose = useCallback(
+    (stack: StackHeader, tabIndex: number) => {
+      const tab = stack.tabs[tabIndex];
+      if (!tab) return;
+      // Optimistic: drop the tab from local state immediately so it disappears
+      // on the same frame as the click. Rust's next `wm:host-layout` emit
+      // (after close_tab → reflow → emit_host) overwrites this with the truth.
+      removeTab(tab.label);
+      invoke("close_tab", { label: tab.label }).catch(console.error);
+    },
+    [removeTab]
+  );
 
   const handleOpenTab = useCallback(
-    (
-      appId: string,
-      url: string,
-      title: string,
-      engineBinding: EngineBinding | null,
-    ) => {
+    (appId: string, url: string, title: string, engineBinding: EngineBinding | null) => {
       // New panel joins the active panel's Stack (auto-wrapping the active
       // leaf into a Stack on first grouping). Creating splits happens only
       // via tab drag-and-drop. When the user picks an engine that doesn't
@@ -100,12 +102,14 @@ export default function App() {
       // window and the tab list stays the same.
       openPanel(appId, url, title, engineBinding).catch(console.error);
     },
-    [openPanel],
+    [openPanel]
   );
 
   const handleClose = useCallback(
-    (panelId: string) => { closePanel(panelId).catch(console.error); },
-    [closePanel],
+    (panelId: string) => {
+      closePanel(panelId).catch(console.error);
+    },
+    [closePanel]
   );
 
   return (
@@ -120,9 +124,7 @@ export default function App() {
       {/* Per-panel headers — drag region + title + close button, painted in
           the top slice of every non-Stack leaf's rect. Stack members get
           their headers from the tab strip instead. */}
-      {layout && (
-        <PanelHeaderLayer panels={layout.panels} onClose={handleClose} />
-      )}
+      {layout && <PanelHeaderLayer panels={layout.panels} onClose={handleClose} />}
 
       {/* Host shell — tab strips + splitter handles driven by the N-ary tree */}
       {hostLayout && (
@@ -141,11 +143,12 @@ export default function App() {
       <GhostLayer drag={tabDrag.state} />
 
       {/* Empty-state hint when no panels are open */}
-      {(!layout || layout.panels.length === 0) && (!hostLayout || hostLayout.stacks.length === 0) && (
-        <div className="wm-empty">
-          <p>No panels open — launch an app from the header.</p>
-        </div>
-      )}
+      {(!layout || layout.panels.length === 0) &&
+        (!hostLayout || hostLayout.stacks.length === 0) && (
+          <div className="wm-empty">
+            <p>No panels open — launch an app from the header.</p>
+          </div>
+        )}
     </div>
   );
 }

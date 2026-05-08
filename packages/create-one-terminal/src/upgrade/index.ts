@@ -42,9 +42,11 @@ export async function runUpgrade(cwd = process.cwd()): Promise<void> {
     [
       `Upgrading from v${project.version} → v${targetVersion}`,
       "",
-      ...chain.map(({ version, migration }) => `  • [v${version}] ${migration.id}  ${migration.description}`),
+      ...chain.map(
+        ({ version, migration }) => `  • [v${version}] ${migration.id}  ${migration.description}`
+      ),
     ].join("\n"),
-    `${chain.length} migration(s)`,
+    `${chain.length} migration(s)`
   );
 
   const go = await p.confirm({ message: "Apply migrations?", initialValue: true });
@@ -89,14 +91,14 @@ export async function runUpgrade(cwd = process.cwd()): Promise<void> {
       manual > 0 ? "See upgrade-report.md for items needing manual review." : "",
     ]
       .filter(Boolean)
-      .join("\n"),
+      .join("\n")
   );
 }
 
 async function applyMigration(
   cwd: string,
   migration: MigrationSpec,
-  version: string,
+  version: string
 ): Promise<MigrationResult> {
   if (migration.type === "config-merge") {
     return applyConfigMerge(
@@ -105,18 +107,12 @@ async function applyMigration(
       migration.patch,
       migration.id,
       migration.description,
-      version,
+      version
     );
   }
 
   if (migration.type === "dep-bump") {
-    return applyDepBump(
-      cwd,
-      migration.target,
-      migration.deps,
-      migration.id,
-      migration.description,
-    );
+    return applyDepBump(cwd, migration.target, migration.deps, migration.id, migration.description);
   }
 
   if (migration.type === "structural") {
@@ -129,7 +125,7 @@ async function applyMigration(
 async function applyStructural(
   cwd: string,
   migration: Extract<MigrationSpec, { type: "structural" }>,
-  _version: string,
+  _version: string
 ): Promise<MigrationResult> {
   const templatesDir = join(fileURLToPath(import.meta.url), "../..", "templates");
 

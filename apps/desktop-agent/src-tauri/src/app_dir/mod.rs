@@ -125,10 +125,7 @@ impl AppDirectoryCache {
             .map_err(|e| format!("App Directory fetch failed: {e}"))?;
 
         if !response.status().is_success() {
-            return Err(format!(
-                "App Directory returned HTTP {}",
-                response.status()
-            ));
+            return Err(format!("App Directory returned HTTP {}", response.status()));
         }
 
         let data: AppsListResponse = response

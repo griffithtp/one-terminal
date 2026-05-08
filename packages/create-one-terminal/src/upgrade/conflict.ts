@@ -19,7 +19,7 @@ export async function handleConflict(opts: {
       `  Framework wants: ${opts.frameworkValue}`,
       `  Your value:      ${opts.yourValue}`,
     ].join("\n"),
-    "Conflict",
+    "Conflict"
   );
 
   const choice = await p.select<ConflictChoice>({
@@ -40,7 +40,7 @@ export async function handleConflict(opts: {
     const markers = conflictMarkers(
       `framework v${opts.frameworkVersion}`,
       `  "${opts.fieldPath}": ${opts.yourValue}`,
-      `  "${opts.fieldPath}": ${opts.frameworkValue}`,
+      `  "${opts.fieldPath}": ${opts.frameworkValue}`
     );
     await writeFile(`${opts.filePath}.merge`, markers, "utf8");
   }

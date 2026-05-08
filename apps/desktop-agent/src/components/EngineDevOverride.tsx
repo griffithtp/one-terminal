@@ -28,19 +28,25 @@ export function EngineDevOverride() {
   useEffect(() => {
     let cancelled = false;
     invoke<EngineCatalog>("engine_catalog")
-      .then((c) => { if (!cancelled) setCatalog(c ?? {}); })
-      .catch((e) => { if (!cancelled) setCatalogError(String(e)); });
-    return () => { cancelled = true; };
+      .then((c) => {
+        if (!cancelled) setCatalog(c ?? {});
+      })
+      .catch((e) => {
+        if (!cancelled) setCatalogError(String(e));
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const osEntries = catalog[os] ?? [];
+  const osEntries = useMemo(() => catalog[os] ?? [], [catalog, os]);
   const families = useMemo(
     () => Array.from(new Set(osEntries.map((e) => e.family))) as EngineFamily[],
-    [osEntries],
+    [osEntries]
   );
   const versionsForFamily = useMemo(
     () => osEntries.filter((e) => e.family === override?.family),
-    [osEntries, override?.family],
+    [osEntries, override?.family]
   );
 
   function chooseFamily(family: string) {
@@ -107,9 +113,7 @@ export function EngineDevOverride() {
       {expanded && (
         <div style={{ marginTop: 10, display: "grid", gap: 8 }}>
           {catalogError && (
-            <div style={{ color: "var(--err, #f44)" }}>
-              catalog unavailable: {catalogError}
-            </div>
+            <div style={{ color: "var(--err, #f44)" }}>catalog unavailable: {catalogError}</div>
           )}
 
           <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -122,7 +126,9 @@ export function EngineDevOverride() {
             >
               <option value="">— none —</option>
               {families.map((f) => (
-                <option key={f} value={f}>{f}</option>
+                <option key={f} value={f}>
+                  {f}
+                </option>
               ))}
             </select>
           </label>
@@ -137,13 +143,17 @@ export function EngineDevOverride() {
             >
               {!override?.family && <option value="">—</option>}
               {versionsForFamily.map((v) => (
-                <option key={v.version} value={v.version}>{v.label}</option>
+                <option key={v.version} value={v.version}>
+                  {v.label}
+                </option>
               ))}
             </select>
           </label>
 
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            <button type="button" onClick={() => setOverride(null)}>clear</button>
+            <button type="button" onClick={() => setOverride(null)}>
+              clear
+            </button>
             <span style={{ opacity: 0.5, alignSelf: "center", fontSize: 11 }}>
               os: {os} · applies to next launch
             </span>

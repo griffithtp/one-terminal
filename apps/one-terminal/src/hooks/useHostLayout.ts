@@ -25,7 +25,9 @@ export function useHostLayout(): UseHostLayoutResult {
     const unlisten = listen<HostLayout>("wm:host-layout", (e) => {
       setHost(e.payload);
     });
-    return () => { unlisten.then((fn) => fn()); };
+    return () => {
+      unlisten.then((fn) => fn());
+    };
   }, []);
 
   const removeTab = useCallback((label: string) => {

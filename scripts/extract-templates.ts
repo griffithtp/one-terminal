@@ -9,7 +9,7 @@
  */
 
 import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { extname, join, relative, dirname } from "node:path";
+import { extname, join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readdir, stat } from "node:fs/promises";
 
@@ -32,17 +32,17 @@ const SKIP_DIRS = new Set(["node_modules", "target", "dist", "gen", ".git"]);
 
 // ── Source trees to walk ───────────────────────────────────────────────────────
 const SOURCES: Array<{ src: string; templateBase: string }> = [
-  { src: join(ROOT, "apps/one-terminal"),        templateBase: "apps/one-terminal" },
-  { src: join(ROOT, "apps/desktop-agent"),       templateBase: "apps/desktop-agent" },
-  { src: join(ROOT, "apps/tauri-webview-host"),  templateBase: "apps/tauri-webview-host" },
-  { src: join(ROOT, "apps/app-directory"),       templateBase: "apps/app-directory" },
-  { src: join(ROOT, "apps/sample-ticker"),       templateBase: "apps/sample-ticker" },
-  { src: join(ROOT, "apps/sample-chart"),        templateBase: "apps/sample-chart" },
-  { src: join(ROOT, "apps/electron-host"),       templateBase: "apps/electron-host" },
-  { src: join(ROOT, "packages/ot-core"),    templateBase: "packages/ot-core" },
-  { src: join(ROOT, "packages/ot-fdc3"),    templateBase: "packages/ot-fdc3" },
-  { src: join(ROOT, "packages/fdc3-plugin"),templateBase: "packages/fdc3-plugin" },
-  { src: join(ROOT, "packages/fdc3-client"),templateBase: "packages/fdc3-client" },
+  { src: join(ROOT, "apps/one-terminal"), templateBase: "apps/one-terminal" },
+  { src: join(ROOT, "apps/desktop-agent"), templateBase: "apps/desktop-agent" },
+  { src: join(ROOT, "apps/tauri-webview-host"), templateBase: "apps/tauri-webview-host" },
+  { src: join(ROOT, "apps/app-directory"), templateBase: "apps/app-directory" },
+  { src: join(ROOT, "apps/sample-ticker"), templateBase: "apps/sample-ticker" },
+  { src: join(ROOT, "apps/sample-chart"), templateBase: "apps/sample-chart" },
+  { src: join(ROOT, "apps/electron-host"), templateBase: "apps/electron-host" },
+  { src: join(ROOT, "packages/ot-core"), templateBase: "packages/ot-core" },
+  { src: join(ROOT, "packages/ot-fdc3"), templateBase: "packages/ot-fdc3" },
+  { src: join(ROOT, "packages/fdc3-plugin"), templateBase: "packages/fdc3-plugin" },
+  { src: join(ROOT, "packages/fdc3-client"), templateBase: "packages/fdc3-client" },
 ];
 
 // ── Scripts to strip from the root package.json template ─────────────────────
@@ -57,74 +57,80 @@ const ROOT_PACKAGE_SCRIPTS_OMIT = new Set([
 
 // Root-level files that also become templates
 const ROOT_FILES = [
-  { src: join(ROOT, "Cargo.toml"),    templateBase: "Cargo.toml" },
-  { src: join(ROOT, "package.json"),  templateBase: "package.json" },
-  { src: join(ROOT, ".gitignore"),    templateBase: ".gitignore" },
+  { src: join(ROOT, "Cargo.toml"), templateBase: "Cargo.toml" },
+  { src: join(ROOT, "package.json"), templateBase: "package.json" },
+  { src: join(ROOT, ".gitignore"), templateBase: ".gitignore" },
 ];
 
 // ── Substitution table (applied in order — longest/most-specific first) ──────
 // Each entry: [literal string in source, EJS replacement]
 const SUBSTITUTIONS: Array<[string, string]> = [
   // Tauri identifiers (most-specific first)
-  ["com.one-terminal.one-terminal",  "<%= tauriIdentifier %>.terminal"],
+  ["com.one-terminal.one-terminal", "<%= tauriIdentifier %>.terminal"],
   ["com.one-terminal.desktop-agent", "<%= tauriIdentifier %>.agent"],
-  ["com.one-terminal",               "<%= tauriIdentifier %>"],
+  ["com.one-terminal", "<%= tauriIdentifier %>"],
 
   // npm scoped package names (specific before catch-all)
-  ["@one-terminal/one-terminal",     "@<%= orgScope %>/one-terminal"],
-  ["@one-terminal/desktop-agent",    "@<%= orgScope %>/desktop-agent"],
-  ["@one-terminal/fdc3-client",      "@<%= orgScope %>/fdc3-client"],
-  ["@one-terminal/fdc3-plugin",      "@<%= orgScope %>/fdc3-plugin"],
-  ["@one-terminal/app-directory",    "@<%= orgScope %>/app-directory"],
-  ["@one-terminal/sample-ticker",    "@<%= orgScope %>/sample-ticker"],
-  ["@one-terminal/sample-chart",        "@<%= orgScope %>/sample-chart"],
-  ["@one-terminal/electron-host",    "@<%= orgScope %>/electron-host"],
-  ["@one-terminal/tauri-webview-host","@<%= orgScope %>/tauri-webview-host"],
-  ["@one-terminal/",                 "@<%= orgScope %>/"],
+  ["@one-terminal/one-terminal", "@<%= orgScope %>/one-terminal"],
+  ["@one-terminal/desktop-agent", "@<%= orgScope %>/desktop-agent"],
+  ["@one-terminal/fdc3-client", "@<%= orgScope %>/fdc3-client"],
+  ["@one-terminal/fdc3-plugin", "@<%= orgScope %>/fdc3-plugin"],
+  ["@one-terminal/app-directory", "@<%= orgScope %>/app-directory"],
+  ["@one-terminal/sample-ticker", "@<%= orgScope %>/sample-ticker"],
+  ["@one-terminal/sample-chart", "@<%= orgScope %>/sample-chart"],
+  ["@one-terminal/electron-host", "@<%= orgScope %>/electron-host"],
+  ["@one-terminal/tauri-webview-host", "@<%= orgScope %>/tauri-webview-host"],
+  ["@one-terminal/", "@<%= orgScope %>/"],
 
   // Root workspace name in package.json (whole-field match)
-  ['"name": "one-terminal"',         '"name": "<%= workspaceName %>"'],
+  ['"name": "one-terminal"', '"name": "<%= workspaceName %>"'],
 
   // Tauri productName
-  ['"productName": "one-terminal"',  '"productName": "<%= workspaceName %>-terminal"'],
+  ['"productName": "one-terminal"', '"productName": "<%= workspaceName %>-terminal"'],
   ['"productName": "desktop-agent"', '"productName": "<%= workspaceName %>-agent"'],
 
   // Display name strings
   ['"title": "OneTerminal Desktop Agent"', '"title": "<%= displayName %> Desktop Agent"'],
-  ['"title": "OneTerminal"',          '"title": "<%= displayName %>"'],
-  ["OneTerminal Desktop Agent",       "<%= displayName %> Desktop Agent"],
-  ["One Terminal",                    "<%= displayName %>"],
-  ["Central Desktop Agent",           "<%= displayName %> Desktop Agent"],
+  ['"title": "OneTerminal"', '"title": "<%= displayName %>"'],
+  ["OneTerminal Desktop Agent", "<%= displayName %> Desktop Agent"],
+  ["One Terminal", "<%= displayName %>"],
+  ["Central Desktop Agent", "<%= displayName %> Desktop Agent"],
 
   // Rust lib function calls and names
-  ["one_terminal_lib::run()",        "<%= snakeWorkspaceName %>_terminal_lib::run()"],
-  ["desktop_agent_lib::run()",       "<%= snakeWorkspaceName %>_agent_lib::run()"],
-  ['name = "one_terminal_lib"',      'name = "<%= snakeWorkspaceName %>_terminal_lib"'],
-  ['name = "desktop_agent_lib"',     'name = "<%= snakeWorkspaceName %>_agent_lib"'],
+  ["one_terminal_lib::run()", "<%= snakeWorkspaceName %>_terminal_lib::run()"],
+  ["desktop_agent_lib::run()", "<%= snakeWorkspaceName %>_agent_lib::run()"],
+  ['name = "one_terminal_lib"', 'name = "<%= snakeWorkspaceName %>_terminal_lib"'],
+  ['name = "desktop_agent_lib"', 'name = "<%= snakeWorkspaceName %>_agent_lib"'],
 
   // Dev server ports — URLs first, then bare port values
-  ["http://localhost:1422",          "http://localhost:<%= terminalDevPort %>"],
-  ["http://localhost:1421",          "http://localhost:<%= agentDevPort %>"],
-  ["port: 1422",                     "port: <%= terminalDevPort %>"],
-  ["port: 1421",                     "port: <%= agentDevPort %>"],
-  ['"port": 1422',                   '"port": <%= terminalDevPort %>'],
-  ['"port": 1421',                   '"port": <%= agentDevPort %>'],
+  ["http://localhost:1422", "http://localhost:<%= terminalDevPort %>"],
+  ["http://localhost:1421", "http://localhost:<%= agentDevPort %>"],
+  ["port: 1422", "port: <%= terminalDevPort %>"],
+  ["port: 1421", "port: <%= agentDevPort %>"],
+  ['"port": 1422', '"port": <%= terminalDevPort %>'],
+  ['"port": 1421', '"port": <%= agentDevPort %>'],
 
   // vite --port flag in package.json scripts
-  ["vite --port 1422",               "vite --port <%= terminalDevPort %>"],
-  ["vite --port 1421",               "vite --port <%= agentDevPort %>"],
+  ["vite --port 1422", "vite --port <%= terminalDevPort %>"],
+  ["vite --port 1421", "vite --port <%= agentDevPort %>"],
 
   // Broker / bus / dacp ports
-  ['"tcpBroker": 7890',              '"tcpBroker": <%= tcpBrokerPort %>'],
-  ['"fdc3Bus": 7891',                '"fdc3Bus": <%= fdc3BusPort %>'],
-  ['"dacpBridge": 4475',             '"dacpBridge": <%= dacpBridgePort %>'],
+  ['"tcpBroker": 7890', '"tcpBroker": <%= tcpBrokerPort %>'],
+  ['"fdc3Bus": 7891', '"fdc3Bus": <%= fdc3BusPort %>'],
+  ['"dacpBridge": 4475', '"dacpBridge": <%= dacpBridgePort %>'],
 
   // App Directory URLs
-  ['"appDirectoryUrl": "http://localhost:3005"', '"appDirectoryUrl": "http://localhost:<%= appDirectoryPort %>"'],
-  ['"engineCatalogUrl": "http://localhost:3005"', '"engineCatalogUrl": "http://localhost:<%= appDirectoryPort %>"'],
+  [
+    '"appDirectoryUrl": "http://localhost:3005"',
+    '"appDirectoryUrl": "http://localhost:<%= appDirectoryPort %>"',
+  ],
+  [
+    '"engineCatalogUrl": "http://localhost:3005"',
+    '"engineCatalogUrl": "http://localhost:<%= appDirectoryPort %>"',
+  ],
 
   // npm workspace commands in tauri.conf.json
-  ["npm -w @one-terminal/one-terminal",  "npm -w @<%= orgScope %>/one-terminal"],
+  ["npm -w @one-terminal/one-terminal", "npm -w @<%= orgScope %>/one-terminal"],
   ["npm -w @one-terminal/desktop-agent", "npm -w @<%= orgScope %>/desktop-agent"],
 ];
 

@@ -8,7 +8,7 @@ export function backupDir(cwd: string, targetVersion: string): string {
 export async function snapshot(
   cwd: string,
   targetVersion: string,
-  targets: string[],
+  targets: string[]
 ): Promise<void> {
   const dir = backupDir(cwd, targetVersion);
   // Fresh snapshot each time

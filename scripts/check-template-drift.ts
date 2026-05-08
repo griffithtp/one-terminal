@@ -25,7 +25,7 @@ try {
   try {
     execSync(`diff -rq "${TMP}" "${COMMITTED}"`, { stdio: "pipe" });
     console.log("✓ Templates are in sync.");
-  } catch (err) {
+  } catch {
     // diff exits non-zero when files differ
     const diffOutput = execSync(`diff -r "${TMP}" "${COMMITTED}" || true`, {
       encoding: "utf8",
@@ -35,7 +35,7 @@ try {
     console.error(diffOutput);
     console.error(
       "Templates are out of sync with the source apps.\n" +
-        "Run `npm run extract-templates` and commit the result.\n",
+        "Run `npm run extract-templates` and commit the result.\n"
     );
     process.exit(1);
   }

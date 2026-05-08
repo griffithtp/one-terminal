@@ -1,12 +1,12 @@
-use std::sync::Arc;
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 
 use tauri::{AppHandle, Emitter, Runtime, State};
 
 use crate::state::OtFdc3State;
 use crate::types::{
-    new_uuid, AppIdentifier, AppIntent, AppMetadata, CdaRequest, DisplayMetadata,
-    FdcChannel, FdcChannelJoinedEvent, IntentMetadata, RaiseIntentResult,
+    new_uuid, AppIdentifier, AppIntent, AppMetadata, CdaRequest, DisplayMetadata, FdcChannel,
+    FdcChannelJoinedEvent, IntentMetadata, RaiseIntentResult,
 };
 
 // ── Registration ───────────────────────────────────────────────────────────────
@@ -33,7 +33,10 @@ pub async fn fdc3_register<R: Runtime>(
     let instance_id = state
         .wait_for_instance_id(std::time::Duration::from_secs(10))
         .await?;
-    Ok(AppIdentifier { app_id, instance_id })
+    Ok(AppIdentifier {
+        app_id,
+        instance_id,
+    })
 }
 
 // ── Channels ───────────────────────────────────────────────────────────────────

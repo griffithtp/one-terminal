@@ -99,7 +99,9 @@ impl EngineRuntimeStore {
         let mut out = Vec::new();
         for family in &families {
             let family_dir = self.root.join(family.as_dir());
-            let Ok(entries) = fs::read_dir(&family_dir) else { continue };
+            let Ok(entries) = fs::read_dir(&family_dir) else {
+                continue;
+            };
             for entry in entries.flatten() {
                 let path = entry.path();
                 if !path.is_dir() || !Self::is_installed(&path) {
@@ -133,8 +135,7 @@ impl EngineRuntimeStore {
         // Electron is resolved via the electron-host launcher, not the catalog.
         if binding.family == EngineFamily::Electron {
             let shell = ot_core::electron_host::locate_electron_shell()?;
-            let bin =
-                ot_core::electron_host::locate_electron_binary(binding, &self.root, &shell)?;
+            let bin = ot_core::electron_host::locate_electron_binary(binding, &self.root, &shell)?;
             return Ok(InstalledEngine {
                 family: binding.family.clone(),
                 version: binding.version.clone(),
@@ -197,15 +198,13 @@ impl EngineRuntimeStore {
             });
         }
 
-        let entry = catalog
-            .find(current_os(), binding)
-            .ok_or_else(|| {
-                format!(
-                    "Engine {}@{} not in catalog for this OS",
-                    binding.family.as_dir(),
-                    binding.version
-                )
-            })?;
+        let entry = catalog.find(current_os(), binding).ok_or_else(|| {
+            format!(
+                "Engine {}@{} not in catalog for this OS",
+                binding.family.as_dir(),
+                binding.version
+            )
+        })?;
         let download = entry.download.as_ref().ok_or_else(|| {
             format!(
                 "Engine {}@{} has no download in catalog",
@@ -275,8 +274,7 @@ impl EngineRuntimeStore {
                 return Err(format!("download HTTP {}", response.status()));
             }
             let total = response.content_length().or(Some(download.size_bytes));
-            let mut file =
-                fs::File::create(&tmp_path).map_err(|e| format!("create temp: {e}"))?;
+            let mut file = fs::File::create(&tmp_path).map_err(|e| format!("create temp: {e}"))?;
             let mut downloaded: u64 = 0;
             let mut stream = response.bytes_stream();
             while let Some(chunk) = stream.next().await {
@@ -311,8 +309,7 @@ impl EngineRuntimeStore {
         extract_zip(&tmp_path, dir).map_err(|e| format!("extract: {e}"))?;
         fs::remove_file(&tmp_path).ok();
 
-        fs::write(dir.join(INSTALL_SENTINEL), b"ok\n")
-            .map_err(|e| format!("sentinel: {e}"))?;
+        fs::write(dir.join(INSTALL_SENTINEL), b"ok\n").map_err(|e| format!("sentinel: {e}"))?;
 
         app.emit(
             "engine:download:complete",

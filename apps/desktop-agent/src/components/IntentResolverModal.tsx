@@ -32,12 +32,11 @@ export function IntentResolverModal() {
     const unlisten = listen<CdaIntentNeedsResolutionEvent>(
       "cda:intent_needs_resolution",
       (event) => {
-        const { intent, context, sourceInstanceId, requestId, candidates } =
-          event.payload;
+        const { intent, context, sourceInstanceId, requestId, candidates } = event.payload;
         setState({ intent, context, sourceInstanceId, requestId, candidates });
         setSelected(null);
         setFeedback(null);
-      },
+      }
     );
     return () => {
       unlisten.then((fn) => fn());
@@ -88,8 +87,7 @@ export function IntentResolverModal() {
         <div className="irm__body">
           <p className="irm__info">
             No running handler found for intent{" "}
-            <strong className="irm__intent">{state.intent}</strong>.
-            Choose an app to launch:
+            <strong className="irm__intent">{state.intent}</strong>. Choose an app to launch:
           </p>
 
           <ul className="irm__candidates">
@@ -100,13 +98,9 @@ export function IntentResolverModal() {
                 onClick={() => setSelected(c.appId)}
               >
                 <div className="irm__candidate-name">{c.title ?? c.name}</div>
-                {c.description && (
-                  <div className="irm__candidate-desc">{c.description}</div>
-                )}
+                {c.description && <div className="irm__candidate-desc">{c.description}</div>}
                 <div className="irm__candidate-meta">
-                  {c.details?.url && (
-                    <span className="irm__candidate-url">{c.details.url}</span>
-                  )}
+                  {c.details?.url && <span className="irm__candidate-url">{c.details.url}</span>}
                   {c.interop?.intents?.listensFor &&
                     Object.keys(c.interop.intents.listensFor).map((intent) => (
                       <span key={intent} className="irm__intent-badge">

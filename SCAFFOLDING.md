@@ -48,20 +48,20 @@ one-terminal/
 
 ## Template Variables (`ScaffoldContext`)
 
-| Variable | Example | Derived from |
-|---|---|---|
-| `workspaceName` | `acme-trading` | prompt |
-| `orgScope` | `acme-trading` | same as workspaceName |
-| `tauriIdentifier` | `com.acme.trading` | prompt |
-| `displayName` | `AcmeTrading` | PascalCase of workspaceName |
-| `snakeWorkspaceName` | `acme_trading` | snake_case of workspaceName |
-| `terminalDevPort` | `1422` | default / prompt |
-| `agentDevPort` | `1421` | default / prompt |
-| `tcpBrokerPort` | `7890` | default / prompt |
-| `fdc3BusPort` | `7891` | default / prompt |
-| `dacpBridgePort` | `4475` | default / prompt |
-| `appDirectoryPort` | `3005` | default / prompt |
-| `includeFdc3` | `true` | prompt |
+| Variable             | Example            | Derived from                |
+| -------------------- | ------------------ | --------------------------- |
+| `workspaceName`      | `acme-trading`     | prompt                      |
+| `orgScope`           | `acme-trading`     | same as workspaceName       |
+| `tauriIdentifier`    | `com.acme.trading` | prompt                      |
+| `displayName`        | `AcmeTrading`      | PascalCase of workspaceName |
+| `snakeWorkspaceName` | `acme_trading`     | snake_case of workspaceName |
+| `terminalDevPort`    | `1422`             | default / prompt            |
+| `agentDevPort`       | `1421`             | default / prompt            |
+| `tcpBrokerPort`      | `7890`             | default / prompt            |
+| `fdc3BusPort`        | `7891`             | default / prompt            |
+| `dacpBridgePort`     | `4475`             | default / prompt            |
+| `appDirectoryPort`   | `3005`             | default / prompt            |
+| `includeFdc3`        | `true`             | prompt                      |
 
 ---
 
@@ -70,40 +70,40 @@ one-terminal/
 The extractor applies these replacements **in order** (longest/most-specific first) on every
 text file under `apps/one-terminal/`, `apps/desktop-agent/`, and relevant `packages/ot-*/`.
 
-| Priority | Source literal | EJS output | Notes |
-|---|---|---|---|
-| 1 | `com.one-terminal.one-terminal` | `<%= tauriIdentifier %>.terminal` | tauri.conf.json identifier |
-| 2 | `com.one-terminal.desktop-agent` | `<%= tauriIdentifier %>.agent` | tauri.conf.json identifier |
-| 3 | `com.one-terminal` | `<%= tauriIdentifier %>` | catch-all reverse-domain |
-| 4 | `@one-terminal/one-terminal` | `@<%= orgScope %>/one-terminal` | scoped npm package name |
-| 5 | `@one-terminal/desktop-agent` | `@<%= orgScope %>/desktop-agent` | scoped npm package name |
-| 6 | `@one-terminal/fdc3-client` | `@<%= orgScope %>/fdc3-client` | fdc3 package |
-| 7 | `@one-terminal/fdc3-plugin` | `@<%= orgScope %>/fdc3-plugin` | fdc3 plugin |
-| 8 | `@one-terminal/` | `@<%= orgScope %>/` | catch-all scope |
-| 9 | `"name": "one-terminal"` | `"name": "<%= workspaceName %>"` | root package.json |
-| 10 | `"productName": "one-terminal"` | `"productName": "<%= workspaceName %>-terminal"` | tauri.conf.json |
-| 11 | `"productName": "desktop-agent"` | `"productName": "<%= workspaceName %>-agent"` | tauri.conf.json |
-| 12 | `"title": "OneTerminal Desktop Agent"` | `"title": "<%= displayName %> Desktop Agent"` | agent config + tauri window |
-| 13 | `"title": "OneTerminal"` | `"title": "<%= displayName %>"` | any other title field |
-| 14 | `One Terminal` | `<%= displayName %>` | index.html title |
-| 15 | `Central Desktop Agent` | `<%= displayName %> Desktop Agent` | desktop-agent index.html title |
-| 16 | `one_terminal_lib::run()` | `<%= snakeWorkspaceName %>_terminal_lib::run()` | main.rs |
-| 17 | `desktop_agent_lib::run()` | `<%= snakeWorkspaceName %>_agent_lib::run()` | main.rs |
-| 18 | `name = "one_terminal_lib"` | `name = "<%= snakeWorkspaceName %>_terminal_lib"` | Cargo.toml lib.name |
-| 19 | `name = "desktop_agent_lib"` | `name = "<%= snakeWorkspaceName %>_agent_lib"` | Cargo.toml lib.name |
-| 20 | `http://localhost:1422` | `http://localhost:<%= terminalDevPort %>` | devUrl + vite port |
-| 21 | `http://localhost:1421` | `http://localhost:<%= agentDevPort %>` | devUrl + vite port |
-| 22 | `port: 1422` | `port: <%= terminalDevPort %>` | vite.config.ts |
-| 23 | `port: 1421` | `port: <%= agentDevPort %>` | vite.config.ts |
-| 24 | `port: 1422` (hmr) | `port: <%= terminalDevPort %>` | desktop-agent hmr config |
-| 25 | `"tcpBroker": 7890` | `"tcpBroker": <%= tcpBrokerPort %>` | agent.config.json |
-| 26 | `"fdc3Bus": 7891` | `"fdc3Bus": <%= fdc3BusPort %>` | agent.config.json |
-| 27 | `"dacpBridge": 4475` | `"dacpBridge": <%= dacpBridgePort %>` | agent.config.json |
-| 28 | `"appDirectoryUrl": "http://localhost:3005"` | `"appDirectoryUrl": "http://localhost:<%= appDirectoryPort %>"` | config files |
-| 29 | `"engineCatalogUrl": "http://localhost:3005"` | `"engineCatalogUrl": "http://localhost:<%= appDirectoryPort %>"` | config files |
-| 30 | `dev": "vite --port 1422"` | `dev": "vite --port <%= terminalDevPort %>"` | one-terminal package.json |
-| 31 | `npm -w @one-terminal/one-terminal` | `npm -w @<%= orgScope %>/one-terminal` | tauri.conf.json build cmds |
-| 32 | `npm -w @one-terminal/desktop-agent` | `npm -w @<%= orgScope %>/desktop-agent` | tauri.conf.json build cmds |
+| Priority | Source literal                                | EJS output                                                       | Notes                          |
+| -------- | --------------------------------------------- | ---------------------------------------------------------------- | ------------------------------ |
+| 1        | `com.one-terminal.one-terminal`               | `<%= tauriIdentifier %>.terminal`                                | tauri.conf.json identifier     |
+| 2        | `com.one-terminal.desktop-agent`              | `<%= tauriIdentifier %>.agent`                                   | tauri.conf.json identifier     |
+| 3        | `com.one-terminal`                            | `<%= tauriIdentifier %>`                                         | catch-all reverse-domain       |
+| 4        | `@one-terminal/one-terminal`                  | `@<%= orgScope %>/one-terminal`                                  | scoped npm package name        |
+| 5        | `@one-terminal/desktop-agent`                 | `@<%= orgScope %>/desktop-agent`                                 | scoped npm package name        |
+| 6        | `@one-terminal/fdc3-client`                   | `@<%= orgScope %>/fdc3-client`                                   | fdc3 package                   |
+| 7        | `@one-terminal/fdc3-plugin`                   | `@<%= orgScope %>/fdc3-plugin`                                   | fdc3 plugin                    |
+| 8        | `@one-terminal/`                              | `@<%= orgScope %>/`                                              | catch-all scope                |
+| 9        | `"name": "one-terminal"`                      | `"name": "<%= workspaceName %>"`                                 | root package.json              |
+| 10       | `"productName": "one-terminal"`               | `"productName": "<%= workspaceName %>-terminal"`                 | tauri.conf.json                |
+| 11       | `"productName": "desktop-agent"`              | `"productName": "<%= workspaceName %>-agent"`                    | tauri.conf.json                |
+| 12       | `"title": "OneTerminal Desktop Agent"`        | `"title": "<%= displayName %> Desktop Agent"`                    | agent config + tauri window    |
+| 13       | `"title": "OneTerminal"`                      | `"title": "<%= displayName %>"`                                  | any other title field          |
+| 14       | `One Terminal`                                | `<%= displayName %>`                                             | index.html title               |
+| 15       | `Central Desktop Agent`                       | `<%= displayName %> Desktop Agent`                               | desktop-agent index.html title |
+| 16       | `one_terminal_lib::run()`                     | `<%= snakeWorkspaceName %>_terminal_lib::run()`                  | main.rs                        |
+| 17       | `desktop_agent_lib::run()`                    | `<%= snakeWorkspaceName %>_agent_lib::run()`                     | main.rs                        |
+| 18       | `name = "one_terminal_lib"`                   | `name = "<%= snakeWorkspaceName %>_terminal_lib"`                | Cargo.toml lib.name            |
+| 19       | `name = "desktop_agent_lib"`                  | `name = "<%= snakeWorkspaceName %>_agent_lib"`                   | Cargo.toml lib.name            |
+| 20       | `http://localhost:1422`                       | `http://localhost:<%= terminalDevPort %>`                        | devUrl + vite port             |
+| 21       | `http://localhost:1421`                       | `http://localhost:<%= agentDevPort %>`                           | devUrl + vite port             |
+| 22       | `port: 1422`                                  | `port: <%= terminalDevPort %>`                                   | vite.config.ts                 |
+| 23       | `port: 1421`                                  | `port: <%= agentDevPort %>`                                      | vite.config.ts                 |
+| 24       | `port: 1422` (hmr)                            | `port: <%= terminalDevPort %>`                                   | desktop-agent hmr config       |
+| 25       | `"tcpBroker": 7890`                           | `"tcpBroker": <%= tcpBrokerPort %>`                              | agent.config.json              |
+| 26       | `"fdc3Bus": 7891`                             | `"fdc3Bus": <%= fdc3BusPort %>`                                  | agent.config.json              |
+| 27       | `"dacpBridge": 4475`                          | `"dacpBridge": <%= dacpBridgePort %>`                            | agent.config.json              |
+| 28       | `"appDirectoryUrl": "http://localhost:3005"`  | `"appDirectoryUrl": "http://localhost:<%= appDirectoryPort %>"`  | config files                   |
+| 29       | `"engineCatalogUrl": "http://localhost:3005"` | `"engineCatalogUrl": "http://localhost:<%= appDirectoryPort %>"` | config files                   |
+| 30       | `dev": "vite --port 1422"`                    | `dev": "vite --port <%= terminalDevPort %>"`                     | one-terminal package.json      |
+| 31       | `npm -w @one-terminal/one-terminal`           | `npm -w @<%= orgScope %>/one-terminal`                           | tauri.conf.json build cmds     |
+| 32       | `npm -w @one-terminal/desktop-agent`          | `npm -w @<%= orgScope %>/desktop-agent`                          | tauri.conf.json build cmds     |
 
 ### Conditional blocks (`ot:if` annotations)
 
@@ -114,6 +114,7 @@ are wrapped in EJS conditionals by the extractor:
 # source (Cargo.toml)
 ot-fdc3  = { path = "packages/ot-fdc3" }  # ot:if includeFdc3
 ```
+
 ```ejs
 # extracted template
 <% if (includeFdc3) { %>
@@ -124,12 +125,14 @@ ot-fdc3  = { path = "packages/ot-fdc3" }
 ### Static files (never templated, no `.ejs` extension)
 
 Copied verbatim — no substitution applied:
+
 - `src-tauri/build.rs`
 - `src/vite-env.d.ts`
 
 ### Binary files
 
 Copied with `fs.copyFile()` — no `.ejs` extension:
+
 - `src-tauri/icons/*.png`
 - `src-tauri/icons/*.ico`
 - `src-tauri/icons/*.icns`
@@ -204,6 +207,7 @@ Copied with `fs.copyFile()` — no `.ejs` extension:
 ### Version tracking
 
 The scaffolded `package.json` gets:
+
 ```json
 "oneTerminal": { "version": "0.1.0", "scaffoldedAt": "2026-05-03" }
 ```
@@ -213,10 +217,11 @@ The scaffolded `package.json` gets:
 Bundled in the npm package at `packages/create-one-terminal/versions.json`.
 
 Schema:
+
 ```ts
 interface VersionEntry {
-  version: string;           // semver
-  releaseDate: string;       // ISO 8601
+  version: string; // semver
+  releaseDate: string; // ISO 8601
   breaking: boolean;
   changelogUrl: string;
   migrations: MigrationSpec[];
@@ -224,13 +229,18 @@ interface VersionEntry {
 
 type MigrationSpec =
   | { type: "config-merge"; target: string; patch: Record<string, unknown>; description: string }
-  | { type: "dep-bump";     target: string; deps: Array<{ name: string; ecosystem: "cargo"|"npm"; newVersion: string }>; description: string }
-  | { type: "structural";   target: string; operations: PatchOperation[]; description: string }
+  | {
+      type: "dep-bump";
+      target: string;
+      deps: Array<{ name: string; ecosystem: "cargo" | "npm"; newVersion: string }>;
+      description: string;
+    }
+  | { type: "structural"; target: string; operations: PatchOperation[]; description: string };
 
 type PatchOperation =
   | { op: "insert-after-line-matching"; pattern: string; content: string }
-  | { op: "replace-line-matching";      pattern: string; replacement: string }
-  | { op: "add-file";                   sourcePath: string; targetPath: string }
+  | { op: "replace-line-matching"; pattern: string; replacement: string }
+  | { op: "add-file"; sourcePath: string; targetPath: string };
 ```
 
 ### `_managed` annotations in config files
@@ -322,8 +332,9 @@ User-modified managed fields trigger the conflict handler.
 ## Publishing
 
 ### npm
+
 ```sh
 npm publish -w packages/create-one-terminal --access public
 ```
-Triggered automatically by `.github/workflows/publish-scaffolder.yml` on `git tag v*`.
 
+Triggered automatically by `.github/workflows/publish-scaffolder.yml` on `git tag v*`.

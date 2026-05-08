@@ -35,9 +35,27 @@ type PatchOperation =
   | { op: "add-file"; sourcePath: string; targetPath: string };
 
 type MigrationSpec =
-  | { type: "config-merge"; id: string; target: string; description: string; patch: Record<string, unknown> }
-  | { type: "dep-bump"; id: string; target: string; description: string; deps: Array<{ name: string; ecosystem: "cargo" | "npm"; newVersion: string }> }
-  | { type: "structural"; id: string; target: string; description: string; operations: PatchOperation[] };
+  | {
+      type: "config-merge";
+      id: string;
+      target: string;
+      description: string;
+      patch: Record<string, unknown>;
+    }
+  | {
+      type: "dep-bump";
+      id: string;
+      target: string;
+      description: string;
+      deps: Array<{ name: string; ecosystem: "cargo" | "npm"; newVersion: string }>;
+    }
+  | {
+      type: "structural";
+      id: string;
+      target: string;
+      description: string;
+      operations: PatchOperation[];
+    };
 
 interface VersionEntry {
   version: string;
@@ -85,10 +103,10 @@ spin.start("Extracting templates from source apps…");
 const tmpDir = mkdtempSync(join(tmpdir(), "ot-migrate-"));
 
 try {
-  execSync(
-    `npx tsx ${join(ROOT, "scripts/extract-templates.ts")} --output ${tmpDir}`,
-    { cwd: ROOT, stdio: "pipe" },
-  );
+  execSync(`npx tsx ${join(ROOT, "scripts/extract-templates.ts")} --output ${tmpDir}`, {
+    cwd: ROOT,
+    stdio: "pipe",
+  });
 } catch (err) {
   spin.stop("Extraction failed.");
   cleanup();
@@ -111,7 +129,7 @@ p.log.info(`${pc.bold(String(changes.length))} file(s) changed.`);
 // Step 3: Read current version
 const manifest = JSON.parse(await readFile(VERSIONS_JSON, "utf8")) as VersionsManifest;
 const latestEntry = [...manifest.versions].sort((a, b) =>
-  semverGt(a.version, b.version) ? -1 : 1,
+  semverGt(a.version, b.version) ? -1 : 1
 )[0];
 const currentVersion = latestEntry?.version ?? "0.1.0";
 
@@ -119,9 +137,18 @@ const currentVersion = latestEntry?.version ?? "0.1.0";
 const bumpType = await p.select({
   message: `Current version is ${pc.bold(currentVersion)}. Choose bump type:`,
   options: [
-    { value: "patch", label: `patch  →  ${bumpVersion(currentVersion, "patch")}  (bug fixes, non-breaking additions)` },
-    { value: "minor", label: `minor  →  ${bumpVersion(currentVersion, "minor")}  (new functionality, backwards-compatible)` },
-    { value: "major", label: `major  →  ${bumpVersion(currentVersion, "major")}  (breaking changes)` },
+    {
+      value: "patch",
+      label: `patch  →  ${bumpVersion(currentVersion, "patch")}  (bug fixes, non-breaking additions)`,
+    },
+    {
+      value: "minor",
+      label: `minor  →  ${bumpVersion(currentVersion, "minor")}  (new functionality, backwards-compatible)`,
+    },
+    {
+      value: "major",
+      label: `major  →  ${bumpVersion(currentVersion, "major")}  (breaking changes)`,
+    },
   ],
 });
 if (p.isCancel(bumpType)) cancel();
@@ -138,9 +165,15 @@ const migrations: MigrationSpec[] = [];
 
 for (let i = 0; i < changes.length; i++) {
   const change = changes[i];
-  const kindLabel = { "config-merge": "JSON config", "dep-bump": "dependency versions", "structural": "source code" }[change.kind];
+  const kindLabel = {
+    "config-merge": "JSON config",
+    "dep-bump": "dependency versions",
+    structural: "source code",
+  }[change.kind];
 
-  p.log.step(`${pc.bold(`${i + 1} / ${changes.length}`)}  ${pc.dim(change.relPath)}  ${pc.cyan(`[${kindLabel}]`)}`);
+  p.log.step(
+    `${pc.bold(`${i + 1} / ${changes.length}`)}  ${pc.dim(change.relPath)}  ${pc.cyan(`[${kindLabel}]`)}`
+  );
 
   let spec: MigrationSpec | null = null;
   if (change.kind === "config-merge") spec = await promptConfigMerge(change, newVersion);
@@ -171,7 +204,7 @@ p.log.success(`versions.json  →  v${newVersion}  (${migrations.length} migrati
 const ctxSource = await readFile(CONTEXT_TS, "utf8");
 const updatedCtx = ctxSource.replace(
   /scaffoldVersion:\s*["'][^"']+["']/,
-  `scaffoldVersion: "${newVersion}"`,
+  `scaffoldVersion: "${newVersion}"`
 );
 if (updatedCtx !== ctxSource) {
   await writeFile(CONTEXT_TS, updatedCtx, "utf8");
@@ -189,7 +222,7 @@ p.outro(
     "",
     `Run ${pc.bold("npm run build:scaffolder")} then test with:`,
     `  node packages/create-one-terminal/dist/index.js upgrade`,
-  ].join("\n"),
+  ].join("\n")
 );
 
 // ── Change detection ──────────────────────────────────────────────────────────
@@ -204,7 +237,7 @@ async function walkAndCompare(
   newDir: string,
   oldDir: string,
   rel: string,
-  out: FileChange[],
+  out: FileChange[]
 ): Promise<void> {
   const items = await readdir(newDir).catch(() => [] as string[]);
   for (const item of items) {
@@ -234,16 +267,20 @@ function classifyChange(relPath: string): MigrationKind {
 
 // ── Migration prompts ─────────────────────────────────────────────────────────
 
-async function promptConfigMerge(change: FileChange, version: string): Promise<MigrationSpec | null> {
+async function promptConfigMerge(
+  change: FileChange,
+  version: string
+): Promise<MigrationSpec | null> {
   const oldJson = change.oldContent ? parseEjsJson(change.oldContent) : {};
   const newJson = parseEjsJson(change.newContent);
   const diffs = jsonDiff(oldJson, newJson);
 
   if (diffs.length > 0) {
     const lines = diffs.map((d) => {
-      if (d.type === "added")   return `  ${pc.green("+")} ${d.path}: ${pc.bold(JSON.stringify(d.new))}`;
+      if (d.type === "added")
+        return `  ${pc.green("+")} ${d.path}: ${pc.bold(JSON.stringify(d.new))}`;
       if (d.type === "removed") return `  ${pc.red("-")} ${d.path}`;
-      return                          `  ${pc.yellow("~")} ${d.path}: ${JSON.stringify(d.old)} → ${pc.bold(JSON.stringify(d.new))}`;
+      return `  ${pc.yellow("~")} ${d.path}: ${JSON.stringify(d.old)} → ${pc.bold(JSON.stringify(d.new))}`;
     });
     p.log.message(lines.join("\n"));
   } else {
@@ -267,9 +304,13 @@ async function promptConfigMerge(change: FileChange, version: string): Promise<M
 
   const description = await p.text({
     message: "Description",
-    initialValue: diffs.length > 0
-      ? `Update ${basename(target)}: ${diffs.filter(d => d.type !== "removed").map(d => d.path).join(", ")}`
-      : `Update ${basename(target)}`,
+    initialValue:
+      diffs.length > 0
+        ? `Update ${basename(target)}: ${diffs
+            .filter((d) => d.type !== "removed")
+            .map((d) => d.path)
+            .join(", ")}`
+        : `Update ${basename(target)}`,
   });
   if (p.isCancel(description)) return null;
 
@@ -296,7 +337,8 @@ async function promptDepBump(change: FileChange, version: string): Promise<Migra
 
   if (bumps.length > 0) {
     const lines = bumps.map(
-      (b) => `  ${pc.cyan(b.name)}  ${pc.dim(b.oldVersion)} → ${pc.green(b.newVersion)}  ${pc.dim(`(${b.ecosystem})`)}`,
+      (b) =>
+        `  ${pc.cyan(b.name)}  ${pc.dim(b.oldVersion)} → ${pc.green(b.newVersion)}  ${pc.dim(`(${b.ecosystem})`)}`
     );
     p.log.message(lines.join("\n"));
   } else {
@@ -320,9 +362,10 @@ async function promptDepBump(change: FileChange, version: string): Promise<Migra
 
   const description = await p.text({
     message: "Description",
-    initialValue: bumps.length > 0
-      ? `Bump ${bumps.map((b) => b.name).join(", ")}`
-      : `Bump ${isCargo ? "Cargo" : "npm"} dependencies`,
+    initialValue:
+      bumps.length > 0
+        ? `Bump ${bumps.map((b) => b.name).join(", ")}`
+        : `Bump ${isCargo ? "Cargo" : "npm"} dependencies`,
   });
   if (p.isCancel(description)) return null;
 
@@ -335,11 +378,24 @@ async function promptDepBump(change: FileChange, version: string): Promise<Migra
   };
 }
 
-async function promptStructural(change: FileChange, version: string): Promise<MigrationSpec | null> {
+async function promptStructural(
+  change: FileChange,
+  version: string
+): Promise<MigrationSpec | null> {
   const isNewFile = change.oldContent === null;
 
   if (isNewFile) {
-    p.log.message(pc.green("(new file)") + "\n" + pc.dim(change.newContent.split("\n").slice(0, 8).map(l => `+ ${l}`).join("\n")));
+    p.log.message(
+      pc.green("(new file)") +
+        "\n" +
+        pc.dim(
+          change.newContent
+            .split("\n")
+            .slice(0, 8)
+            .map((l) => `+ ${l}`)
+            .join("\n")
+        )
+    );
   } else {
     p.log.message(pc.dim(getLineDiff(change.oldContent ?? "", change.newContent)));
   }
@@ -363,8 +419,10 @@ async function promptStructural(change: FileChange, version: string): Promise<Mi
 
   const opTypeOptions = [
     { value: "insert-after-line-matching", label: "Insert a line after a matching line" },
-    { value: "replace-line-matching",       label: "Replace a matching line" },
-    ...(isNewFile ? [{ value: "add-file", label: "Add new file (copy from bundled template)" }] : []),
+    { value: "replace-line-matching", label: "Replace a matching line" },
+    ...(isNewFile
+      ? [{ value: "add-file", label: "Add new file (copy from bundled template)" }]
+      : []),
   ];
 
   const opType = await p.select({ message: "Operation type", options: opTypeOptions });
@@ -379,9 +437,15 @@ async function promptStructural(change: FileChange, version: string): Promise<Mi
       placeholder: "e.g. .plugin(ot_fdc3::init())",
     });
     if (p.isCancel(pattern)) return null;
-    const content = await p.text({ message: "Line content to insert (exact indentation included)" });
+    const content = await p.text({
+      message: "Line content to insert (exact indentation included)",
+    });
     if (p.isCancel(content)) return null;
-    op = { op: "insert-after-line-matching", pattern: pattern as string, content: content as string };
+    op = {
+      op: "insert-after-line-matching",
+      pattern: pattern as string,
+      content: content as string,
+    };
   } else {
     const pattern = await p.text({
       message: "Pattern — unique substring of the line to anchor on",
@@ -390,7 +454,11 @@ async function promptStructural(change: FileChange, version: string): Promise<Mi
     if (p.isCancel(pattern)) return null;
     const replacement = await p.text({ message: "Replacement line (exact indentation included)" });
     if (p.isCancel(replacement)) return null;
-    op = { op: "replace-line-matching", pattern: pattern as string, replacement: replacement as string };
+    op = {
+      op: "replace-line-matching",
+      pattern: pattern as string,
+      replacement: replacement as string,
+    };
   }
 
   return {
@@ -411,9 +479,11 @@ function getLineDiff(oldContent: string, newContent: string): string {
     writeFileSync(tmpOld, oldContent);
     writeFileSync(tmpNew, newContent);
     // tail -n +3 strips the --- / +++ header lines; head -40 keeps output readable
-    return execSync(`diff -u "${tmpOld}" "${tmpNew}" | tail -n +3 | head -40 || true`, {
-      encoding: "utf8",
-    }).trim() || "(identical after normalisation)";
+    return (
+      execSync(`diff -u "${tmpOld}" "${tmpNew}" | tail -n +3 | head -40 || true`, {
+        encoding: "utf8",
+      }).trim() || "(identical after normalisation)"
+    );
   } finally {
     rmSync(tmpOld, { force: true });
     rmSync(tmpNew, { force: true });
@@ -443,7 +513,7 @@ function parseEjsJson(content: string): Record<string, unknown> {
 function jsonDiff(
   oldObj: Record<string, unknown>,
   newObj: Record<string, unknown>,
-  prefix = "",
+  prefix = ""
 ): JsonDiff[] {
   const results: JsonDiff[] = [];
   const keys = new Set([...Object.keys(oldObj), ...Object.keys(newObj)]);
@@ -455,15 +525,19 @@ function jsonDiff(
     } else if (!(key in newObj)) {
       results.push({ path, type: "removed", old: oldObj[key], new: undefined });
     } else if (
-      typeof oldObj[key] === "object" && oldObj[key] !== null &&
-      typeof newObj[key] === "object" && newObj[key] !== null &&
+      typeof oldObj[key] === "object" &&
+      oldObj[key] !== null &&
+      typeof newObj[key] === "object" &&
+      newObj[key] !== null &&
       !Array.isArray(oldObj[key])
     ) {
-      results.push(...jsonDiff(
-        oldObj[key] as Record<string, unknown>,
-        newObj[key] as Record<string, unknown>,
-        path,
-      ));
+      results.push(
+        ...jsonDiff(
+          oldObj[key] as Record<string, unknown>,
+          newObj[key] as Record<string, unknown>,
+          path
+        )
+      );
     } else if (JSON.stringify(oldObj[key]) !== JSON.stringify(newObj[key])) {
       results.push({ path, type: "changed", old: oldObj[key], new: newObj[key] });
     }
@@ -509,7 +583,8 @@ function detectNpmBumps(oldContent: string, newContent: string): DepBump[] {
       if (ov && ov !== nv) {
         const cleanOld = ov.replace(/^[\^~>=<]+/, "");
         const cleanNew = nv.replace(/^[\^~>=<]+/, "");
-        if (cleanOld !== cleanNew) bumps.push({ name, oldVersion: cleanOld, newVersion: cleanNew, ecosystem: "npm" });
+        if (cleanOld !== cleanNew)
+          bumps.push({ name, oldVersion: cleanOld, newVersion: cleanNew, ecosystem: "npm" });
       }
     }
   }
@@ -536,7 +611,10 @@ function semverGt(a: string, b: string): boolean {
 // ── Misc ──────────────────────────────────────────────────────────────────────
 
 function slugify(s: string): string {
-  return s.replace(/[^a-z0-9]+/gi, "-").toLowerCase().replace(/^-|-$/g, "");
+  return s
+    .replace(/[^a-z0-9]+/gi, "-")
+    .toLowerCase()
+    .replace(/^-|-$/g, "");
 }
 
 function cleanup(): void {

@@ -10,7 +10,7 @@ interface TabStripLayerProps {
   onTabPointerDown?: (
     e: React.PointerEvent<HTMLDivElement>,
     stack: StackHeader,
-    tabIndex: number,
+    tabIndex: number
   ) => void;
   /** Close-button click — caller destroys the leaf and its webview. */
   onTabClose?: (stack: StackHeader, tabIndex: number) => void;
@@ -51,7 +51,7 @@ interface TabStripProps {
   onTabPointerDown?: (
     e: React.PointerEvent<HTMLDivElement>,
     stack: StackHeader,
-    tabIndex: number,
+    tabIndex: number
   ) => void;
   onTabClose?: (stack: StackHeader, tabIndex: number) => void;
 }
@@ -131,21 +131,18 @@ function TabStrip({ stack, onTabPointerDown, onTabClose }: TabStripProps) {
       invoke("wm_set_active_tab", { path: stack.path, tabIndex }).catch(console.error);
       setMenuOpen(false);
     },
-    [stack.path],
+    [stack.path]
   );
 
-  const commitRename = useCallback(
-    (label: string, title: string, fallback: string) => {
-      const trimmed = title.trim();
-      setEditing(null);
-      // Empty input → keep the existing title (no backend call). Non-empty
-      // but unchanged → still no-op. Otherwise send to Rust, which emits a
-      // fresh host-layout so the strip re-renders with the new title.
-      if (!trimmed || trimmed === fallback) return;
-      invoke("wm_rename_tab", { label, title: trimmed }).catch(console.error);
-    },
-    [],
-  );
+  const commitRename = useCallback((label: string, title: string, fallback: string) => {
+    const trimmed = title.trim();
+    setEditing(null);
+    // Empty input → keep the existing title (no backend call). Non-empty
+    // but unchanged → still no-op. Otherwise send to Rust, which emits a
+    // fresh host-layout so the strip re-renders with the new title.
+    if (!trimmed || trimmed === fallback) return;
+    invoke("wm_rename_tab", { label, title: trimmed }).catch(console.error);
+  }, []);
 
   return (
     <div
@@ -282,33 +279,38 @@ function TabStrip({ stack, onTabPointerDown, onTabClose }: TabStripProps) {
         </button>
       </div>
 
-      {menuOpen && hiddenStart < n && menuBtnRect && createPortal(
-        <div
-          ref={menuRef}
-          className="wm-tab-overflow-menu"
-          role="menu"
-          style={{ position: "fixed", top: menuBtnRect.bottom, right: window.innerWidth - menuBtnRect.right }}
-          onPointerDown={(e) => e.stopPropagation()}
-        >
-          {stack.tabs.slice(hiddenStart).map((tab, i) => {
-            const realIndex = hiddenStart + i;
-            return (
-              <button
-                key={tab.label}
-                type="button"
-                role="menuitem"
-                className={`wm-tab-overflow-menu__item${realIndex === stack.active ? " wm-tab-overflow-menu__item--active" : ""}`}
-                onClick={() => selectTab(realIndex)}
-              >
-                {tab.title}
-              </button>
-            );
-          })}
-        </div>,
-        document.body,
-      )}
-
+      {menuOpen &&
+        hiddenStart < n &&
+        menuBtnRect &&
+        createPortal(
+          <div
+            ref={menuRef}
+            className="wm-tab-overflow-menu"
+            role="menu"
+            style={{
+              position: "fixed",
+              top: menuBtnRect.bottom,
+              right: window.innerWidth - menuBtnRect.right,
+            }}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            {stack.tabs.slice(hiddenStart).map((tab, i) => {
+              const realIndex = hiddenStart + i;
+              return (
+                <button
+                  key={tab.label}
+                  type="button"
+                  role="menuitem"
+                  className={`wm-tab-overflow-menu__item${realIndex === stack.active ? " wm-tab-overflow-menu__item--active" : ""}`}
+                  onClick={() => selectTab(realIndex)}
+                >
+                  {tab.title}
+                </button>
+              );
+            })}
+          </div>,
+          document.body
+        )}
     </div>
   );
 }
-
