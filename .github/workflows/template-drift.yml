@@ -3,6 +3,8 @@ name: Template Drift Check
 on:
   push:
     paths:
+      - "package.json"
+      - "package-lock.json"
       - "apps/**"
       - "packages/ot-core/**"
       - "packages/ot-fdc3/**"
@@ -11,6 +13,8 @@ on:
       - "Cargo.toml"
   pull_request:
     paths:
+      - "package.json"
+      - "package-lock.json"
       - "apps/**"
       - "packages/ot-core/**"
       - "packages/ot-fdc3/**"
