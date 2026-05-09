@@ -1,0 +1,12 @@
+pre-push:
+  parallel: true
+  commands:
+    rust-fmt:
+      run: cargo fmt --check --all
+      fail_text: "To fix, run: cargo fmt --all"
+    ts-format:
+      run: npm run format:check
+      fail_text: "To fix, run: npm run format"
+    ts-lint:
+      run: npm run lint
+      fail_text: "To fix, run: npm run lint:fix"
