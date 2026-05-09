@@ -30,6 +30,9 @@ jobs:
       - name: Cache Rust build artifacts
         uses: Swatinem/rust-cache@v2
 
+      - name: Create stub frontend dist dirs
+        run: mkdir -p apps/one-terminal/dist apps/desktop-agent/dist apps/tauri-webview-host/dist
+
       - name: Check formatting
         run: cargo fmt --check --all
 
