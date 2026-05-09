@@ -87,7 +87,10 @@ pub fn compute_host_layout(
             // Caller validated `path` resolves to a Stack. Emit only that
             // stack at the full content rect and skip splitters — no other
             // strips/handles should appear while maximized.
-            if let Some(LayoutNode::Stack { active, children, .. }) = resolve(root, path) {
+            if let Some(LayoutNode::Stack {
+                active, children, ..
+            }) = resolve(root, path)
+            {
                 let tabs = stack_tabs(children, titles, app_ids);
                 stacks.push(StackHeader {
                     path: path.to_vec(),
