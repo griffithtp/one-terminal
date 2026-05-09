@@ -8,12 +8,16 @@ export function useLayout() {
 
   // ── Fetch initial snapshot + subscribe to layout changes ──────────────────
   useEffect(() => {
-    invoke<LayoutSnapshot | null>("wm_snapshot").then(setLayout).catch(() => {});
+    invoke<LayoutSnapshot | null>("wm_snapshot")
+      .then(setLayout)
+      .catch(() => {});
 
     const unlisten = listen<LayoutSnapshot | null>("wm:layout", (e) => {
       setLayout(e.payload);
     });
-    return () => { unlisten.then((fn) => fn()); };
+    return () => {
+      unlisten.then((fn) => fn());
+    };
   }, []);
 
   // ── Commands ──────────────────────────────────────────────────────────────
@@ -34,7 +38,7 @@ export function useLayout() {
       title: string,
       engineBinding: EngineBinding | null = null,
       target?: string,
-      dir: SplitDir | null = null,
+      dir: SplitDir | null = null
     ) =>
       invoke<LayoutSnapshot>("wm_open", {
         appId,
@@ -44,12 +48,12 @@ export function useLayout() {
         dir,
         engineBinding,
       }),
-    [],
+    []
   );
 
   const closePanel = useCallback(
     (panelId: string) => invoke<LayoutSnapshot | null>("wm_close", { panelId }),
-    [],
+    []
   );
 
   return { layout, openPanel, closePanel };

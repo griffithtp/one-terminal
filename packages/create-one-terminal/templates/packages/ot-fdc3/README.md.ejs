@@ -34,16 +34,16 @@ pub fn run() {
 ### 3. TypeScript frontend
 
 ```ts
-import { initFdc3 } from '@<%= orgScope %>/fdc3-client';
+import { initFdc3 } from "@<%= orgScope %>/fdc3-client";
 
 // Call once before rendering.  Starts the TCP connection, waits for Welcome.
-const fdc3 = await initFdc3('my-app-id');
+const fdc3 = await initFdc3("my-app-id");
 
-await fdc3.joinUserChannel('Green');
-await fdc3.broadcast({ type: 'fdc3.instrument', id: { ticker: 'AAPL' } });
+await fdc3.joinUserChannel("Green");
+await fdc3.broadcast({ type: "fdc3.instrument", id: { ticker: "AAPL" } });
 
-fdc3.addContextListener('fdc3.instrument', (ctx) => {
-  console.log('received', ctx.id.ticker);
+fdc3.addContextListener("fdc3.instrument", (ctx) => {
+  console.log("received", ctx.id.ticker);
 });
 ```
 
@@ -74,24 +74,24 @@ app.emit("fdc3:context", FdcContextEvent {
 
 All commands are registered by the plugin — do not add them to `invoke_handler` manually.
 
-| Command | Description |
-|---|---|
-| `fdc3_register(appId, windowLabel)` | Connect to CDA, returns `{ appId, instanceId }` |
-| `fdc3_get_system_channels()` | List user channels from CDA Welcome |
-| `fdc3_join_user_channel(instanceId, channelId)` | Join a channel, emits `fdc3:channel_joined` |
-| `fdc3_leave_current_channel(instanceId)` | Leave current channel |
-| `fdc3_get_current_channel(instanceId)` | Current channel or `null` |
-| `fdc3_broadcast(instanceId, context)` | Broadcast on current channel |
-| `fdc3_add_intent_listener(instanceId, intent)` | Register intent handler with CDA |
-| `fdc3_remove_intent_listener(instanceId, intent)` | Deregister intent handler |
-| `fdc3_raise_intent(sourceInstanceId, intent, context, target)` | Raise intent, blocks until resolved |
-| `fdc3_get_registered_apps()` | Stub — returns `[]` |
-| `fdc3_get_current_context(channelId, contextType)` | Stub — returns `null` |
-| `fdc3_find_intent(intent, contextType)` | Stub — returns empty app list |
-| `fdc3_find_intents_for_context(contextType)` | Stub — returns `[]` |
-| `fdc3_raise_intent_for_context(…)` | Stub — returns error |
-| `fdc3_get_or_create_channel(id)` | Looks up known channels, or returns a plain `Channel` |
-| `fdc3_create_private_channel()` | Returns a stub private channel with a random ID |
+| Command                                                        | Description                                           |
+| -------------------------------------------------------------- | ----------------------------------------------------- |
+| `fdc3_register(appId, windowLabel)`                            | Connect to CDA, returns `{ appId, instanceId }`       |
+| `fdc3_get_system_channels()`                                   | List user channels from CDA Welcome                   |
+| `fdc3_join_user_channel(instanceId, channelId)`                | Join a channel, emits `fdc3:channel_joined`           |
+| `fdc3_leave_current_channel(instanceId)`                       | Leave current channel                                 |
+| `fdc3_get_current_channel(instanceId)`                         | Current channel or `null`                             |
+| `fdc3_broadcast(instanceId, context)`                          | Broadcast on current channel                          |
+| `fdc3_add_intent_listener(instanceId, intent)`                 | Register intent handler with CDA                      |
+| `fdc3_remove_intent_listener(instanceId, intent)`              | Deregister intent handler                             |
+| `fdc3_raise_intent(sourceInstanceId, intent, context, target)` | Raise intent, blocks until resolved                   |
+| `fdc3_get_registered_apps()`                                   | Stub — returns `[]`                                   |
+| `fdc3_get_current_context(channelId, contextType)`             | Stub — returns `null`                                 |
+| `fdc3_find_intent(intent, contextType)`                        | Stub — returns empty app list                         |
+| `fdc3_find_intents_for_context(contextType)`                   | Stub — returns `[]`                                   |
+| `fdc3_raise_intent_for_context(…)`                             | Stub — returns error                                  |
+| `fdc3_get_or_create_channel(id)`                               | Looks up known channels, or returns a plain `Channel` |
+| `fdc3_create_private_channel()`                                | Returns a stub private channel with a random ID       |
 
 ## Notes
 

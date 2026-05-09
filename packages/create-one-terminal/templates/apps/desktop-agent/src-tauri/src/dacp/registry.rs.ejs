@@ -65,9 +65,7 @@ impl PeerRegistry {
 
     pub fn unregister(&self, desktop_agent_id: &str) {
         if let Some((_, h)) = self.peers.remove(desktop_agent_id) {
-            let intents: Vec<String> = h.intent_listeners.iter()
-                .map(|e| e.key().clone())
-                .collect();
+            let intents: Vec<String> = h.intent_listeners.iter().map(|e| e.key().clone()).collect();
             for intent in intents {
                 self.intent_index
                     .remove_if(&intent, |_, v| v.as_str() == desktop_agent_id);
@@ -181,9 +179,7 @@ impl PeerRegistry {
                 PeerInfo {
                     desktop_agent_id: h.desktop_agent_id.clone(),
                     url: h.url.clone(),
-                    intent_listeners: h.intent_listeners.iter()
-                        .map(|i| i.key().clone())
-                        .collect(),
+                    intent_listeners: h.intent_listeners.iter().map(|i| i.key().clone()).collect(),
                 }
             })
             .collect()

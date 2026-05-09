@@ -24,14 +24,7 @@ pub const SPLITTER_THICKNESS: f64 = 4.0;
 const OFFSCREEN_X: f64 = -20000.0;
 const OFFSCREEN_Y: f64 = -20000.0;
 
-pub fn reflow_layout(
-    node: &LayoutNode,
-    app: &AppHandle,
-    x: f64,
-    y: f64,
-    width: f64,
-    height: f64,
-) {
+pub fn reflow_layout(node: &LayoutNode, app: &AppHandle, x: f64, y: f64, width: f64, height: f64) {
     reflow_inner(node, app, x, y, width, height, false);
 }
 
@@ -55,16 +48,27 @@ fn reflow_inner(
             let (py, ph) = if in_stack {
                 (y, height)
             } else {
-                (y + PANEL_HEADER_HEIGHT, (height - PANEL_HEADER_HEIGHT).max(0.0))
+                (
+                    y + PANEL_HEADER_HEIGHT,
+                    (height - PANEL_HEADER_HEIGHT).max(0.0),
+                )
             };
             place(app, label, x, py, width, ph);
         }
 
-        LayoutNode::Splitter { direction, children, .. } => {
+        LayoutNode::Splitter {
+            direction,
+            children,
+            ..
+        } => {
             let n = children.len();
-            if n == 0 { return; }
+            if n == 0 {
+                return;
+            }
             let total: f64 = children.iter().map(|c| c.weight().max(0.0)).sum();
-            if total <= 0.0 { return; }
+            if total <= 0.0 {
+                return;
+            }
 
             let axis_total = match direction {
                 Direction::Horizontal => width,
@@ -92,7 +96,9 @@ fn reflow_inner(
             }
         }
 
-        LayoutNode::Stack { active, children, .. } => {
+        LayoutNode::Stack {
+            active, children, ..
+        } => {
             if children.is_empty() {
                 return;
             }
@@ -112,7 +118,9 @@ fn reflow_inner(
 }
 
 fn place(app: &AppHandle, label: &str, x: f64, y: f64, w: f64, h: f64) {
-    let Some(wv) = app.get_webview(label) else { return };
+    let Some(wv) = app.get_webview(label) else {
+        return;
+    };
     let _ = wv.set_position(LogicalPosition::new(x, y));
     let _ = wv.set_size(LogicalSize::new(w.max(1.0), h.max(1.0)));
 }

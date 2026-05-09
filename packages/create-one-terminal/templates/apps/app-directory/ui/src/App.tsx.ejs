@@ -11,12 +11,12 @@ interface Toast {
 }
 
 export default function App() {
-  const [view, setView]           = useState<View>("list");
+  const [view, setView] = useState<View>("list");
   const [editTarget, setEditTarget] = useState<AppD | null>(null);
-  const [apps, setApps]           = useState<AppD[]>([]);
-  const [loading, setLoading]     = useState(true);
-  const [error, setError]         = useState<string | null>(null);
-  const [toast, setToast]         = useState<Toast | null>(null);
+  const [apps, setApps] = useState<AppD[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<Toast | null>(null);
 
   const showToast = (message: string, isError = false) => {
     setToast({ message, isError });
@@ -38,7 +38,9 @@ export default function App() {
     }
   }, []);
 
-  useEffect(() => { fetchApps(); }, [fetchApps]);
+  useEffect(() => {
+    fetchApps();
+  }, [fetchApps]);
 
   const handleEdit = (app: AppD) => {
     setEditTarget(app);
@@ -81,15 +83,14 @@ export default function App() {
   return (
     <>
       <header className="app-header">
-        <h1>OneTerminal <span>· App Directory</span></h1>
+        <h1>
+          OneTerminal <span>· App Directory</span>
+        </h1>
         <nav className="nav-tabs">
           <button className={view === "list" ? "active" : ""} onClick={gotoList}>
             App Catalogue
           </button>
-          <button
-            className={view === "register" ? "active" : ""}
-            onClick={gotoRegister}
-          >
+          <button className={view === "register" ? "active" : ""} onClick={gotoRegister}>
             + Register App
           </button>
         </nav>
@@ -106,19 +107,11 @@ export default function App() {
           />
         )}
         {(view === "register" || view === "edit") && (
-          <AppForm
-            existingApp={editTarget}
-            onSave={handleSave}
-            onCancel={handleCancel}
-          />
+          <AppForm existingApp={editTarget} onSave={handleSave} onCancel={handleCancel} />
         )}
       </main>
 
-      {toast && (
-        <div className={`toast${toast.isError ? " is-error" : ""}`}>
-          {toast.message}
-        </div>
-      )}
+      {toast && <div className={`toast${toast.isError ? " is-error" : ""}`}>{toast.message}</div>}
     </>
   );
 }

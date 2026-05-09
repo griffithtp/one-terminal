@@ -25,10 +25,7 @@ export function ChannelsPanel({ channels, connections }: Props) {
             style={{ "--ch-color": ch.color } as React.CSSProperties}
           >
             <div className="channel-card__header">
-              <span
-                className="channel-card__swatch"
-                style={{ background: ch.color }}
-              />
+              <span className="channel-card__swatch" style={{ background: ch.color }} />
               <span className="channel-card__name">{ch.displayName}</span>
               <span className="channel-card__count">{ch.members.length}</span>
             </div>

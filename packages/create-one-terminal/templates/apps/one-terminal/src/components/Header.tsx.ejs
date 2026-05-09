@@ -37,7 +37,7 @@ interface Props {
     appId: string,
     url: string,
     title: string,
-    engineBinding: EngineBinding | null,
+    engineBinding: EngineBinding | null
   ) => void;
 }
 
@@ -85,11 +85,7 @@ function EnginePickerDialog({ app, engines, onPick, onCancel }: EnginePickerProp
         <ul className="wm-engine-picker__list">
           {engines.map((b) => (
             <li key={`${b.family}@${b.version}`}>
-              <button
-                type="button"
-                className="wm-engine-picker__option"
-                onClick={() => onPick(b)}
-              >
+              <button type="button" className="wm-engine-picker__option" onClick={() => onPick(b)}>
                 <span className="wm-engine-picker__family">{b.family}</span>
                 <span className="wm-engine-picker__version">{b.version}</span>
               </button>
@@ -147,17 +143,14 @@ function DownloadPromptDialog({
           Download <strong>{label}</strong>?
         </div>
         <p className="wm-engine-picker__note">
-          {binding.family}@{binding.version} isn't installed on this machine. The
-          window manager needs to download <strong>{formatBytes(sizeBytes)}</strong>
-          {" "}before it can launch a new external window with this engine.
+          {binding.family}@{binding.version} isn&apos;t installed on this machine. The window manager
+          needs to download <strong>{formatBytes(sizeBytes)}</strong> before it can launch a new
+          external window with this engine.
         </p>
 
         {busy && (
           <div className="wm-engine-picker__progress" aria-live="polite">
-            <div
-              className="wm-engine-picker__progress-bar"
-              style={{ width: `${pct}%` }}
-            />
+            <div className="wm-engine-picker__progress-bar" style={{ width: `${pct}%` }} />
             <div className="wm-engine-picker__progress-text">
               {formatBytes(downloaded)} / {formatBytes(total)} ({pct}%)
             </div>
@@ -261,19 +254,14 @@ export function Header({ onOpenTab }: Props) {
 
   const enginesFor = useCallback(
     (app: AppRecord): EngineBinding[] => app.engineBindings?.[currentOs] ?? [],
-    [currentOs],
+    [currentOs]
   );
 
   const launchApp = useCallback(
     (app: AppRecord, engineBinding: EngineBinding | null) => {
-      onOpenTab(
-        app.appId,
-        app.details?.url ?? "",
-        app.title ?? app.name,
-        engineBinding,
-      );
+      onOpenTab(app.appId, app.details?.url ?? "", app.title ?? app.name, engineBinding);
     },
-    [onOpenTab],
+    [onOpenTab]
   );
 
   // Resolve `binding` then either launch (Ready) or show the download
@@ -300,7 +288,7 @@ export function Header({ onOpenTab }: Props) {
         setErrorMessage(e instanceof Error ? e.message : String(e));
       }
     },
-    [launchApp],
+    [launchApp]
   );
 
   const handleAppClick = useCallback(
@@ -318,7 +306,7 @@ export function Header({ onOpenTab }: Props) {
       }
       setPickerApp(app);
     },
-    [enginesFor, launchApp, proceedLaunch],
+    [enginesFor, launchApp, proceedLaunch]
   );
 
   const handlePickerPick = useCallback(
@@ -328,7 +316,7 @@ export function Header({ onOpenTab }: Props) {
       if (!app) return;
       proceedLaunch({ app, binding }).catch(console.error);
     },
-    [pickerApp, proceedLaunch],
+    [pickerApp, proceedLaunch]
   );
 
   const handleDownloadConfirm = useCallback(async () => {
@@ -393,15 +381,18 @@ export function Header({ onOpenTab }: Props) {
       onPointerDown={handleHeaderPointerDown}
       onDoubleClick={handleHeaderDoubleClick}
     >
-      <span className="wm-header__brand" data-tauri-drag-region>{cfg?.title ?? "OneTerminal"}</span>
+      <span className="wm-header__brand" data-tauri-drag-region>
+        {cfg?.title ?? "OneTerminal"}
+      </span>
 
       <div className="wm-header__apps">
         {apps.map((app) => {
           const engineCount = enginesFor(app).length;
           const baseTitle = app.description ?? "Open as tab";
-          const tooltip = engineCount > 1
-            ? `${baseTitle} — choose browser engine (${engineCount} available)`
-            : baseTitle;
+          const tooltip =
+            engineCount > 1
+              ? `${baseTitle} — choose browser engine (${engineCount} available)`
+              : baseTitle;
           return (
             <button
               key={app.appId}

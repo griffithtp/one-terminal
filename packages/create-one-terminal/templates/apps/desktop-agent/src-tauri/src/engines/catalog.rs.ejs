@@ -47,12 +47,7 @@ impl EngineCatalogClient {
             .await
             .map_err(|e| format!("Engine catalog JSON parse error: {e}"))?;
 
-        let count = data
-            .engines
-            .windows
-            .as_ref()
-            .map(|v| v.len())
-            .unwrap_or(0)
+        let count = data.engines.windows.as_ref().map(|v| v.len()).unwrap_or(0)
             + data.engines.macos.as_ref().map(|v| v.len()).unwrap_or(0)
             + data.engines.linux.as_ref().map(|v| v.len()).unwrap_or(0);
 

@@ -46,24 +46,20 @@ function applyFilter(apps: AppD[], filter: string): AppD[] {
   const catAny = lower.match(/^categories\/any\(c:\s*c\s+eq\s+'([^']+)'\)$/);
   if (catAny) {
     const v = catAny[1];
-    return apps.filter((a) =>
-      a.categories?.some((c) => c.toLowerCase() === v),
-    );
+    return apps.filter((a) => a.categories?.some((c) => c.toLowerCase() === v));
   }
 
   // intent listensFor: intents/listensFor/<IntentName>
   const intentListens = lower.match(/^intents\/listensfor\/(\w+)$/);
   if (intentListens) {
     const intent = intentListens[1];
-    return apps.filter((a) =>
-      a.interop?.intents?.listensFor &&
-      intent in
-        Object.fromEntries(
-          Object.entries(a.interop.intents.listensFor).map(([k, v]) => [
-            k.toLowerCase(),
-            v,
-          ]),
-        ),
+    return apps.filter(
+      (a) =>
+        a.interop?.intents?.listensFor &&
+        intent in
+          Object.fromEntries(
+            Object.entries(a.interop.intents.listensFor).map(([k, v]) => [k.toLowerCase(), v])
+          )
     );
   }
 
@@ -78,7 +74,7 @@ function applyFilter(apps: AppD[], filter: string): AppD[] {
  * rejected. Returns an error message on failure, otherwise `null`.
  */
 function validateEngineBindings(
-  bindings: Partial<Record<OsKey, EngineBinding[]>> | undefined,
+  bindings: Partial<Record<OsKey, EngineBinding[]>> | undefined
 ): string | null {
   if (!bindings) return null;
   for (const [os, list] of Object.entries(bindings) as [OsKey, EngineBinding[] | undefined][]) {

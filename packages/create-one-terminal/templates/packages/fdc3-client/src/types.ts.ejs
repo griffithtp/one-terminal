@@ -73,7 +73,10 @@ export interface Listener {
 }
 
 export type ContextHandler = (context: Context, metadata?: { source: AppIdentifier }) => void;
-export type IntentHandler = (context: Context, metadata?: { source: AppIdentifier; requestId: string }) => void;
+export type IntentHandler = (
+  context: Context,
+  metadata?: { source: AppIdentifier; requestId: string }
+) => void;
 
 // ── FDC3 2.2 Agent Bridging types ─────────────────────────────────────────────
 

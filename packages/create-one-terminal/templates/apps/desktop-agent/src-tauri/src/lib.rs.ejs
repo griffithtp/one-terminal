@@ -8,15 +8,15 @@ mod tcp;
 
 use app_dir::{AppDirectoryCache, AppRecord};
 use broker::{
-    ChannelInfo, ChannelManager, IntentHandlerInfo, IntentRegistry,
-    WindowHandle, WindowManager, new_uuid,
+    new_uuid, ChannelInfo, ChannelManager, IntentHandlerInfo, IntentRegistry, WindowHandle,
+    WindowManager,
 };
 use config::AgentConfig;
 use dacp::{PeerInfo, PeerRegistry};
 use engines::{EngineCatalogClient, EngineRuntimeStore};
-use tauri::{AppHandle, Manager, State};
 use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::{AppHandle, Manager, State};
 
 // ── Tauri commands ─────────────────────────────────────────────────────────────
 
@@ -176,7 +176,11 @@ fn cda_raise_intent_from_dashboard(
 
     let resolved = match &target_instance_id {
         Some(tid) => {
-            if window_manager.get(tid).is_some() { Some(tid.clone()) } else { None }
+            if window_manager.get(tid).is_some() {
+                Some(tid.clone())
+            } else {
+                None
+            }
         }
         None => intent_registry.find_handler(&intent),
     };
@@ -270,7 +274,7 @@ async fn cda_launch_app(
 
     if app_type != "onlineNative" {
         return tauri_plugin_opener::open_url(app_url, None::<&str>)
-            .map_err(|e| format!("Failed to launch app: {e}"))
+            .map_err(|e| format!("Failed to launch app: {e}"));
     }
 
     // Focus an existing standalone window for this app if we already opened one.
@@ -279,7 +283,8 @@ async fn cda_launch_app(
         app_id.replace(|c: char| !c.is_alphanumeric() && c != '-', "-")
     );
     if let Some(win) = app.get_webview_window(&label) {
-        win.set_focus().map_err(|e| format!("Failed to focus window: {e}"))?;
+        win.set_focus()
+            .map_err(|e| format!("Failed to focus window: {e}"))?;
         return Ok(());
     }
 
@@ -298,7 +303,9 @@ async fn cda_launch_app(
                 title: app_title.clone(),
                 description: None,
                 version: None,
-                details: Some(app_dir::AppDetails { url: Some(app_url.clone()) }),
+                details: Some(app_dir::AppDetails {
+                    url: Some(app_url.clone()),
+                }),
                 categories: Vec::new(),
                 interop: None,
                 engine_bindings: None,
@@ -325,7 +332,12 @@ async fn cda_launch_app(
     };
 
     let manifests = app.state::<EngineRuntimeStore>().plugins().to_vec();
-    let plan = plan_launch(appd, &LaunchContext::Standalone, installed.as_ref(), &manifests)?;
+    let plan = plan_launch(
+        appd,
+        &LaunchContext::Standalone,
+        installed.as_ref(),
+        &manifests,
+    )?;
     execute_plan(&app, &label, plan).await
 }
 
@@ -348,7 +360,11 @@ async fn execute_plan(
                 .map_err(|e| format!("Failed to open WebView: {e}"))?;
             Ok(())
         }
-        LaunchPlan::SpawnTauriHost { runtime_folder, url, title } => {
+        LaunchPlan::SpawnTauriHost {
+            runtime_folder,
+            url,
+            title,
+        } => {
             let host_bin = locate_host_binary()?;
             let mut cmd = std::process::Command::new(&host_bin);
             cmd.env("OT_APP_ID", label)
@@ -361,21 +377,22 @@ async fn execute_plan(
                 .map(|_| ())
                 .map_err(|e| format!("Failed to spawn {}: {e}", host_bin.display()))
         }
-        LaunchPlan::SpawnElectronHost { binding, url, title } => {
+        LaunchPlan::SpawnElectronHost {
+            binding,
+            url,
+            title,
+        } => {
             // The shared launcher locates the electron-host shell folder
             // (OT_ELECTRON_HOST_OVERRIDE in dev, sibling-of-exe in release)
             // and the Electron binary (OT_ELECTRON_BIN, catalog cache, or
             // the shell's own node_modules from `npm install`).
             let cache_root = ot_core::engine::default_cache_root();
-            ot_core::electron_host::spawn_electron_app(
-                &binding,
-                &cache_root,
-                label,
-                &url,
-                &title,
-            )
+            ot_core::electron_host::spawn_electron_app(&binding, &cache_root, label, &url, &title)
         }
-        LaunchPlan::SpawnBinary { binary_name, env_vars } => {
+        LaunchPlan::SpawnBinary {
+            binary_name,
+            env_vars,
+        } => {
             let mut cmd = std::process::Command::new(&binary_name);
             for (k, v) in env_vars {
                 cmd.env(k, v);
@@ -394,8 +411,14 @@ fn locate_host_binary() -> Result<std::path::PathBuf, String> {
         return Ok(std::path::PathBuf::from(path));
     }
     let exe = std::env::current_exe().map_err(|e| format!("current_exe: {e}"))?;
-    let dir = exe.parent().ok_or_else(|| "exe has no parent dir".to_string())?;
-    let name = if cfg!(windows) { "tauri-webview-host.exe" } else { "tauri-webview-host" };
+    let dir = exe
+        .parent()
+        .ok_or_else(|| "exe has no parent dir".to_string())?;
+    let name = if cfg!(windows) {
+        "tauri-webview-host.exe"
+    } else {
+        "tauri-webview-host"
+    };
     let candidate = dir.join(name);
     if !candidate.exists() {
         return Err(format!(
@@ -413,8 +436,14 @@ fn locate_wm_binary() -> Result<std::path::PathBuf, String> {
         return Ok(std::path::PathBuf::from(path));
     }
     let exe = std::env::current_exe().map_err(|e| format!("current_exe: {e}"))?;
-    let dir = exe.parent().ok_or_else(|| "exe has no parent dir".to_string())?;
-    let name = if cfg!(windows) { "one-terminal.exe" } else { "one-terminal" };
+    let dir = exe
+        .parent()
+        .ok_or_else(|| "exe has no parent dir".to_string())?;
+    let name = if cfg!(windows) {
+        "one-terminal.exe"
+    } else {
+        "one-terminal"
+    };
     let candidate = dir.join(name);
     if !candidate.exists() {
         return Err(format!(
@@ -443,9 +472,9 @@ fn spawn_wm_instance() {
 async fn build_tray_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Menu<tauri::Wry>> {
     let apps = app.state::<AppDirectoryCache>().list_all().await;
 
-    let open_item     = MenuItemBuilder::with_id("open",     "Open CDA").build(app)?;
+    let open_item = MenuItemBuilder::with_id("open", "Open CDA").build(app)?;
     let terminal_item = MenuItemBuilder::with_id("terminal", "Launch Terminal").build(app)?;
-    let exit_item     = MenuItemBuilder::with_id("exit",     "Exit").build(app)?;
+    let exit_item = MenuItemBuilder::with_id("exit", "Exit").build(app)?;
 
     let mut sub = SubmenuBuilder::new(app, "Launch App");
     if apps.is_empty() {
@@ -456,8 +485,8 @@ async fn build_tray_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Menu<tau
     } else {
         for record in &apps {
             let label = record.title.as_deref().unwrap_or(&record.name);
-            let item = MenuItemBuilder::with_id(format!("launch:{}", record.app_id), label)
-                .build(app)?;
+            let item =
+                MenuItemBuilder::with_id(format!("launch:{}", record.app_id), label).build(app)?;
             sub = sub.item(&item);
         }
     }
@@ -494,7 +523,11 @@ async fn launch_app_from_tray(app: AppHandle, app_id: String) {
     let effective_binding = resolve_binding(&record);
     let installed = if let Some(binding) = effective_binding {
         let snapshot = app.state::<EngineCatalogClient>().snapshot().await;
-        match app.state::<EngineRuntimeStore>().ensure(&binding, &snapshot, &app).await {
+        match app
+            .state::<EngineRuntimeStore>()
+            .ensure(&binding, &snapshot, &app)
+            .await
+        {
             Ok(e) => Some(e),
             Err(e) => {
                 eprintln!("[cda/tray] Engine ensure failed for '{app_id}': {e}");
@@ -506,7 +539,12 @@ async fn launch_app_from_tray(app: AppHandle, app_id: String) {
     };
 
     let manifests = app.state::<EngineRuntimeStore>().plugins().to_vec();
-    match plan_launch(&record, &LaunchContext::Standalone, installed.as_ref(), &manifests) {
+    match plan_launch(
+        &record,
+        &LaunchContext::Standalone,
+        installed.as_ref(),
+        &manifests,
+    ) {
         Ok(plan) => {
             if let Err(e) = execute_plan(&app, &label, plan).await {
                 eprintln!("[cda/tray] Launch failed for '{app_id}': {e}");
@@ -518,9 +556,50 @@ async fn launch_app_from_tray(app: AppHandle, app_id: String) {
 
 // ── App entry point ────────────────────────────────────────────────────────────
 
+/// When `OT_ELECTRON_HOST_OVERRIDE` is set, probe both the shell directory and
+/// the Electron binary so the user gets an actionable warning at startup
+/// instead of a cryptic error when they first try to launch an Electron app.
+fn validate_electron_override() {
+    let Ok(raw) = std::env::var("OT_ELECTRON_HOST_OVERRIDE") else {
+        return;
+    };
+
+    // ── Shell directory check ──────────────────────────────────────────────
+    let shell = {
+        let path = std::path::PathBuf::from(&raw);
+        if path.is_dir() && path.join("main.js").is_file() {
+            path
+        } else {
+            eprintln!(
+                "[desktop-agent] warning: OT_ELECTRON_HOST_OVERRIDE={raw} is not a valid \
+                 electron-host directory (expected main.js inside)\n  \
+                 Fix: run `npm run setup:electron-host` from the workspace root, then retry."
+            );
+            return;
+        }
+    };
+
+    // ── Electron binary check ──────────────────────────────────────────────
+    let cache_root = ot_core::engine::default_cache_root();
+    let probe = ot_core::engine::EngineBinding {
+        family: ot_core::engine::EngineFamily::Electron,
+        version: "system".to_string(),
+    };
+    if let Err(msg) = ot_core::electron_host::locate_electron_binary(&probe, &cache_root, &shell) {
+        eprintln!("[desktop-agent] warning: Electron binary not available — {msg}");
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let cfg = AgentConfig::load();
+
+    if let Err(msg) = cfg.ports.check_availability() {
+        eprintln!("[desktop-agent] {msg}");
+        std::process::exit(1);
+    }
+
+    validate_electron_override();
 
     let app_dir_cache = AppDirectoryCache::new(&cfg.app_directory_url);
     let engine_catalog = EngineCatalogClient::new(&cfg.engine_catalog_url);
@@ -582,7 +661,12 @@ pub fn run() {
             // DACP subsystem: discovery, inbound WS server, file announce.
             let dacp_instance_id = new_uuid();
             let app_handle_tray = app_handle.clone();
-            tauri::async_runtime::spawn(dacp::start(pr, app_handle, dacp_instance_id, ports.dacp_bridge));
+            tauri::async_runtime::spawn(dacp::start(
+                pr,
+                app_handle,
+                dacp_instance_id,
+                ports.dacp_bridge,
+            ));
 
             // Initial App Directory fetch (non-fatal if the service is not running).
             tauri::async_runtime::spawn(async move {
@@ -609,10 +693,11 @@ pub fn run() {
 
             // ── System tray ────────────────────────────────────────────────────
             // Initial menu: apps list is empty until the App Directory fetch completes.
-            let open_item     = MenuItemBuilder::with_id("open",     "Open CDA").build(app)?;
-            let terminal_item = MenuItemBuilder::with_id("terminal", "Launch Terminal").build(app)?;
-            let exit_item     = MenuItemBuilder::with_id("exit",     "Exit").build(app)?;
-            let placeholder   = MenuItemBuilder::with_id("no-apps",  "No apps available")
+            let open_item = MenuItemBuilder::with_id("open", "Open CDA").build(app)?;
+            let terminal_item =
+                MenuItemBuilder::with_id("terminal", "Launch Terminal").build(app)?;
+            let exit_item = MenuItemBuilder::with_id("exit", "Exit").build(app)?;
+            let placeholder = MenuItemBuilder::with_id("no-apps", "No apps available")
                 .enabled(false)
                 .build(app)?;
             let apps_sub = SubmenuBuilder::new(app, "Launch App")

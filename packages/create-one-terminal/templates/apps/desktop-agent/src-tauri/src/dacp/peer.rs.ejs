@@ -5,8 +5,8 @@ use tokio_tungstenite::tungstenite::Message;
 
 use super::registry::{PeerHandle, PeerRegistry};
 use super::types::{
-    AgentIdentifier, BmpMessage, BmpMeta, CdaPeerConnectedEvent, CdaPeerDisconnectedEvent,
-    WcpAgentDetails, WcpHelloPayload, new_uuid, now_ms_str,
+    new_uuid, now_ms_str, AgentIdentifier, BmpMessage, BmpMeta, CdaPeerConnectedEvent,
+    CdaPeerDisconnectedEvent, WcpAgentDetails, WcpHelloPayload,
 };
 
 // ── Outbound client connection ─────────────────────────────────────────────────
@@ -165,11 +165,7 @@ pub async fn connect_to_peer(url: String, registry: PeerRegistry, app: AppHandle
 /// Called from both the outbound client path (`peer.rs`) and the inbound server
 /// path (`server.rs`).  Currently tracks intent listener registrations; relay
 /// for `broadcastBridge` and `raiseIntentBridge` can be extended here.
-pub(super) fn handle_inbound_bmp(
-    bmp: &BmpMessage,
-    peer_id: &str,
-    registry: &PeerRegistry,
-) {
+pub(super) fn handle_inbound_bmp(bmp: &BmpMessage, peer_id: &str, registry: &PeerRegistry) {
     match bmp.msg_type.as_str() {
         "addIntentListenerRequest" | "addIntentListenerBridge" => {
             if let Some(intent) = extract_intent_name(&bmp.payload) {

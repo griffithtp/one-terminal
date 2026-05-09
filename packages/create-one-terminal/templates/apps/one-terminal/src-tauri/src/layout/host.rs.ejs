@@ -87,7 +87,10 @@ pub fn compute_host_layout(
             // stack at the full content rect and skip splitters — no other
             // strips/handles should appear while maximized.
             if let Some(node) = resolve(root, path) {
-                if let LayoutNode::Stack { active, children, .. } = node {
+                if let LayoutNode::Stack {
+                    active, children, ..
+                } = node
+                {
                     let tabs = stack_tabs(children, titles, app_ids);
                     stacks.push(StackHeader {
                         path: path.to_vec(),
@@ -153,7 +156,11 @@ fn stack_tabs(
                     .filter(|t| !t.is_empty())
                     .unwrap_or_else(|| label.clone());
                 let app_id = app_ids.get(label).cloned().unwrap_or_default();
-                Some(StackTab { label: label.clone(), title, app_id })
+                Some(StackTab {
+                    label: label.clone(),
+                    title,
+                    app_id,
+                })
             }
             _ => None,
         })
@@ -175,11 +182,19 @@ fn walk(
     match node {
         LayoutNode::Leaf { .. } => {}
 
-        LayoutNode::Splitter { direction, children, .. } => {
+        LayoutNode::Splitter {
+            direction,
+            children,
+            ..
+        } => {
             let n = children.len();
-            if n == 0 { return; }
+            if n == 0 {
+                return;
+            }
             let total: f64 = children.iter().map(|c| c.weight().max(0.0)).sum();
-            if total <= 0.0 { return; }
+            if total <= 0.0 {
+                return;
+            }
 
             let axis_total = match direction {
                 Direction::Horizontal => w,
@@ -197,7 +212,9 @@ fn walk(
                     Direction::Vertical => (x, y + offset, w, axis_share),
                 };
                 path.push(i);
-                walk(child, path, cx, cy, cw, ch, stacks, splitters, titles, app_ids);
+                walk(
+                    child, path, cx, cy, cw, ch, stacks, splitters, titles, app_ids,
+                );
                 path.pop();
                 offset += axis_share;
 
@@ -220,7 +237,9 @@ fn walk(
             }
         }
 
-        LayoutNode::Stack { active, children, .. } => {
+        LayoutNode::Stack {
+            active, children, ..
+        } => {
             // `simplify()` guarantees a Stack's children are all Leaves, so
             // non-Leaf cases are unreachable here.
             let tabs = stack_tabs(children, titles, app_ids);

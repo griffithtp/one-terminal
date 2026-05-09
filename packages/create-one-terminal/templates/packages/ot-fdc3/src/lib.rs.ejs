@@ -4,10 +4,13 @@ mod state;
 mod types;
 
 use std::sync::Arc;
-use tauri::{AppHandle, Manager, Runtime, plugin::{Builder as PluginBuilder, TauriPlugin}};
+use tauri::{
+    plugin::{Builder as PluginBuilder, TauriPlugin},
+    AppHandle, Manager, Runtime,
+};
 
 pub use state::OtFdc3State;
-pub use types::{FdcContextEvent, FdcChannelJoinedEvent, FdcIntentEvent};
+pub use types::{FdcChannelJoinedEvent, FdcContextEvent, FdcIntentEvent};
 
 use commands::*;
 

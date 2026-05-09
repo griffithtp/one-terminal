@@ -79,10 +79,7 @@ export function OverlayApp() {
   return (
     <>
       {/* Transparent full-window backdrop — click outside dismisses. */}
-      <div
-        style={{ position: "fixed", inset: 0 }}
-        onPointerDown={dismiss}
-      />
+      <div style={{ position: "fixed", inset: 0 }} onPointerDown={dismiss} />
       <div
         ref={menuRef}
         className="wm-tab-ctx-menu"
@@ -96,9 +93,7 @@ export function OverlayApp() {
           role="menuitem"
           className="wm-tab-ctx-menu__item wm-tab-ctx-menu__item--danger"
           onClick={() => {
-            invoke("wm_close_stack", { path: menu.stackPath }).catch(
-              console.error,
-            );
+            invoke("wm_close_stack", { path: menu.stackPath }).catch(console.error);
             dismiss();
           }}
         >

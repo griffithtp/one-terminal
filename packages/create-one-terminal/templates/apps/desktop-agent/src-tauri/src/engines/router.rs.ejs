@@ -180,7 +180,10 @@ fn plan_from_manifest(
             title,
         }),
 
-        LaunchMode::SpawnBinary { binary_name, env_templates } => {
+        LaunchMode::SpawnBinary {
+            binary_name,
+            env_templates,
+        } => {
             let env_vars = env_templates
                 .iter()
                 .map(|t| {
@@ -216,7 +219,9 @@ mod tests {
             title: None,
             description: None,
             version: None,
-            details: Some(AppDetails { url: Some(url.into()) }),
+            details: Some(AppDetails {
+                url: Some(url.into()),
+            }),
             categories: vec![],
             interop: None,
             engine_bindings: bindings,

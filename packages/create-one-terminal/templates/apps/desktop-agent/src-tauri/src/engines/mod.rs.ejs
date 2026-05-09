@@ -14,14 +14,12 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 pub use catalog::EngineCatalogClient;
-pub use runtime::EngineRuntimeStore;
 pub use ot_core::plugin::EngineManifest;
+pub use runtime::EngineRuntimeStore;
 
 // Re-export shared types so existing `engines::OsKey`, `engines::EngineBinding`
 // call sites keep working.
-pub use ot_core::engine::{
-    current_os, is_system_version, EngineBinding, EngineFamily, OsKey,
-};
+pub use ot_core::engine::{current_os, is_system_version, EngineBinding, EngineFamily, OsKey};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

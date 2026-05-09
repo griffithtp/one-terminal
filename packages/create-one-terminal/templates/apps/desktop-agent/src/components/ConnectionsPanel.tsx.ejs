@@ -40,16 +40,16 @@ export function ConnectionsPanel({ connections, channels, onDisconnect }: Props)
               <tr key={c.instanceId}>
                 <td>
                   <span className="spoke__name">{c.displayName ?? c.appId}</span>
-                  {c.displayName && (
-                    <span className="spoke__id">{c.appId}</span>
-                  )}
+                  {c.displayName && <span className="spoke__id">{c.appId}</span>}
                 </td>
                 <td className="mono">{c.instanceId.slice(0, 8)}…</td>
                 <td>
                   {c.currentChannel ? (
                     <span
                       className="channel-dot"
-                      style={{ "--dot-color": channelColor(c.currentChannel) } as React.CSSProperties}
+                      style={
+                        { "--dot-color": channelColor(c.currentChannel) } as React.CSSProperties
+                      }
                     >
                       {c.currentChannel}
                     </span>

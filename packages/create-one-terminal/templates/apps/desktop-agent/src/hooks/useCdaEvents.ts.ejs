@@ -51,11 +51,15 @@ export function useCdaEvents() {
         refresh();
         const { channelId, sourceAppId, recipientCount } = e.payload;
         const payloadContext = JSON.stringify(e.payload.context);
-        log(`broadcast  ${sourceAppId} → ${channelId}  (${recipientCount} recipient${recipientCount !== 1 ? "s" : ""}) >> ${payloadContext}`);
+        log(
+          `broadcast  ${sourceAppId} → ${channelId}  (${recipientCount} recipient${recipientCount !== 1 ? "s" : ""}) >> ${payloadContext}`
+        );
       }),
       listen<CdaIntentEvent>("cda:intent", (e) => {
         const { intent, sourceInstanceId, handlerInstanceId } = e.payload;
-        log(`intent  ${intent}  ${sourceInstanceId.slice(0, 8)}… → ${handlerInstanceId.slice(0, 8)}…`);
+        log(
+          `intent  ${intent}  ${sourceInstanceId.slice(0, 8)}… → ${handlerInstanceId.slice(0, 8)}…`
+        );
       }),
       listen<CdaPeerConnectedEvent>("cda:peer_connected", (e) => {
         refresh();
@@ -77,7 +81,7 @@ export function useCdaEvents() {
       await invoke("cda_disconnect_spoke", { instanceId });
       refresh();
     },
-    [refresh],
+    [refresh]
   );
 
   return { connections, channels, peers, activityLog, refresh, disconnectSpoke };

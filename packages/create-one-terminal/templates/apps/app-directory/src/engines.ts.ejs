@@ -54,7 +54,7 @@ export function getCatalog(): EngineCatalog {
 export function isEngineBindingValid(
   os: keyof EngineCatalog,
   family: string,
-  version: string,
+  version: string
 ): boolean {
   const entries = catalog[os] ?? [];
   return entries.some((e) => e.family === family && e.version === version);

@@ -40,10 +40,8 @@ pub async fn start(
                 let adc = app_dir_cache.clone();
                 let app_h = app.clone();
                 tokio::spawn(async move {
-                    crate::tcp::handler::handle_connection(
-                        stream, wm, cm, ir, pr, adc, app_h,
-                    )
-                    .await;
+                    crate::tcp::handler::handle_connection(stream, wm, cm, ir, pr, adc, app_h)
+                        .await;
                 });
             }
             Err(e) => eprintln!("[cda] accept error: {e}"),

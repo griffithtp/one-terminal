@@ -14,9 +14,9 @@ type MainTab = "dashboard" | "bridge" | "interop" | "launcher";
 
 const TAB_LABELS: Record<MainTab, string> = {
   dashboard: "Dashboard",
-  bridge:    "Bridge",
-  interop:   "Interop",
-  launcher:  "Launcher",
+  bridge: "Bridge",
+  interop: "Interop",
+  launcher: "Launcher",
 };
 
 export default function App() {
@@ -58,13 +58,9 @@ export default function App() {
           </>
         )}
 
-        {tab === "bridge" && (
-          <BridgeVisualizer connections={connections} peers={peers} />
-        )}
+        {tab === "bridge" && <BridgeVisualizer connections={connections} peers={peers} />}
 
-        {tab === "interop" && (
-          <InteropDashboard channels={channels} peers={peers} />
-        )}
+        {tab === "interop" && <InteropDashboard channels={channels} peers={peers} />}
 
         {tab === "launcher" && <LauncherPanel />}
       </main>
