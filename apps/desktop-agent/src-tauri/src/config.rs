@@ -131,8 +131,8 @@ impl AgentConfig {
         let paths = Self::search_paths();
         for path in paths {
             if path.exists() {
-                match fs::read_to_string(&path) {
-                    Ok(json) => match serde_json::from_str(&json) {
+                if let Ok(json) = fs::read_to_string(&path) {
+                    match serde_json::from_str(&json) {
                         Ok(cfg) => {
                             println!("[desktop-agent] config loaded from {}", path.display());
                             return Some(cfg);
@@ -141,8 +141,7 @@ impl AgentConfig {
                             "[desktop-agent] config parse error at {}: {e}",
                             path.display()
                         ),
-                    },
-                    Err(_) => {}
+                    }
                 }
             }
         }

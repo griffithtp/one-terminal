@@ -248,7 +248,7 @@ fn stack_size(root: &LayoutNode, path: &[usize]) -> Option<usize> {
 /// If extracting at `source` removes a sibling that comes *before* `target`,
 /// decrement the affected index in `target` by 1 so the path still points at
 /// the same node post-extraction.
-fn adjust_for_removal(source: &[usize], target: &mut Vec<usize>) {
+fn adjust_for_removal(source: &[usize], target: &mut [usize]) {
     if source.is_empty() {
         return;
     }
@@ -444,6 +444,7 @@ fn collect_leaves(node: LayoutNode, acc: &mut Vec<LayoutNode>) {
 
 type InsertErr = (LayoutNode, LayoutNode);
 
+#[allow(clippy::result_large_err)]
 fn insert_at(
     node: LayoutNode,
     path: &[usize],

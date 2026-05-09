@@ -116,11 +116,8 @@ async fn connect_once<R: Runtime>(state: Arc<OtFdc3State>, app_id: String, app: 
     });
 
     // ── Inbound message loop ──────────────────────────────────────────────────
-    loop {
-        match lines.next_line().await {
-            Ok(Some(line)) => handle_line(&line, &state, &app).await,
-            Ok(None) | Err(_) => break,
-        }
+    while let Ok(Some(line)) = lines.next_line().await {
+        handle_line(&line, &state, &app).await;
     }
 }
 
