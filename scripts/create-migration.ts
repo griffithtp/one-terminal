@@ -6,7 +6,9 @@
  * 2. Diffs against committed templates to detect changes
  * 3. For each changed file, infers migration type and prompts for spec details
  * 4. Bumps the version in versions.json and prepends a new entry
+ *    (or amends the version already added on this branch)
  * 5. Updates scaffoldVersion in context.ts so new workspaces start on the right version
+ *    (skipped when amending — version hasn't changed)
  * 6. Copies the new templates to the committed templates directory
  *
  * Usage:
@@ -126,41 +128,80 @@ if (changes.length === 0) {
 
 p.log.info(`${pc.bold(String(changes.length))} file(s) changed.`);
 
-// Step 3: Read current version
+// Step 3: Read current manifest
 const manifest = JSON.parse(await readFile(VERSIONS_JSON, "utf8")) as VersionsManifest;
 const latestEntry = [...manifest.versions].sort((a, b) =>
   semverGt(a.version, b.version) ? -1 : 1
 )[0];
 const currentVersion = latestEntry?.version ?? "0.1.0";
 
-// Step 4: Version bump type
-const bumpType = await p.select({
-  message: `Current version is ${pc.bold(currentVersion)}. Choose bump type:`,
-  options: [
-    {
-      value: "patch",
-      label: `patch  →  ${bumpVersion(currentVersion, "patch")}  (bug fixes, non-breaking additions)`,
-    },
-    {
-      value: "minor",
-      label: `minor  →  ${bumpVersion(currentVersion, "minor")}  (new functionality, backwards-compatible)`,
-    },
-    {
-      value: "major",
-      label: `major  →  ${bumpVersion(currentVersion, "major")}  (breaking changes)`,
-    },
-  ],
-});
-if (p.isCancel(bumpType)) cancel();
-const newVersion = bumpVersion(currentVersion, bumpType as "patch" | "minor" | "major");
+// Step 4: Detect whether this branch already added a migration version and offer to amend it
+const branchVersion = detectBranchMigration(manifest);
 
-const isBreaking = await p.confirm({
-  message: "Does this version contain breaking changes for existing scaffolded workspaces?",
-  initialValue: bumpType === "major",
-});
-if (p.isCancel(isBreaking)) cancel();
+type Mode = "amend" | "new";
+let mode: Mode = "new";
+let amendEntry: VersionEntry | null = null;
 
-// Step 5: Per-file migration prompts
+if (branchVersion) {
+  const choice = await p.select({
+    message: `Version ${pc.bold(branchVersion)} was already added on this branch. What would you like to do?`,
+    options: [
+      {
+        value: "amend",
+        label: `Amend v${branchVersion} — merge new migrations into this version`,
+      },
+      { value: "new", label: "Create a new version on top" },
+    ],
+  });
+  if (p.isCancel(choice)) cancel();
+  mode = choice as Mode;
+  if (mode === "amend") {
+    amendEntry = manifest.versions.find((v) => v.version === branchVersion) ?? null;
+    if (!amendEntry) {
+      p.log.warn("Could not locate branch version entry — falling back to new version.");
+      mode = "new";
+    }
+  }
+}
+
+// Step 5: Determine target version
+let newVersion: string;
+let isBreaking: boolean;
+
+if (mode === "amend" && amendEntry) {
+  newVersion = amendEntry.version;
+  isBreaking = amendEntry.breaking;
+  p.log.info(`Amending v${newVersion}…`);
+} else {
+  const bumpType = await p.select({
+    message: `Current version is ${pc.bold(currentVersion)}. Choose bump type:`,
+    options: [
+      {
+        value: "patch",
+        label: `patch  →  ${bumpVersion(currentVersion, "patch")}  (bug fixes, non-breaking additions)`,
+      },
+      {
+        value: "minor",
+        label: `minor  →  ${bumpVersion(currentVersion, "minor")}  (new functionality, backwards-compatible)`,
+      },
+      {
+        value: "major",
+        label: `major  →  ${bumpVersion(currentVersion, "major")}  (breaking changes)`,
+      },
+    ],
+  });
+  if (p.isCancel(bumpType)) cancel();
+  newVersion = bumpVersion(currentVersion, bumpType as "patch" | "minor" | "major");
+
+  const breakingAnswer = await p.confirm({
+    message: "Does this version contain breaking changes for existing scaffolded workspaces?",
+    initialValue: bumpType === "major",
+  });
+  if (p.isCancel(breakingAnswer)) cancel();
+  isBreaking = breakingAnswer as boolean;
+}
+
+// Step 6: Per-file migration prompts
 const migrations: MigrationSpec[] = [];
 
 for (let i = 0; i < changes.length; i++) {
@@ -188,42 +229,108 @@ for (let i = 0; i < changes.length; i++) {
   }
 }
 
-// Step 6: Write new entry to versions.json
-const newEntry: VersionEntry = {
-  version: newVersion,
-  releaseDate: new Date().toISOString().slice(0, 10),
-  breaking: isBreaking as boolean,
-  changelogUrl: `https://github.com/one-terminal/one-terminal/releases/tag/v${newVersion}`,
-  migrations,
-};
-manifest.versions.unshift(newEntry);
-await writeFile(VERSIONS_JSON, JSON.stringify(manifest, null, 2) + "\n", "utf8");
-p.log.success(`versions.json  →  v${newVersion}  (${migrations.length} migration(s))`);
-
-// Step 7: Update scaffoldVersion in context.ts so new workspaces start on the new version
-const ctxSource = await readFile(CONTEXT_TS, "utf8");
-const updatedCtx = ctxSource.replace(
-  /scaffoldVersion:\s*["'][^"']+["']/,
-  `scaffoldVersion: "${newVersion}"`
-);
-if (updatedCtx !== ctxSource) {
-  await writeFile(CONTEXT_TS, updatedCtx, "utf8");
-  p.log.success(`context.ts  →  scaffoldVersion: "${newVersion}"`);
+// Step 7: Write versions.json
+if (mode === "amend" && amendEntry) {
+  // Merge new specs into existing entry (update by id, append if new)
+  for (const spec of migrations) {
+    const idx = amendEntry.migrations.findIndex((m) => m.id === spec.id);
+    if (idx >= 0) {
+      amendEntry.migrations[idx] = spec;
+    } else {
+      amendEntry.migrations.push(spec);
+    }
+  }
+  const entryIdx = manifest.versions.findIndex((v) => v.version === amendEntry!.version);
+  if (entryIdx >= 0) manifest.versions[entryIdx] = amendEntry;
+  await writeFile(VERSIONS_JSON, JSON.stringify(manifest, null, 2) + "\n", "utf8");
+  p.log.success(
+    `versions.json  →  v${newVersion} amended  (${amendEntry.migrations.length} total migration(s))`
+  );
+} else {
+  const newEntry: VersionEntry = {
+    version: newVersion,
+    releaseDate: new Date().toISOString().slice(0, 10),
+    breaking: isBreaking,
+    changelogUrl: `https://github.com/one-terminal/one-terminal/releases/tag/v${newVersion}`,
+    migrations,
+  };
+  manifest.versions.unshift(newEntry);
+  await writeFile(VERSIONS_JSON, JSON.stringify(manifest, null, 2) + "\n", "utf8");
+  p.log.success(`versions.json  →  v${newVersion}  (${migrations.length} migration(s))`);
 }
 
-// Step 8: Copy new templates to committed location
+// Step 8: Update scaffoldVersion in context.ts (new versions only — amend keeps the same version)
+if (mode === "new") {
+  const ctxSource = await readFile(CONTEXT_TS, "utf8");
+  const updatedCtx = ctxSource.replace(
+    /scaffoldVersion:\s*["'][^"']+["']/,
+    `scaffoldVersion: "${newVersion}"`
+  );
+  if (updatedCtx !== ctxSource) {
+    await writeFile(CONTEXT_TS, updatedCtx, "utf8");
+    p.log.success(`context.ts  →  scaffoldVersion: "${newVersion}"`);
+  }
+}
+
+// Step 9: Copy new templates to committed location
 await cp(tmpDir, TEMPLATES, { recursive: true, force: true });
 cleanup();
 p.log.success("Committed templates updated.");
 
-p.outro(
-  [
-    `v${currentVersion} → v${newVersion} complete.`,
-    "",
-    `Run ${pc.bold("npm run build:scaffolder")} then test with:`,
-    `  node packages/create-one-terminal/dist/index.js upgrade`,
-  ].join("\n")
-);
+if (mode === "amend") {
+  p.outro(
+    [
+      `v${newVersion} amended (+${migrations.length} migration(s)).`,
+      "",
+      `Run ${pc.bold("npm run build:scaffolder")} then test with:`,
+      `  node packages/create-one-terminal/dist/index.js upgrade`,
+    ].join("\n")
+  );
+} else {
+  p.outro(
+    [
+      `v${currentVersion} → v${newVersion} complete.`,
+      "",
+      `Run ${pc.bold("npm run build:scaffolder")} then test with:`,
+      `  node packages/create-one-terminal/dist/index.js upgrade`,
+    ].join("\n")
+  );
+}
+
+// ── Branch migration detection ────────────────────────────────────────────────
+
+function detectBranchMigration(currentManifest: VersionsManifest): string | null {
+  const currentLatest = [...currentManifest.versions].sort((a, b) =>
+    semverGt(a.version, b.version) ? -1 : 1
+  )[0]?.version;
+  if (!currentLatest) return null;
+
+  let mainContent: string;
+  try {
+    mainContent = execSync(`git show main:packages/create-one-terminal/versions.json`, {
+      cwd: ROOT,
+      encoding: "utf8",
+      stdio: "pipe",
+    });
+  } catch {
+    try {
+      mainContent = execSync(`git show origin/main:packages/create-one-terminal/versions.json`, {
+        cwd: ROOT,
+        encoding: "utf8",
+        stdio: "pipe",
+      });
+    } catch {
+      return null;
+    }
+  }
+
+  const mainManifest = JSON.parse(mainContent) as VersionsManifest;
+  const mainLatest = [...mainManifest.versions].sort((a, b) =>
+    semverGt(a.version, b.version) ? -1 : 1
+  )[0]?.version;
+
+  return currentLatest !== mainLatest ? currentLatest : null;
+}
 
 // ── Change detection ──────────────────────────────────────────────────────────
 
