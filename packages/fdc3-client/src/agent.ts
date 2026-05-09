@@ -137,10 +137,7 @@ export class Fdc3Agent {
    *
    * Returns a `Listener` whose `unsubscribe()` cleans up the event handler.
    */
-  addContextListener(
-    contextType: string | null,
-    handler: ContextHandler
-  ): Listener {
+  addContextListener(contextType: string | null, handler: ContextHandler): Listener {
     const unlistenPromise = listen<ContextEvent>("fdc3:context", (event) => {
       const { context, sourceAppId, sourceInstanceId } = event.payload;
       if (contextType === null || context.type === contextType) {
@@ -171,8 +168,7 @@ export class Fdc3Agent {
 
     const unlistenPromise = listen<IntentEvent>("fdc3:intent", (event) => {
       if (event.payload.intent === intent) {
-        const { context, sourceAppId, sourceInstanceId, requestId } =
-          event.payload;
+        const { context, sourceAppId, sourceInstanceId, requestId } = event.payload;
         handler(context, {
           source: { appId: sourceAppId, instanceId: sourceInstanceId },
           requestId,
@@ -220,18 +216,12 @@ export class Fdc3Agent {
     });
   }
 
-  async raiseIntentForContext(
-    context: Context,
-    target?: AppIdentifier
-  ): Promise<IntentResolution> {
-    const result = await invoke<RaiseIntentResult>(
-      "fdc3_raise_intent_for_context",
-      {
-        sourceInstanceId: this.instanceId,
-        context,
-        target: target ?? null,
-      }
-    );
+  async raiseIntentForContext(context: Context, target?: AppIdentifier): Promise<IntentResolution> {
+    const result = await invoke<RaiseIntentResult>("fdc3_raise_intent_for_context", {
+      sourceInstanceId: this.instanceId,
+      context,
+      target: target ?? null,
+    });
 
     if (result.kind === "resolved") return result.data;
 

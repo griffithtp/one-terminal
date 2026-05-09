@@ -28,6 +28,6 @@ export async function postScaffold(ctx: ScaffoldContext, outputDir: string): Pro
       "  npm run dev:app-directory",
       "  npm run dev:desktop-agent",
       "  npm run dev:terminal",
-    ].join("\n"),
+    ].join("\n")
   );
 }

@@ -30,12 +30,7 @@ export async function walk(root: string, skip: string[] = []): Promise<WalkEntry
   return entries;
 }
 
-async function walkDir(
-  root: string,
-  dir: string,
-  skip: string[],
-  out: WalkEntry[],
-): Promise<void> {
+async function walkDir(root: string, dir: string, skip: string[], out: WalkEntry[]): Promise<void> {
   const items = await readdir(dir);
   for (const item of items) {
     const absolute = join(dir, item);

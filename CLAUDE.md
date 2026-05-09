@@ -30,18 +30,19 @@ apps/sample-chart/            — demo browser app, port 3011
 
 ## Key port defaults (all overridable via env vars)
 
-| Service | Port | Env var |
-|---|---|---|
-| App Directory | 3005 | — |
-| TCP Broker | 7890 | `OT_TCP_PORT` |
-| FDC3 Bus WS | 7891 | `OT_FDC3_BUS_PORT` |
-| DACP Bridge | 4475 | `OT_DACP_PORT` |
-| sample-ticker | 3010 | — |
-| sample-chart | 3011 | — |
+| Service       | Port | Env var            |
+| ------------- | ---- | ------------------ |
+| App Directory | 3005 | —                  |
+| TCP Broker    | 7890 | `OT_TCP_PORT`      |
+| FDC3 Bus WS   | 7891 | `OT_FDC3_BUS_PORT` |
+| DACP Bridge   | 4475 | `OT_DACP_PORT`     |
+| sample-ticker | 3010 | —                  |
+| sample-chart  | 3011 | —                  |
 
 ## Engine families
 
 `ot_core::engine::EngineFamily` enum:
+
 - `Webview2` — Windows system WebView2
 - `Wkwebview` — macOS system WebKit
 - `Electron` — Electron via `apps/electron-host`
@@ -54,6 +55,7 @@ apps/sample-chart/            — demo browser app, port 3011
 Loaded at `EngineRuntimeStore::new(root)` from `<root>/plugins/*/manifest.json`.
 
 `LaunchMode` variants (in `ot_core::plugin`):
+
 - `InProcess`
 - `SpawnTauriHost`
 - `SpawnElectronHost`
@@ -62,6 +64,7 @@ Loaded at `EngineRuntimeStore::new(root)` from `<root>/plugins/*/manifest.json`.
 ## Config loading (desktop-agent)
 
 `apps/desktop-agent/src-tauri/src/config.rs` — `AgentConfig::load()`:
+
 1. Reads `agent.config.json` from next to binary or `resources/`
 2. Applies env var overrides (`OT_*`)
 
@@ -70,6 +73,7 @@ User channels are seeded at runtime from `AgentConfig.user_channels` — `Channe
 ## FDC3 Bus URL (fdc3-plugin)
 
 Resolved in order:
+
 1. `<meta name="ot-fdc3-bus-url">` content attribute
 2. `window.OT_FDC3_BUS_URL`
 3. Fallback: `ws://localhost:7891/fdc3`

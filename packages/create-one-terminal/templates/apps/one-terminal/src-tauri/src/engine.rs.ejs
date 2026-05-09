@@ -9,8 +9,7 @@
 use std::path::PathBuf;
 
 use ot_core::engine::{
-    binding_path, default_cache_root, is_installed, is_system_version, EngineBinding,
-    EngineFamily,
+    binding_path, default_cache_root, is_installed, is_system_version, EngineBinding, EngineFamily,
 };
 
 /// The engine this WM process is running under, plus where its fixed runtime

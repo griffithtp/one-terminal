@@ -90,8 +90,7 @@ impl EngineManifest {
     pub fn load(path: &Path) -> Result<Self, String> {
         let json = std::fs::read_to_string(path)
             .map_err(|e| format!("read manifest {}: {e}", path.display()))?;
-        serde_json::from_str(&json)
-            .map_err(|e| format!("parse manifest {}: {e}", path.display()))
+        serde_json::from_str(&json).map_err(|e| format!("parse manifest {}: {e}", path.display()))
     }
 
     /// Scan `<root>/plugins/` for subdirectories each containing a

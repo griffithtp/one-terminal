@@ -1,13 +1,24 @@
 /* ── Reset & base ─────────────────────────────────────────────────────────── */
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
 
-html, body, #root {
+html,
+body,
+#root {
   width: 100%;
   height: 100%;
   overflow: hidden;
   /* Transparent so panel webviews beneath are visible in the content area */
   background: transparent;
-  font-family: system-ui, -apple-system, sans-serif;
+  font-family:
+    system-ui,
+    -apple-system,
+    sans-serif;
   font-size: 13px;
   color: #e2e8f0;
 }
@@ -24,7 +35,9 @@ html, body, #root {
 /* ── Header bar ──────────────────────────────────────────────────────────── */
 .wm-header {
   position: absolute;
-  top: 0; left: 0; right: 0;
+  top: 0;
+  left: 0;
+  right: 0;
   height: 40px;
   background: #0f172a;
   border-bottom: 1px solid #1e293b;
@@ -72,7 +85,11 @@ html, body, #root {
   transition: background 120ms;
   white-space: nowrap;
 }
-.wm-header__app-btn:hover { background: #3b82f6; color: #fff; border-color: #3b82f6; }
+.wm-header__app-btn:hover {
+  background: #3b82f6;
+  color: #fff;
+  border-color: #3b82f6;
+}
 .wm-header__app-btn--v {
   padding: 3px 7px;
   border-radius: 0 4px 4px 0;
@@ -109,7 +126,9 @@ html, body, #root {
   margin-bottom: 10px;
   color: #cbd5e1;
 }
-.wm-engine-picker__title strong { color: #f8fafc; }
+.wm-engine-picker__title strong {
+  color: #f8fafc;
+}
 .wm-engine-picker__list {
   list-style: none;
   margin: 0;
@@ -130,15 +149,23 @@ html, body, #root {
   color: inherit;
   cursor: pointer;
   font-size: 12px;
-  transition: background 120ms, border-color 120ms;
+  transition:
+    background 120ms,
+    border-color 120ms;
 }
 .wm-engine-picker__option:hover {
   background: #3b82f6;
   border-color: #3b82f6;
   color: #fff;
 }
-.wm-engine-picker__family { font-weight: 500; }
-.wm-engine-picker__version { opacity: 0.75; font-family: monospace; font-size: 11px; }
+.wm-engine-picker__family {
+  font-weight: 500;
+}
+.wm-engine-picker__version {
+  opacity: 0.75;
+  font-family: monospace;
+  font-size: 11px;
+}
 .wm-engine-picker__actions {
   margin-top: 12px;
   display: flex;
@@ -153,7 +180,9 @@ html, body, #root {
   cursor: pointer;
   font-size: 12px;
 }
-.wm-engine-picker__cancel:hover { background: #1e293b; }
+.wm-engine-picker__cancel:hover {
+  background: #1e293b;
+}
 .wm-engine-picker__cancel:disabled,
 .wm-engine-picker__option:disabled {
   opacity: 0.5;
@@ -223,7 +252,10 @@ html, body, #root {
 }
 
 /* Separator between app launchers and panel chips */
-.wm-header__apps + .wm-header__panels { border-left: 1px solid #1e293b; padding-left: 10px; }
+.wm-header__apps + .wm-header__panels {
+  border-left: 1px solid #1e293b;
+  padding-left: 10px;
+}
 
 .wm-header__panels {
   display: flex;
@@ -232,7 +264,9 @@ html, body, #root {
   overflow-x: auto;
   flex: 1;
 }
-.wm-header__panels::-webkit-scrollbar { display: none; }
+.wm-header__panels::-webkit-scrollbar {
+  display: none;
+}
 
 .wm-header__chip {
   display: flex;
@@ -246,8 +280,14 @@ html, body, #root {
   white-space: nowrap;
   font-size: 11px;
 }
-.wm-header__chip--active { border-color: #3b82f6; background: #1e3a5f; }
-.wm-header__chip-label { color: #94a3b8; margin-right: 2px; }
+.wm-header__chip--active {
+  border-color: #3b82f6;
+  background: #1e3a5f;
+}
+.wm-header__chip-label {
+  color: #94a3b8;
+  margin-right: 2px;
+}
 
 .wm-header__chip-btn {
   padding: 1px 5px;
@@ -257,10 +297,18 @@ html, body, #root {
   cursor: pointer;
   font-size: 10px;
   border-radius: 3px;
-  transition: color 100ms, background 100ms;
+  transition:
+    color 100ms,
+    background 100ms;
 }
-.wm-header__chip-btn:hover { background: #334155; color: #e2e8f0; }
-.wm-header__chip-btn--close:hover { background: #7f1d1d; color: #fca5a5; }
+.wm-header__chip-btn:hover {
+  background: #334155;
+  color: #e2e8f0;
+}
+.wm-header__chip-btn--close:hover {
+  background: #7f1d1d;
+  color: #fca5a5;
+}
 
 /* ── Panel preview (shown while dragging a divider) ───────────────────────── */
 .wm-panel-preview {
@@ -307,7 +355,9 @@ html, body, #root {
   font-size: 12px;
   line-height: 1;
   cursor: pointer;
-  transition: background 100ms, color 100ms;
+  transition:
+    background 100ms,
+    color 100ms;
 }
 .wm-header__control-btn:hover {
   background: #1e293b;
@@ -335,7 +385,9 @@ html, body, #root {
   box-sizing: border-box;
   overflow: hidden;
 }
-.wm-panel-header:active { cursor: grabbing; }
+.wm-panel-header:active {
+  cursor: grabbing;
+}
 
 .wm-panel-header__title {
   flex: 1 1 auto;
@@ -375,7 +427,9 @@ html, body, #root {
   border: none;
   border-radius: 3px;
   cursor: pointer;
-  transition: color 100ms, background 100ms;
+  transition:
+    color 100ms,
+    background 100ms;
 }
 .wm-panel-header__close:hover {
   background: #7f1d1d;
@@ -394,8 +448,12 @@ html, body, #root {
 .divider:active {
   background: #3b82f6;
 }
-.divider--horizontal { cursor: col-resize; }
-.divider--vertical   { cursor: row-resize; }
+.divider--horizontal {
+  cursor: col-resize;
+}
+.divider--vertical {
+  cursor: row-resize;
+}
 
 /* ── Host shell: tab strips + splitter handles (N-ary model) ─────────────── */
 .wm-tabstrip {
@@ -428,7 +486,10 @@ html, body, #root {
   max-width: 180px;
   overflow: hidden;
 }
-.wm-tab:hover { background: #1e293b; color: #e2e8f0; }
+.wm-tab:hover {
+  background: #1e293b;
+  color: #e2e8f0;
+}
 .wm-tab--active {
   background: #1e3a5f;
   color: #e2e8f0;
@@ -468,9 +529,14 @@ html, body, #root {
   border: none;
   border-radius: 3px;
   cursor: pointer;
-  transition: color 100ms, background 100ms;
+  transition:
+    color 100ms,
+    background 100ms;
 }
-.wm-tab__close:hover { background: #7f1d1d; color: #fca5a5; }
+.wm-tab__close:hover {
+  background: #7f1d1d;
+  color: #fca5a5;
+}
 
 /* Right-aligned cluster: overflow button + close-group button. */
 .wm-tabstrip__right {
@@ -497,9 +563,14 @@ html, body, #root {
   cursor: pointer;
   font-size: 14px;
   line-height: 1;
-  transition: background 100ms, color 100ms;
+  transition:
+    background 100ms,
+    color 100ms;
 }
-.wm-tab-overflow-btn:hover { background: #1e293b; color: #e2e8f0; }
+.wm-tab-overflow-btn:hover {
+  background: #1e293b;
+  color: #e2e8f0;
+}
 .wm-tab-overflow-btn__badge {
   font-size: 9px;
   font-weight: 700;
@@ -522,9 +593,14 @@ html, body, #root {
   cursor: pointer;
   font-size: 12px;
   line-height: 1;
-  transition: background 100ms, color 100ms;
+  transition:
+    background 100ms,
+    color 100ms;
 }
-.wm-tabstrip__maximize:hover { background: #1e293b; color: #e2e8f0; }
+.wm-tabstrip__maximize:hover {
+  background: #1e293b;
+  color: #e2e8f0;
+}
 
 /* Close-group button — destroys the entire stack. */
 .wm-tabstrip__close-group {
@@ -542,9 +618,14 @@ html, body, #root {
   cursor: pointer;
   font-size: 16px;
   line-height: 1;
-  transition: background 100ms, color 100ms;
+  transition:
+    background 100ms,
+    color 100ms;
 }
-.wm-tabstrip__close-group:hover { background: #7f1d1d; color: #fca5a5; }
+.wm-tabstrip__close-group:hover {
+  background: #7f1d1d;
+  color: #fca5a5;
+}
 
 .wm-tab-overflow-menu {
   position: fixed;
@@ -575,7 +656,9 @@ html, body, #root {
   text-overflow: ellipsis;
   transition: background 100ms;
 }
-.wm-tab-overflow-menu__item:hover { background: #1e293b; }
+.wm-tab-overflow-menu__item:hover {
+  background: #1e293b;
+}
 .wm-tab-overflow-menu__item--active {
   background: #1e3a5f;
   color: #e2e8f0;
@@ -605,10 +688,18 @@ html, body, #root {
   font-size: 12px;
   cursor: pointer;
   white-space: nowrap;
-  transition: background 100ms, color 100ms;
+  transition:
+    background 100ms,
+    color 100ms;
 }
-.wm-tab-ctx-menu__item:hover { background: #1e293b; color: #e2e8f0; }
-.wm-tab-ctx-menu__item--danger:hover { background: #7f1d1d; color: #fca5a5; }
+.wm-tab-ctx-menu__item:hover {
+  background: #1e293b;
+  color: #e2e8f0;
+}
+.wm-tab-ctx-menu__item--danger:hover {
+  background: #7f1d1d;
+  color: #fca5a5;
+}
 
 .wm-splitter {
   background: #1e293b;
@@ -617,7 +708,9 @@ html, body, #root {
   transition: background 100ms;
 }
 .wm-splitter:hover,
-.wm-splitter:active { background: #3b82f6; }
+.wm-splitter:active {
+  background: #3b82f6;
+}
 
 /* ── Tab drag: ghost + drop indicator ─────────────────────────────────────── */
 .wm-ghost {
@@ -632,16 +725,22 @@ html, body, #root {
   z-index: 50;
   user-select: none;
 }
-.wm-ghost__label { font-weight: 600; }
+.wm-ghost__label {
+  font-weight: 600;
+}
 
 .wm-drop-zone {
   background: rgba(59, 130, 246, 0.22);
   border: 2px solid #3b82f6;
   box-sizing: border-box;
   z-index: 20;
-  transition: background 80ms, border-color 80ms;
+  transition:
+    background 80ms,
+    border-color 80ms;
 }
-.wm-drop-zone--center { background: rgba(59, 130, 246, 0.28); }
+.wm-drop-zone--center {
+  background: rgba(59, 130, 246, 0.28);
+}
 
 /* Tab-slot insertion indicator — thin solid bar between tabs. */
 .wm-drop-zone--insert-bar {
@@ -649,6 +748,28 @@ html, body, #root {
   border: none;
   box-shadow: 0 0 4px rgba(59, 130, 246, 0.8);
   border-radius: 1px;
+}
+
+/* ── Electron install status banner ──────────────────────────────────────── */
+.wm-electron-status {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1e293b;
+  border: 1px solid #3b82f6;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-size: 12px;
+  color: #93c5fd;
+  pointer-events: none;
+  user-select: none;
+  z-index: 9999;
+  white-space: nowrap;
+}
+.wm-electron-status--error {
+  border-color: #ef4444;
+  color: #fca5a5;
 }
 
 /* ── Empty-state hint ─────────────────────────────────────────────────────── */

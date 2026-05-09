@@ -45,9 +45,7 @@ impl IntentRegistry {
 
     /// Return the `instance_id` of the first registered handler for `intent`, if any.
     pub fn find_handler(&self, intent: &str) -> Option<String> {
-        self.inner
-            .get(intent)
-            .and_then(|v| v.first().cloned())
+        self.inner.get(intent).and_then(|v| v.first().cloned())
     }
 
     /// Return all (intent, Vec<instance_id>) pairs with at least one handler.

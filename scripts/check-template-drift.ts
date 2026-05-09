@@ -25,7 +25,7 @@ try {
   try {
     execSync(`diff -rq "${TMP}" "${COMMITTED}"`, { stdio: "pipe" });
     console.log("✓ Templates are in sync.");
-  } catch (err) {
+  } catch {
     // diff exits non-zero when files differ
     const diffOutput = execSync(`diff -r "${TMP}" "${COMMITTED}" || true`, {
       encoding: "utf8",
@@ -34,8 +34,14 @@ try {
     console.error("\n── Template drift detected ──────────────────────────────────\n");
     console.error(diffOutput);
     console.error(
-      "Templates are out of sync with the source apps.\n" +
-        "Run `npm run extract-templates` and commit the result.\n",
+      "Templates are out of sync with the source apps.\n\n" +
+        "To fix, run the following steps:\n\n" +
+        "  1. npm run create-migration   # recommended: extracts templates, authors\n" +
+        "                                #   migrations, and bumps the version\n" +
+        "     — OR —\n" +
+        "     npm run extract-templates  # re-extract templates only (no migration)\n\n" +
+        "  2. npm run build:scaffolder   # recompile the scaffolder\n\n" +
+        "  3. git add packages/create-one-terminal/ && git commit\n"
     );
     process.exit(1);
   }

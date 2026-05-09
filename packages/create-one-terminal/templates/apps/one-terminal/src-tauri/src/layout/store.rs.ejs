@@ -102,9 +102,21 @@ impl LayoutTree {
     /// state changed.
     pub fn toggle_maximize_stack(&self, path: &[usize]) -> bool {
         let mut g = self.0.write().unwrap();
-        let Some(root) = g.root.as_ref() else { return false };
-        let Some(node) = node_at(root, path) else { return false };
-        let LayoutNode::Stack { id, active, children, .. } = node else { return false };
+        let Some(root) = g.root.as_ref() else {
+            return false;
+        };
+        let Some(node) = node_at(root, path) else {
+            return false;
+        };
+        let LayoutNode::Stack {
+            id,
+            active,
+            children,
+            ..
+        } = node
+        else {
+            return false;
+        };
         if g.maximized_stack_id.as_deref() == Some(id.as_str()) {
             g.maximized_stack_id = None;
             return true;
@@ -113,12 +125,10 @@ impl LayoutTree {
         // `wm_open` path (target = active_panel when unspecified) tab-inserts
         // into the maximized group rather than whatever the user touched last.
         let active_idx = (*active).min(children.len().saturating_sub(1));
-        let active_label = children
-            .get(active_idx)
-            .and_then(|c| match c {
-                LayoutNode::Leaf { label, .. } => Some(label.clone()),
-                _ => None,
-            });
+        let active_label = children.get(active_idx).and_then(|c| match c {
+            LayoutNode::Leaf { label, .. } => Some(label.clone()),
+            _ => None,
+        });
         let id = id.clone();
         g.maximized_stack_id = Some(id);
         if let Some(label) = active_label {
@@ -128,12 +138,14 @@ impl LayoutTree {
     }
 
     /// Currently-active panel label, if any.
+    #[allow(dead_code)]
     pub fn active_panel(&self) -> Option<String> {
         self.0.read().unwrap().active_panel.clone()
     }
 
     /// Mark `label` as the active panel. Caller is responsible for ensuring
     /// `label` exists in the tree.
+    #[allow(dead_code)]
     pub fn set_active_panel(&self, label: &str) {
         self.0.write().unwrap().active_panel = Some(label.to_string());
     }
@@ -221,7 +233,16 @@ impl LayoutTree {
         let root = g.root.as_ref()?;
         let h = (g.height - HEADER_HEIGHT).max(0.0);
         let mut panels = Vec::new();
-        walk_for_snapshot(root, 0.0, HEADER_HEIGHT, g.width, h, false, &mut panels, &g.meta);
+        walk_for_snapshot(
+            root,
+            0.0,
+            HEADER_HEIGHT,
+            g.width,
+            h,
+            false,
+            &mut panels,
+            &g.meta,
+        );
         Some(LayoutSnapshot {
             panels,
             dividers: Vec::new(),
@@ -247,8 +268,8 @@ impl LayoutTree {
     /// - Tree empty → new leaf becomes root (bare Leaf, no Stack wrapper).
     /// - `dir = Some(d)` → split `target` (or active, or first) along `d`.
     /// - `dir = None`  → tab-insert:
-    ///     • target's parent is a Stack → append as new sibling tab.
-    ///     • otherwise                  → wrap target + new leaf into a Stack.
+    ///   • target's parent is a Stack → append as new sibling tab.
+    ///   • otherwise                  → wrap target + new leaf into a Stack.
     ///
     /// The new leaf becomes the active panel. Returns the new webview label.
     pub fn add_panel(
@@ -273,7 +294,10 @@ impl LayoutTree {
             },
         );
 
-        let leaf = LayoutNode::Leaf { label: label.clone(), weight: 1.0 };
+        let leaf = LayoutNode::Leaf {
+            label: label.clone(),
+            weight: 1.0,
+        };
 
         // Empty tree — install bare leaf.
         if g.root.is_none() {
@@ -394,7 +418,9 @@ impl LayoutTree {
             return false;
         }
         let mut g = self.0.write().unwrap();
-        let Some(root) = g.root.as_mut() else { return false };
+        let Some(root) = g.root.as_mut() else {
+            return false;
+        };
         swap_leaves_inner(root, a, b)
     }
 
@@ -429,7 +455,9 @@ impl LayoutTree {
     /// webviews to destroy for a "Close group" action.
     pub fn labels_in_stack(&self, path: &[usize]) -> Vec<String> {
         let g = self.0.read().unwrap();
-        let Some(root) = g.root.as_ref() else { return Vec::new() };
+        let Some(root) = g.root.as_ref() else {
+            return Vec::new();
+        };
         if !is_stack_at(root, path) {
             return Vec::new();
         }
@@ -437,7 +465,9 @@ impl LayoutTree {
         for &i in path {
             match node {
                 LayoutNode::Splitter { children, .. } | LayoutNode::Stack { children, .. } => {
-                    let Some(next) = children.get(i) else { return Vec::new() };
+                    let Some(next) = children.get(i) else {
+                        return Vec::new();
+                    };
                     node = next;
                 }
                 LayoutNode::Leaf { .. } => return Vec::new(),
@@ -455,16 +485,12 @@ impl LayoutTree {
     ///
     /// Returns `true` iff the mutation was applied (path valid, splitter has
     /// an adjacent pair at `child_index`).
-    pub fn resize_splitter(
-        &self,
-        path: &[usize],
-        child_index: usize,
-        px: f64,
-        py: f64,
-    ) -> bool {
+    pub fn resize_splitter(&self, path: &[usize], child_index: usize, px: f64, py: f64) -> bool {
         let mut g = self.0.write().unwrap();
         let (w, h) = (g.width, (g.height - HEADER_HEIGHT).max(0.0));
-        let Some(root) = g.root.as_mut() else { return false };
+        let Some(root) = g.root.as_mut() else {
+            return false;
+        };
         apply_splitter_drag(root, path, child_index, 0.0, HEADER_HEIGHT, w, h, px, py)
     }
 }
@@ -515,7 +541,11 @@ fn first_leaf_label(node: &LayoutNode) -> Option<String> {
 fn find_stack_path_by_id(node: &LayoutNode, id: &str, acc: &mut Vec<usize>) -> bool {
     match node {
         LayoutNode::Leaf { .. } => false,
-        LayoutNode::Stack { id: node_id, children, .. } => {
+        LayoutNode::Stack {
+            id: node_id,
+            children,
+            ..
+        } => {
             if node_id == id {
                 return true;
             }
@@ -604,7 +634,11 @@ fn walk_for_snapshot(
                 engine_binding: m.and_then(|m| m.engine_binding.clone()),
             });
         }
-        LayoutNode::Splitter { direction, children, .. } => {
+        LayoutNode::Splitter {
+            direction,
+            children,
+            ..
+        } => {
             let n = children.len();
             if n == 0 {
                 return;
@@ -714,7 +748,11 @@ fn apply_splitter_drag(
     match node {
         LayoutNode::Leaf { .. } => false,
 
-        LayoutNode::Splitter { direction, children, .. } => {
+        LayoutNode::Splitter {
+            direction,
+            children,
+            ..
+        } => {
             if idx >= children.len() {
                 return false;
             }
@@ -730,10 +768,7 @@ fn apply_splitter_drag(
             let gaps = SPLITTER_THICKNESS * n.saturating_sub(1) as f64;
             let content = (axis_total - gaps).max(0.0);
 
-            let prior_sum: f64 = children[..idx]
-                .iter()
-                .map(|c| c.weight().max(0.0))
-                .sum();
+            let prior_sum: f64 = children[..idx].iter().map(|c| c.weight().max(0.0)).sum();
             let offset = content * (prior_sum / total) + idx as f64 * SPLITTER_THICKNESS;
             let axis_share = content * (children[idx].weight().max(0.0) / total);
 
@@ -741,7 +776,17 @@ fn apply_splitter_drag(
                 Direction::Horizontal => (x + offset, y, axis_share, h),
                 Direction::Vertical => (x, y + offset, w, axis_share),
             };
-            apply_splitter_drag(&mut children[idx], rest, child_index, cx, cy, cw, ch, px, py)
+            apply_splitter_drag(
+                &mut children[idx],
+                rest,
+                child_index,
+                cx,
+                cy,
+                cw,
+                ch,
+                px,
+                py,
+            )
         }
 
         LayoutNode::Stack { children, .. } => {
@@ -779,7 +824,12 @@ fn apply_at_splitter(
     px: f64,
     py: f64,
 ) -> bool {
-    let LayoutNode::Splitter { direction, children, .. } = node else {
+    let LayoutNode::Splitter {
+        direction,
+        children,
+        ..
+    } = node
+    else {
         return false;
     };
     let n = children.len();
@@ -832,4 +882,3 @@ fn set_weight(node: &mut LayoutNode, w: f64) {
         | LayoutNode::Stack { weight, .. } => *weight = w,
     }
 }
-

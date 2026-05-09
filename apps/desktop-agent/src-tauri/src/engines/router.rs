@@ -26,6 +26,7 @@ pub enum LaunchContext {
     Standalone,
     /// As a tab inside an existing window-manager session. (Phase 4 uses this
     /// to delegate to a sibling WM host when engines mismatch.)
+    #[allow(dead_code)]
     Tab { wm_session_id: String },
 }
 
@@ -47,7 +48,7 @@ pub enum LaunchPlan {
     },
 
     /// Spawn the bundled Electron host pointed at the URL. The actual binary
-    /// + shell-folder lookup happens in `ot_core::electron_host`; we just
+    /// and shell-folder lookup happens in `ot_core::electron_host`; we just
     /// carry the binding so `execute_plan` can resolve them.
     SpawnElectronHost {
         binding: EngineBinding,
@@ -180,7 +181,10 @@ fn plan_from_manifest(
             title,
         }),
 
-        LaunchMode::SpawnBinary { binary_name, env_templates } => {
+        LaunchMode::SpawnBinary {
+            binary_name,
+            env_templates,
+        } => {
             let env_vars = env_templates
                 .iter()
                 .map(|t| {
@@ -216,7 +220,9 @@ mod tests {
             title: None,
             description: None,
             version: None,
-            details: Some(AppDetails { url: Some(url.into()) }),
+            details: Some(AppDetails {
+                url: Some(url.into()),
+            }),
             categories: vec![],
             interop: None,
             engine_bindings: bindings,

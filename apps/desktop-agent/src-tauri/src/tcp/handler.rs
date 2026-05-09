@@ -5,9 +5,8 @@ use tokio::sync::mpsc;
 
 use crate::app_dir::{AppDirectoryCache, CdaIntentNeedsResolutionEvent};
 use crate::broker::{
-    CdaConnectedEvent, CdaContextEvent, CdaDisconnectedEvent, CdaErrorCode,
-    CdaIntentEvent, CdaRequest, CdaResponse, ChannelManager, IntentRegistry, WindowManager,
-    now_ms,
+    now_ms, CdaConnectedEvent, CdaContextEvent, CdaDisconnectedEvent, CdaErrorCode, CdaIntentEvent,
+    CdaRequest, CdaResponse, ChannelManager, IntentRegistry, WindowManager,
 };
 use crate::dacp::PeerRegistry;
 
@@ -43,7 +42,10 @@ pub async fn handle_connection(
                     continue;
                 }
                 match serde_json::from_str::<CdaRequest>(trimmed) {
-                    Ok(CdaRequest::Hello { app_id, display_name }) => {
+                    Ok(CdaRequest::Hello {
+                        app_id,
+                        display_name,
+                    }) => {
                         let iid = window_manager.register(
                             app_id.clone(),
                             display_name.clone(),
@@ -158,6 +160,7 @@ pub async fn handle_connection(
 
 // ── Dispatch ───────────────────────────────────────────────────────────────────
 
+#[allow(clippy::too_many_arguments)]
 async fn dispatch(
     req: CdaRequest,
     instance_id: &str,
@@ -174,10 +177,8 @@ async fn dispatch(
             match channel_manager.join(instance_id, &channel_id) {
                 Ok(()) => {
                     window_manager.set_channel(instance_id, Some(channel_id.clone()));
-                    let resp = serde_json::to_string(&CdaResponse::ChannelJoined {
-                        channel_id,
-                    })
-                    .unwrap_or_default();
+                    let resp = serde_json::to_string(&CdaResponse::ChannelJoined { channel_id })
+                        .unwrap_or_default();
                     window_manager.send_to(instance_id, &resp);
                 }
                 Err(msg) => {
@@ -199,7 +200,10 @@ async fn dispatch(
             window_manager.send_to(instance_id, &resp);
         }
 
-        CdaRequest::Broadcast { channel_id, context } => {
+        CdaRequest::Broadcast {
+            channel_id,
+            context,
+        } => {
             fan_out_broadcast(
                 instance_id,
                 app_id,
@@ -258,6 +262,7 @@ async fn dispatch(
 
 /// Fan-out a context broadcast to all local channel members and all connected
 /// external bridge peers.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn fan_out_broadcast(
     source_instance_id: &str,
     source_app_id: &str,
@@ -318,6 +323,7 @@ pub(crate) fn fan_out_broadcast(
 ///    emit `cda:intent_needs_resolution` so the frontend resolver can launch one.
 ///
 /// If all tiers fail, `Error { NoIntentHandlers }` is sent to the raiser.
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn deliver_intent(
     source_instance_id: &str,
     intent: &str,
@@ -383,7 +389,8 @@ pub(crate) async fn deliver_intent(
 
         None => {
             // Tier 3: forward to a connected bridge peer
-            if peer_registry.forward_raise_intent(intent, &context, source_instance_id, request_id) {
+            if peer_registry.forward_raise_intent(intent, &context, source_instance_id, request_id)
+            {
                 println!("[cda] intent '{intent}' forwarded to peer bridge");
                 return;
             }
@@ -426,4 +433,3 @@ fn send_no_handler_error(
     .unwrap_or_default();
     window_manager.send_to(instance_id, &err);
 }
-

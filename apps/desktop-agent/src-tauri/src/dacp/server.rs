@@ -1,12 +1,11 @@
 use axum::{
-    Router,
     extract::{
-        State,
-        WebSocketUpgrade,
         ws::{Message, WebSocket},
+        State, WebSocketUpgrade,
     },
     response::IntoResponse,
     routing::get,
+    Router,
 };
 use futures_util::{SinkExt, StreamExt};
 use tauri::{AppHandle, Emitter};
@@ -16,8 +15,7 @@ use tokio::sync::mpsc;
 use super::peer::handle_inbound_bmp;
 use super::registry::{PeerHandle, PeerRegistry};
 use super::types::{
-    BmpMessage, BmpMeta, CdaPeerConnectedEvent, CdaPeerDisconnectedEvent,
-    new_uuid, now_ms_str,
+    new_uuid, now_ms_str, BmpMessage, BmpMeta, CdaPeerConnectedEvent, CdaPeerDisconnectedEvent,
 };
 
 // ── Axum state ────────────────────────────────────────────────────────────────
@@ -50,10 +48,7 @@ pub async fn start(registry: PeerRegistry, app: AppHandle, port: u16) {
 
 // ── WebSocket upgrade handler ─────────────────────────────────────────────────
 
-async fn ws_handler(
-    ws: WebSocketUpgrade,
-    State(state): State<ServerState>,
-) -> impl IntoResponse {
+async fn ws_handler(ws: WebSocketUpgrade, State(state): State<ServerState>) -> impl IntoResponse {
     ws.on_upgrade(|socket| accept_connection(socket, state))
 }
 
@@ -65,26 +60,24 @@ async fn accept_connection(socket: WebSocket, state: ServerState) {
     // ── Phase 1: wait for WCPHello ────────────────────────────────────────────
     let (app_id, hello_uuid) = loop {
         match stream.next().await {
-            Some(Ok(Message::Text(txt))) => {
-                match serde_json::from_str::<BmpMessage>(&txt) {
-                    Ok(msg) if msg.msg_type == "WCPHello" => {
-                        let aid = msg
-                            .payload
-                            .get("desktopAgentDetails")
-                            .and_then(|d| d.get("id"))
-                            .and_then(|id| id.get("appId"))
-                            .and_then(|v| v.as_str())
-                            .unwrap_or("unknown")
-                            .to_string();
-                        break (aid, msg.meta.request_uuid);
-                    }
-                    Ok(_) => continue,
-                    Err(e) => {
-                        eprintln!("[dacp] server: handshake parse error: {e}");
-                        return;
-                    }
+            Some(Ok(Message::Text(txt))) => match serde_json::from_str::<BmpMessage>(&txt) {
+                Ok(msg) if msg.msg_type == "WCPHello" => {
+                    let aid = msg
+                        .payload
+                        .get("desktopAgentDetails")
+                        .and_then(|d| d.get("id"))
+                        .and_then(|id| id.get("appId"))
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("unknown")
+                        .to_string();
+                    break (aid, msg.meta.request_uuid);
                 }
-            }
+                Ok(_) => continue,
+                Err(e) => {
+                    eprintln!("[dacp] server: handshake parse error: {e}");
+                    return;
+                }
+            },
             _ => return,
         }
     };

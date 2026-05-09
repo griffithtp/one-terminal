@@ -14,8 +14,7 @@ export async function runPrompts(): Promise<PromptsResult> {
     message: "Workspace name (kebab-case)",
     placeholder: "acme-trading",
     validate: (v) => {
-      if (!/^[a-z][a-z0-9-]+$/.test(v))
-        return "Must be lowercase kebab-case (e.g. acme-trading)";
+      if (!/^[a-z][a-z0-9-]+$/.test(v)) return "Must be lowercase kebab-case (e.g. acme-trading)";
     },
   });
   if (p.isCancel(workspaceName)) cancel();
@@ -65,13 +64,25 @@ export async function runPrompts(): Promise<PromptsResult> {
   if (overridePorts) {
     const ports = await p.group({
       terminalDevPort: () =>
-        p.text({ message: "Terminal (one-terminal) Vite dev port", initialValue: "1422", validate: validatePort }),
+        p.text({
+          message: "Terminal (one-terminal) Vite dev port",
+          initialValue: "1422",
+          validate: validatePort,
+        }),
       agentDevPort: () =>
-        p.text({ message: "Desktop Agent Vite dev port", initialValue: "1421", validate: validatePort }),
+        p.text({
+          message: "Desktop Agent Vite dev port",
+          initialValue: "1421",
+          validate: validatePort,
+        }),
       tcpBrokerPort: () =>
         p.text({ message: "TCP broker port", initialValue: "7890", validate: validatePort }),
       fdc3BusPort: () =>
-        p.text({ message: "FDC3 bus WebSocket port", initialValue: "7891", validate: validatePort }),
+        p.text({
+          message: "FDC3 bus WebSocket port",
+          initialValue: "7891",
+          validate: validatePort,
+        }),
       dacpBridgePort: () =>
         p.text({ message: "DACP bridge port", initialValue: "4475", validate: validatePort }),
       appDirectoryPort: () =>
@@ -102,7 +113,7 @@ export async function runPrompts(): Promise<PromptsResult> {
       `FDC3:        ${ctx.includeFdc3 ? "yes" : "no"}`,
       `Output:      ${outputDir}`,
     ].join("\n"),
-    "Summary",
+    "Summary"
   );
 
   const go = await p.confirm({ message: "Generate workspace?", initialValue: true });

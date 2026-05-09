@@ -12,11 +12,11 @@
     "build:terminal": "npm -w @one-terminal/one-terminal run tauri:build",
     "dev:vite:terminal": "npm -w @one-terminal/one-terminal run dev",
     "dev:terminal:pin": "OT_ENGINE_FAMILY=webview2 OT_ENGINE_VERSION=124.0.2478.97 npm -w @one-terminal/one-terminal run tauri:dev",
-    "dev:terminal:electron": "OT_ELECTRON_HOST_OVERRIDE=$INIT_CWD/apps/electron-host npm -w @one-terminal/one-terminal run tauri:dev",
+    "dev:terminal:electron": "npm run setup:electron-host && OT_ELECTRON_HOST_OVERRIDE=$INIT_CWD/apps/electron-host npm -w @one-terminal/one-terminal run tauri:dev",
     "dev:desktop-agent": "npm -w @one-terminal/desktop-agent run tauri:dev",
     "build:desktop-agent": "npm -w @one-terminal/desktop-agent run tauri:build",
     "dev:vite:desktop-agent": "npm -w @one-terminal/desktop-agent run dev",
-    "dev:desktop-agent:electron": "OT_ELECTRON_HOST_OVERRIDE=$INIT_CWD/apps/electron-host npm -w @one-terminal/desktop-agent run tauri:dev",
+    "dev:desktop-agent:electron": "npm run setup:electron-host && OT_ELECTRON_HOST_OVERRIDE=$INIT_CWD/apps/electron-host npm -w @one-terminal/desktop-agent run tauri:dev",
     "dev:desktop-agent:pin": "OT_ENGINE_FAMILY=webview2 OT_ENGINE_VERSION=124.0.2478.97 npm -w @one-terminal/desktop-agent run tauri:dev",
     "dev:sample-ticker": "npm -w @one-terminal/sample-ticker run dev",
     "dev:sample-chart": "npm -w @one-terminal/sample-chart run dev",
@@ -26,15 +26,31 @@
     "build:tauri-webview-host": "cargo build -p tauri-webview-host",
     "setup:electron-host": "npm install -w @one-terminal/electron-host",
     "start:electron-host": "npm -w @one-terminal/electron-host start",
+    "dev:all:electron": "concurrently --kill-others-on-fail -n appd,cda,terminal -c blue,green,magenta \"npm run dev:app-directory\" \"npm run dev:desktop-agent:electron\" \"npm run dev:terminal:electron\"",
     "build:all": "npm -w @one-terminal/one-terminal run build && npm -w @one-terminal/desktop-agent run build && npm -w @one-terminal/app-directory run build",
     "extract-templates": "npx tsx scripts/extract-templates.ts",
     "check-template-drift": "npx tsx scripts/check-template-drift.ts",
     "create-migration": "npx tsx scripts/create-migration.ts",
     "build:scaffolder": "npm -w create-one-terminal run build",
-    "scaffold": "node packages/create-one-terminal/dist/index.js"
+    "scaffold": "node packages/create-one-terminal/dist/index.js",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "fmt:rust": "cargo fmt --all",
+    "lint:rust": "cargo fmt --check --all",
+    "prepare": "lefthook install"
   },
   "devDependencies": {
+    "eslint": "^9.39.4",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "lefthook": "^2.1.6",
+    "prettier": "^3.8.3",
     "tsx": "^4.19.4",
-    "typescript": "~5.8.3"
+    "typescript": "~5.8.3",
+    "typescript-eslint": "^8.59.2"
   }
 }

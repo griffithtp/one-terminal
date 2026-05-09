@@ -64,17 +64,10 @@ export function useTabDrag() {
   const rerender = useCallback(() => setTick((t) => t + 1), []);
 
   const arm = useCallback(
-    (
-      label: string,
-      stackPath: number[],
-      tabIndex: number,
-      title: string,
-      x: number,
-      y: number,
-    ) => {
+    (label: string, stackPath: number[], tabIndex: number, title: string, x: number, y: number) => {
       armedRef.current = { label, stackPath, tabIndex, title, downX: x, downY: y };
     },
-    [],
+    []
   );
 
   const maybePark = useCallback((target: DropTarget | null) => {
@@ -120,7 +113,7 @@ export function useTabDrag() {
       maybePark(target);
       rerender();
     },
-    [rerender, maybePark],
+    [rerender, maybePark]
   );
 
   const end = useCallback((): TabDragEndResult => {
@@ -182,7 +175,7 @@ function resolveRootEdge(
   windowWidth: number,
   windowHeight: number,
   x: number,
-  y: number,
+  y: number
 ): DropTarget | null {
   const cy = HEADER_HEIGHT;
   if (y < cy || y >= windowHeight || x < 0 || x >= windowWidth) return null;
@@ -244,7 +237,7 @@ export function resolveDropTarget(
   stacks: StackHeader[],
   host: HostLayout | null,
   x: number,
-  y: number,
+  y: number
 ): DropTarget | null {
   // Priority 1: tab-strip insertion on any stack we're directly over.
   for (const s of stacks) {
@@ -307,9 +300,7 @@ function computeTabInsertion(s: StackHeader, x: number): DropTarget | null {
   const stripSel = `[data-stack-path="${s.path.join(".")}"]`;
   const strip = document.querySelector(stripSel);
   if (!strip) return null;
-  const tabs = Array.from(
-    strip.querySelectorAll<HTMLElement>("[data-tab-index]"),
-  );
+  const tabs = Array.from(strip.querySelectorAll<HTMLElement>("[data-tab-index]"));
   if (tabs.length === 0) {
     // Empty strip — drop inserts at index 0.
     return {

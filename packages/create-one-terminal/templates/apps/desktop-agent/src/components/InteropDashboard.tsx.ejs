@@ -50,16 +50,16 @@ interface Props {
 }
 
 export function InteropDashboard({ channels, peers }: Props) {
-  const [tab, setTab]                 = useState<Tab>("broadcast");
+  const [tab, setTab] = useState<Tab>("broadcast");
   const [contextJson, setContextJson] = useState(
-    JSON.stringify(TEMPLATES["fdc3.instrument"], null, 2),
+    JSON.stringify(TEMPLATES["fdc3.instrument"], null, 2)
   );
-  const [jsonError, setJsonError]     = useState<string | null>(null);
+  const [jsonError, setJsonError] = useState<string | null>(null);
   const [targetChannel, setTargetChannel] = useState<string>("");
 
   // Intent state
-  const [intent, setIntent]               = useState(INTENTS[0]);
-  const [handlers, setHandlers]           = useState<IntentHandlerInfo[]>([]);
+  const [intent, setIntent] = useState(INTENTS[0]);
+  const [handlers, setHandlers] = useState<IntentHandlerInfo[]>([]);
   const [selectedHandler, setSelectedHandler] = useState<string | null>(null);
 
   // Feedback messages
@@ -73,9 +73,7 @@ export function InteropDashboard({ channels, peers }: Props) {
   // Reload handlers when tab switches to intent or intent name changes
   useEffect(() => {
     if (tab !== "intent") return;
-    invoke<IntentHandlerInfo[]>("cda_list_intent_handlers")
-      .then(setHandlers)
-      .catch(console.error);
+    invoke<IntentHandlerInfo[]>("cda_list_intent_handlers").then(setHandlers).catch(console.error);
   }, [tab, intent]);
 
   const parseContext = useCallback((): object | null => {
@@ -95,7 +93,10 @@ export function InteropDashboard({ channels, peers }: Props) {
     const ctx = parseContext();
     if (!ctx) return;
     const ch = targetChannel || channels[0]?.channelId;
-    if (!ch) { flash(false, "No channel selected"); return; }
+    if (!ch) {
+      flash(false, "No channel selected");
+      return;
+    }
     try {
       const count = await invoke<number>("cda_broadcast_from_dashboard", {
         channelId: ch,
@@ -126,7 +127,7 @@ export function InteropDashboard({ channels, peers }: Props) {
 
   // ── Derived: group handlers by local vs. each peer ─────────────────────────
 
-  const localHandlers  = handlers.filter((h) => !h.desktopAgentId);
+  const localHandlers = handlers.filter((h) => !h.desktopAgentId);
   const peerHandlerMap = new Map<string, IntentHandlerInfo[]>();
   for (const h of handlers.filter((h) => h.desktopAgentId)) {
     const key = h.desktopAgentId!;
@@ -185,7 +186,9 @@ export function InteropDashboard({ channels, peers }: Props) {
         {tab === "broadcast" && (
           <div className="id__section">
             <div className="id__row">
-              <label className="id__label" htmlFor="id-channel">Channel</label>
+              <label className="id__label" htmlFor="id-channel">
+                Channel
+              </label>
               <select
                 id="id-channel"
                 className="id__select"
@@ -209,15 +212,22 @@ export function InteropDashboard({ channels, peers }: Props) {
         {tab === "intent" && (
           <div className="id__section">
             <div className="id__row">
-              <label className="id__label" htmlFor="id-intent">Intent</label>
+              <label className="id__label" htmlFor="id-intent">
+                Intent
+              </label>
               <select
                 id="id-intent"
                 className="id__select"
                 value={intent}
-                onChange={(e) => { setIntent(e.target.value); setSelectedHandler(null); }}
+                onChange={(e) => {
+                  setIntent(e.target.value);
+                  setSelectedHandler(null);
+                }}
               >
                 {INTENTS.map((i) => (
-                  <option key={i} value={i}>{i}</option>
+                  <option key={i} value={i}>
+                    {i}
+                  </option>
                 ))}
               </select>
             </div>
@@ -269,8 +279,8 @@ export function InteropDashboard({ channels, peers }: Props) {
               {/* No handlers but peers exist → show peers as potential forwarders */}
               {handlers.length === 0 && peers.length > 0 && (
                 <p className="id__empty-hint">
-                  {peers.length} peer bridge{peers.length !== 1 ? "s" : ""} connected — intent
-                  will be forwarded if left unresolved.
+                  {peers.length} peer bridge{peers.length !== 1 ? "s" : ""} connected — intent will
+                  be forwarded if left unresolved.
                 </p>
               )}
             </div>

@@ -1,8 +1,8 @@
 pub mod discovery;
+pub(crate) mod peer;
 pub mod registry;
 pub mod server;
 pub mod types;
-pub(crate) mod peer;
 
 pub use registry::PeerRegistry;
 pub use types::PeerInfo;
@@ -34,7 +34,13 @@ pub async fn start(registry: PeerRegistry, app: AppHandle, our_instance_id: Stri
     }
 
     // Background discovery loop.
-    tokio::spawn(discovery_loop(registry, app, our_url, port, our_instance_id));
+    tokio::spawn(discovery_loop(
+        registry,
+        app,
+        our_url,
+        port,
+        our_instance_id,
+    ));
 }
 
 /// Revoke our DACP discovery file on graceful shutdown (best-effort).
@@ -64,11 +70,7 @@ async fn discovery_loop(
             // try_claim_url is atomic: returns true only if the URL is new.
             if registry.try_claim_url(&url) {
                 println!("[dacp] discovered peer at {url} — connecting");
-                tokio::spawn(peer::connect_to_peer(
-                    url,
-                    registry.clone(),
-                    app.clone(),
-                ));
+                tokio::spawn(peer::connect_to_peer(url, registry.clone(), app.clone()));
             }
         }
 

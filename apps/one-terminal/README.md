@@ -35,11 +35,11 @@ This app is a standalone component in the OneTerminal monorepo; it can be consum
 
 The entire layout is one [`LayoutNode`](src-tauri/src/layout/node.rs) tree. Three variants:
 
-| Variant | Purpose | Rendered as |
-|---|---|---|
-| `Leaf { label, weight }` | A single webview identified by its Tauri `label` | one panel webview |
-| `Splitter { direction, weight, children[] }` | Weighted row (Horizontal) or column (Vertical) | draggable splitter handles between children |
-| `Stack { active, weight, children[] }` | Tabset — siblings share a rect, only `active` is visible | a tab strip; inactive tabs parked offscreen but kept loaded |
+| Variant                                      | Purpose                                                  | Rendered as                                                 |
+| -------------------------------------------- | -------------------------------------------------------- | ----------------------------------------------------------- |
+| `Leaf { label, weight }`                     | A single webview identified by its Tauri `label`         | one panel webview                                           |
+| `Splitter { direction, weight, children[] }` | Weighted row (Horizontal) or column (Vertical)           | draggable splitter handles between children                 |
+| `Stack { active, weight, children[] }`       | Tabset — siblings share a rect, only `active` is visible | a tab strip; inactive tabs parked offscreen but kept loaded |
 
 ### Layout pipeline
 
@@ -102,13 +102,13 @@ The WM can host apps on different browser engines in the same session. Each WM p
 
 **`WmHostIdentity`** is derived at startup from env vars:
 
-| Env var | Effect |
-|---|---|
-| `OT_ENGINE_FAMILY` | Pin to `webview2`, `wkwebview`, or `electron` |
-| `OT_ENGINE_VERSION` | Pin to a specific version string; omit for system default |
+| Env var                      | Effect                                                                            |
+| ---------------------------- | --------------------------------------------------------------------------------- |
+| `OT_ENGINE_FAMILY`           | Pin to `webview2`, `wkwebview`, or `electron`                                     |
+| `OT_ENGINE_VERSION`          | Pin to a specific version string; omit for system default                         |
 | `OT_ENGINE_RUNTIME_OVERRIDE` | (dev only) Point at a local extracted runtime folder, bypassing the install cache |
-| `OT_ELECTRON_HOST_OVERRIDE` | Point at the `apps/electron-host/` folder during development |
-| `OT_ELECTRON_BIN` | Override the Electron binary path directly |
+| `OT_ELECTRON_HOST_OVERRIDE`  | Point at the `apps/electron-host/` folder during development                      |
+| `OT_ELECTRON_BIN`            | Override the Electron binary path directly                                        |
 
 If `OT_ENGINE_FAMILY` / `OT_ENGINE_VERSION` are unset, the WM defaults to the OS-native system engine (`wkwebview@system` on macOS, `webview2@system` on Windows).
 
@@ -116,21 +116,21 @@ If `OT_ENGINE_FAMILY` / `OT_ENGINE_VERSION` are unset, the WM defaults to the OS
 
 ## Core features
 
-| Feature | Behavior |
-|---|---|
-| **Open as tab** | Launch a new panel into the active Stack (auto-wraps the active leaf into a Stack on first grouping) |
-| **Open as split** | Launch a new panel as a horizontal or vertical sibling of the active panel |
-| **Split existing panel** | Divide the focused panel's rect along H/V — Rust inserts a Splitter with balanced weights |
-| **Resizable splitters** | Drag the strip between children; `wm_splitter_drag` preserves `w_i + w_{i+1}` so untouched siblings keep their share. Clamped to `[5%, 95%]` so panels can't collapse |
-| **Tab strips** | One per `Stack`. Min 80 px per tab; tabs that don't fit are moved into an overflow menu. Active tab is pinned into the visible set even under pressure |
-| **Tab drag-and-dock** | Drag a tab to reparent it: Center drops append to a Stack, Left/Right/Top/Bottom split. Root-edge band (24 px) splits the entire tree instead of just the hit-tested stack |
-| **Same-stack reorder** | Dragging a tab within its own strip reorders without parking panels offscreen (no flicker) |
-| **Close tab / close group** | × button on each tab; right-click strip → "Close group (N tabs)". Removal auto-simplifies the tree (empty stacks collapse, 1-child splitters bubble up) |
-| **Inline tab rename** | Double-click a tab title → inline `<input>`. Enter commits, Escape cancels, blur commits. Default title is the app name from the App Directory |
-| **Session preservation** | All reparenting reuses the webview process — cookies, localStorage, WebSocket connections, in-page state survive every dock |
-| **Live window resize** | `on_window_event(Resized)` triggers `reflow` + `emit_host` so the chrome and every panel rect refit the new dimensions |
-| **Custom window chrome** | `decorations: false` — minimize / maximize / close buttons are drawn in React and dispatched via `tauri-plugin-window` |
-| **App launcher** | Header fetches the FDC3 2.2 App Directory from `http://localhost:3005/v2/apps` and renders a button per app; primary click → open-as-tab, ⊟ → open-as-vertical-split |
+| Feature                     | Behavior                                                                                                                                                                   |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Open as tab**             | Launch a new panel into the active Stack (auto-wraps the active leaf into a Stack on first grouping)                                                                       |
+| **Open as split**           | Launch a new panel as a horizontal or vertical sibling of the active panel                                                                                                 |
+| **Split existing panel**    | Divide the focused panel's rect along H/V — Rust inserts a Splitter with balanced weights                                                                                  |
+| **Resizable splitters**     | Drag the strip between children; `wm_splitter_drag` preserves `w_i + w_{i+1}` so untouched siblings keep their share. Clamped to `[5%, 95%]` so panels can't collapse      |
+| **Tab strips**              | One per `Stack`. Min 80 px per tab; tabs that don't fit are moved into an overflow menu. Active tab is pinned into the visible set even under pressure                     |
+| **Tab drag-and-dock**       | Drag a tab to reparent it: Center drops append to a Stack, Left/Right/Top/Bottom split. Root-edge band (24 px) splits the entire tree instead of just the hit-tested stack |
+| **Same-stack reorder**      | Dragging a tab within its own strip reorders without parking panels offscreen (no flicker)                                                                                 |
+| **Close tab / close group** | × button on each tab; right-click strip → "Close group (N tabs)". Removal auto-simplifies the tree (empty stacks collapse, 1-child splitters bubble up)                    |
+| **Inline tab rename**       | Double-click a tab title → inline `<input>`. Enter commits, Escape cancels, blur commits. Default title is the app name from the App Directory                             |
+| **Session preservation**    | All reparenting reuses the webview process — cookies, localStorage, WebSocket connections, in-page state survive every dock                                                |
+| **Live window resize**      | `on_window_event(Resized)` triggers `reflow` + `emit_host` so the chrome and every panel rect refit the new dimensions                                                     |
+| **Custom window chrome**    | `decorations: false` — minimize / maximize / close buttons are drawn in React and dispatched via `tauri-plugin-window`                                                     |
+| **App launcher**            | Header fetches the FDC3 2.2 App Directory from `http://localhost:3005/v2/apps` and renders a button per app; primary click → open-as-tab, ⊟ → open-as-vertical-split       |
 
 ### Empty state
 
@@ -142,36 +142,36 @@ When no panels are open, the chrome shows a "No panels open — launch an app fr
 
 All registered in [`lib.rs`](src-tauri/src/lib.rs) via `tauri::generate_handler!`.
 
-| Command | Args | Description |
-|---|---|---|
-| `wm_snapshot` | — | Return the current `LayoutSnapshot` or `null` |
-| `wm_open` | `appId, url, title, target?, dir?, engineBinding?` | Open a new panel. `dir=null` → tab into active Stack; `dir="horizontal"\|"vertical"` → split target. When `engineBinding` doesn't match the WM's pinned engine, the app is launched in a stand-alone host window instead |
-| `wm_engine_status` | `binding` | Check whether an engine binding is `ready`, `needs-download`, or `unsupported`. For `electron`, resolves via `electron-host` binary lookup rather than the download catalog |
-| `wm_engine_install` | `binding` | Download + verify + extract the runtime for a `webview2` binding. Emits `engine:download:start\|progress\|complete\|error` events during the transfer |
-| `wm_close` | `panelId` | Close a panel, destroy its webview, reflow |
-| `wm_split` | `panelId, dir, appId, url, title` | Convenience wrapper over `wm_open` with an explicit target |
-| `update_layout` | `jsonTree` | Replace the tree wholesale (FlexLayout-shaped JSON — `{type: "leaf"\|"splitter"\|"stack", …}`) |
-| `wm_splitter_drag` | `path, childIndex, positionX, positionY` | Place the Splitter boundary under the cursor. High-frequency; called on `pointermove` |
-| `wm_begin_tab_drag` | — | Park every panel offscreen so chrome is fully visible during a drag |
-| `wm_end_tab_drag` | `sourceLabel, targetPath?, zone?, insertIndex?` | Complete a drop (reparent + reflow) or cancel (reflow only → panels restored) |
-| `wm_set_active_tab` | `path, tabIndex` | Switch which child of a Stack is visible |
-| `wm_close_leaf` | `label` | Close a leaf by its webview label |
-| `close_tab` | `label` | Same as above — mutate tree + destroy webview + reflow |
-| `wm_close_stack` | `path` | Close every tab in a Stack ("Close group") |
-| `wm_rename_tab` | `label, title` | Update the display title for a panel (rejects empty) |
+| Command             | Args                                               | Description                                                                                                                                                                                                              |
+| ------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `wm_snapshot`       | —                                                  | Return the current `LayoutSnapshot` or `null`                                                                                                                                                                            |
+| `wm_open`           | `appId, url, title, target?, dir?, engineBinding?` | Open a new panel. `dir=null` → tab into active Stack; `dir="horizontal"\|"vertical"` → split target. When `engineBinding` doesn't match the WM's pinned engine, the app is launched in a stand-alone host window instead |
+| `wm_engine_status`  | `binding`                                          | Check whether an engine binding is `ready`, `needs-download`, or `unsupported`. For `electron`, resolves via `electron-host` binary lookup rather than the download catalog                                              |
+| `wm_engine_install` | `binding`                                          | Download + verify + extract the runtime for a `webview2` binding. Emits `engine:download:start\|progress\|complete\|error` events during the transfer                                                                    |
+| `wm_close`          | `panelId`                                          | Close a panel, destroy its webview, reflow                                                                                                                                                                               |
+| `wm_split`          | `panelId, dir, appId, url, title`                  | Convenience wrapper over `wm_open` with an explicit target                                                                                                                                                               |
+| `update_layout`     | `jsonTree`                                         | Replace the tree wholesale (FlexLayout-shaped JSON — `{type: "leaf"\|"splitter"\|"stack", …}`)                                                                                                                           |
+| `wm_splitter_drag`  | `path, childIndex, positionX, positionY`           | Place the Splitter boundary under the cursor. High-frequency; called on `pointermove`                                                                                                                                    |
+| `wm_begin_tab_drag` | —                                                  | Park every panel offscreen so chrome is fully visible during a drag                                                                                                                                                      |
+| `wm_end_tab_drag`   | `sourceLabel, targetPath?, zone?, insertIndex?`    | Complete a drop (reparent + reflow) or cancel (reflow only → panels restored)                                                                                                                                            |
+| `wm_set_active_tab` | `path, tabIndex`                                   | Switch which child of a Stack is visible                                                                                                                                                                                 |
+| `wm_close_leaf`     | `label`                                            | Close a leaf by its webview label                                                                                                                                                                                        |
+| `close_tab`         | `label`                                            | Same as above — mutate tree + destroy webview + reflow                                                                                                                                                                   |
+| `wm_close_stack`    | `path`                                             | Close every tab in a Stack ("Close group")                                                                                                                                                                               |
+| `wm_rename_tab`     | `label, title`                                     | Update the display title for a panel (rejects empty)                                                                                                                                                                     |
 
 ## Events (Rust → chrome)
 
-| Event | Payload | Emitted by |
-|---|---|---|
-| `wm:layout` | `LayoutSnapshot` (panels not in Stacks + window size) | Every tree mutation |
-| `wm:host-layout` | `HostLayout` (`stacks[]` with `tabs[{label,title}]` + `splitters[]`) | Every tree mutation + on window resize |
-| `wm:external-launched` | `{ appId, url, title, family, version }` | `wm_open` when a panel is sent to an out-of-process host |
-| `wm:engine-missing` | `{ family, version, path, hint }` | `spawn_external_host` when a non-Electron runtime folder isn't installed |
-| `engine:download:start` | `{ family, version, total }` | `wm_engine_install` — download begins |
-| `engine:download:progress` | `{ family, version, total, downloaded }` | `wm_engine_install` — bytes received |
-| `engine:download:complete` | `{ family, version, total, downloaded, path }` | `wm_engine_install` — install finished |
-| `engine:download:error` | `{ family, version, message }` | `wm_engine_install` — download or verification failed |
+| Event                      | Payload                                                              | Emitted by                                                               |
+| -------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `wm:layout`                | `LayoutSnapshot` (panels not in Stacks + window size)                | Every tree mutation                                                      |
+| `wm:host-layout`           | `HostLayout` (`stacks[]` with `tabs[{label,title}]` + `splitters[]`) | Every tree mutation + on window resize                                   |
+| `wm:external-launched`     | `{ appId, url, title, family, version }`                             | `wm_open` when a panel is sent to an out-of-process host                 |
+| `wm:engine-missing`        | `{ family, version, path, hint }`                                    | `spawn_external_host` when a non-Electron runtime folder isn't installed |
+| `engine:download:start`    | `{ family, version, total }`                                         | `wm_engine_install` — download begins                                    |
+| `engine:download:progress` | `{ family, version, total, downloaded }`                             | `wm_engine_install` — bytes received                                     |
+| `engine:download:complete` | `{ family, version, total, downloaded, path }`                       | `wm_engine_install` — install finished                                   |
+| `engine:download:error`    | `{ family, version, message }`                                       | `wm_engine_install` — download or verification failed                    |
 
 ---
 
@@ -179,12 +179,12 @@ All registered in [`lib.rs`](src-tauri/src/lib.rs) via `tauri::generate_handler!
 
 ### Prerequisites
 
-| Tool | Version |
-|---|---|
-| [Rust](https://rustup.rs) | stable (≥ 1.77) |
-| [Node.js](https://nodejs.org) | ≥ 20 LTS |
-| Tauri CLI v2 | installed via npm |
-| Xcode Command Line Tools | macOS only |
+| Tool                          | Version           |
+| ----------------------------- | ----------------- |
+| [Rust](https://rustup.rs)     | stable (≥ 1.77)   |
+| [Node.js](https://nodejs.org) | ≥ 20 LTS          |
+| Tauri CLI v2                  | installed via npm |
+| Xcode Command Line Tools      | macOS only        |
 
 ### Install & run (from repo root)
 
@@ -226,6 +226,7 @@ npm run dev:terminal:pin
 ```
 
 The startup log always prints the resolved engine:
+
 ```
 [wm] engine: wkwebview@system (runtime=None)
 ```
@@ -246,16 +247,16 @@ Outputs under `apps/window-manager/src-tauri/target/release/bundle/` as platform
 
 All geometry lives in two files — change these and the whole chrome reflows.
 
-| Constant | File | Default | Meaning |
-|---|---|---|---|
-| `HEADER_HEIGHT` | [`layout/mod.rs`](src-tauri/src/layout/mod.rs) | `40.0` | Top chrome toolbar height |
-| `PANEL_HEADER_HEIGHT` | [`layout/mod.rs`](src-tauri/src/layout/mod.rs) | `28.0` | Chrome-drawn title bar on non-stack leaves |
-| `TAB_STRIP_HEIGHT` | [`layout/reflow.rs`](src-tauri/src/layout/reflow.rs) | `28.0` | Height of each Stack's tab strip |
-| `SPLITTER_THICKNESS` | [`layout/reflow.rs`](src-tauri/src/layout/reflow.rs) | `4.0` | Resize-handle gap between splitter children |
-| `MIN_TAB_WIDTH` | [`components/TabStripLayer.tsx`](src/components/TabStripLayer.tsx) | `80` | Overflow threshold (must match `.wm-tab` CSS `min-width`) |
-| `OVERFLOW_BTN_WIDTH` | [`components/TabStripLayer.tsx`](src/components/TabStripLayer.tsx) | `28` | Width reserved for overflow button when tabs spill |
-| `ROOT_EDGE_BAND` | [`hooks/useTabDrag.ts`](src/hooks/useTabDrag.ts) | `24` | Pixel band at window edges that triggers root-level split on tab drag |
-| `DRAG_THRESHOLD_SQ` | [`hooks/useTabDrag.ts`](src/hooks/useTabDrag.ts) | `25` (5 px) | Squared-distance threshold before a pointerdown becomes a drag |
+| Constant              | File                                                               | Default     | Meaning                                                               |
+| --------------------- | ------------------------------------------------------------------ | ----------- | --------------------------------------------------------------------- |
+| `HEADER_HEIGHT`       | [`layout/mod.rs`](src-tauri/src/layout/mod.rs)                     | `40.0`      | Top chrome toolbar height                                             |
+| `PANEL_HEADER_HEIGHT` | [`layout/mod.rs`](src-tauri/src/layout/mod.rs)                     | `28.0`      | Chrome-drawn title bar on non-stack leaves                            |
+| `TAB_STRIP_HEIGHT`    | [`layout/reflow.rs`](src-tauri/src/layout/reflow.rs)               | `28.0`      | Height of each Stack's tab strip                                      |
+| `SPLITTER_THICKNESS`  | [`layout/reflow.rs`](src-tauri/src/layout/reflow.rs)               | `4.0`       | Resize-handle gap between splitter children                           |
+| `MIN_TAB_WIDTH`       | [`components/TabStripLayer.tsx`](src/components/TabStripLayer.tsx) | `80`        | Overflow threshold (must match `.wm-tab` CSS `min-width`)             |
+| `OVERFLOW_BTN_WIDTH`  | [`components/TabStripLayer.tsx`](src/components/TabStripLayer.tsx) | `28`        | Width reserved for overflow button when tabs spill                    |
+| `ROOT_EDGE_BAND`      | [`hooks/useTabDrag.ts`](src/hooks/useTabDrag.ts)                   | `24`        | Pixel band at window edges that triggers root-level split on tab drag |
+| `DRAG_THRESHOLD_SQ`   | [`hooks/useTabDrag.ts`](src/hooks/useTabDrag.ts)                   | `25` (5 px) | Squared-distance threshold before a pointerdown becomes a drag        |
 
 > Keep `MIN_TAB_WIDTH` in sync with `.wm-tab { min-width }` in [`wm.css`](src/wm.css). The overflow calculation uses the JS constant, but the browser sizes the tabs from the CSS rule.
 
@@ -307,7 +308,7 @@ For actions that are already expressible via an existing IPC command, no Rust ch
   className="wm-tab-ctx-menu__item"
   onClick={() => {
     invoke("wm_rename_tab", {
-      label: menu.activeTabLabel,   // see "passing extra data" below
+      label: menu.activeTabLabel, // see "passing extra data" below
       title: "New Title",
     }).catch(console.error);
     dismiss();
@@ -320,7 +321,7 @@ For actions that are already expressible via an existing IPC command, no Rust ch
 Use `wm-tab-ctx-menu__item--danger` for destructive actions (red hover):
 
 ```tsx
-className="wm-tab-ctx-menu__item wm-tab-ctx-menu__item--danger"
+className = "wm-tab-ctx-menu__item wm-tab-ctx-menu__item--danger";
 ```
 
 #### Passing extra data to the menu
@@ -363,7 +364,7 @@ interface CtxMenuPayload {
   y: number;
   stackPath: number[];
   nTabs: number;
-  activeTabLabel: string;  // ← new field
+  activeTabLabel: string; // ← new field
 }
 ```
 
@@ -426,10 +427,10 @@ The IPC command receives `stackPath: number[]` and `nTabs: number` from the menu
 
 All menu styles are in [`src/wm.css`](src/wm.css) under the `/* Right-click context menu */` block:
 
-| Class | Role |
-|---|---|
-| `.wm-tab-ctx-menu` | Floating container (dark card, `min-width: 180px`) |
-| `.wm-tab-ctx-menu__item` | A single menu button (full-width, 12 px text) |
+| Class                            | Role                                               |
+| -------------------------------- | -------------------------------------------------- |
+| `.wm-tab-ctx-menu`               | Floating container (dark card, `min-width: 180px`) |
+| `.wm-tab-ctx-menu__item`         | A single menu button (full-width, 12 px text)      |
 | `.wm-tab-ctx-menu__item--danger` | Modifier — red hover state for destructive actions |
 
 To widen the menu or change its appearance, edit only those classes. The menu is automatically kept within the viewport (8 px margin) by the clamping logic in `OverlayApp`.
@@ -489,9 +490,12 @@ await window.__TAURI__.core.invoke("update_layout", {
     weight: 1,
     children: [
       { type: "leaf", label: "panel-abc12345", weight: 1 },
-      { type: "stack", active: 0, weight: 1, children: [
-        { type: "leaf", label: "panel-def67890", weight: 1 },
-      ]},
+      {
+        type: "stack",
+        active: 0,
+        weight: 1,
+        children: [{ type: "leaf", label: "panel-def67890", weight: 1 }],
+      },
     ],
   },
 });
@@ -505,36 +509,36 @@ Leaves referencing labels that aren't alive are silently skipped by `reflow`, so
 
 ### Runtime (Rust)
 
-| Crate | Version | Why |
-|---|---|---|
-| [`tauri`](https://crates.io/crates/tauri) | 2.x, `features = ["unstable"]` | Multi-webview (`win.add_child`), Emitter, custom window chrome |
-| [`serde`](https://serde.rs) / [`serde_json`](https://crates.io/crates/serde_json) | workspace | Tree serialization, IPC payloads |
-| [`url`](https://crates.io/crates/url) | 2 | Parse panel URLs before handing to `WebviewUrl::External` |
-| [`uuid`](https://crates.io/crates/uuid) | 1 (`v4`) | Short random id (first 8 chars) for new `panel-*` labels |
-| [`tauri-build`](https://crates.io/crates/tauri-build) | 2 | Build-time scaffolding |
+| Crate                                                                             | Version                        | Why                                                            |
+| --------------------------------------------------------------------------------- | ------------------------------ | -------------------------------------------------------------- |
+| [`tauri`](https://crates.io/crates/tauri)                                         | 2.x, `features = ["unstable"]` | Multi-webview (`win.add_child`), Emitter, custom window chrome |
+| [`serde`](https://serde.rs) / [`serde_json`](https://crates.io/crates/serde_json) | workspace                      | Tree serialization, IPC payloads                               |
+| [`url`](https://crates.io/crates/url)                                             | 2                              | Parse panel URLs before handing to `WebviewUrl::External`      |
+| [`uuid`](https://crates.io/crates/uuid)                                           | 1 (`v4`)                       | Short random id (first 8 chars) for new `panel-*` labels       |
+| [`tauri-build`](https://crates.io/crates/tauri-build)                             | 2                              | Build-time scaffolding                                         |
 
 > The `unstable` Tauri feature is required — child-webview APIs (`win.add_child`, multi-webview in one window) are gated behind it. On Windows, child-webview creation must happen on the UI thread; `wm_open` explicitly dispatches via `run_on_main_thread` to avoid a deadlock with Tauri's internal main-thread marshalling.
 
 ### Runtime (frontend)
 
-| Package | Version | Why |
-|---|---|---|
-| [`@tauri-apps/api`](https://www.npmjs.com/package/@tauri-apps/api) | ^2 | `invoke`, `listen`, `getCurrentWindow` |
-| [`react`](https://www.npmjs.com/package/react) / [`react-dom`](https://www.npmjs.com/package/react-dom) | ^19 | Chrome UI |
+| Package                                                                                                 | Version | Why                                    |
+| ------------------------------------------------------------------------------------------------------- | ------- | -------------------------------------- |
+| [`@tauri-apps/api`](https://www.npmjs.com/package/@tauri-apps/api)                                      | ^2      | `invoke`, `listen`, `getCurrentWindow` |
+| [`react`](https://www.npmjs.com/package/react) / [`react-dom`](https://www.npmjs.com/package/react-dom) | ^19     | Chrome UI                              |
 
 ### Build-time
 
-| Package | Version | Why |
-|---|---|---|
-| [`@tauri-apps/cli`](https://www.npmjs.com/package/@tauri-apps/cli) | ^2 | `tauri dev` / `tauri build` |
-| [`vite`](https://www.npmjs.com/package/vite) | ^7 | Dev server + bundler for the chrome webview |
-| [`@vitejs/plugin-react`](https://www.npmjs.com/package/@vitejs/plugin-react) | ^4 | Fast Refresh |
-| [`typescript`](https://www.npmjs.com/package/typescript) | ~5.8 | Strict mode, `noUnusedLocals`, `noUnusedParameters` |
+| Package                                                                      | Version | Why                                                 |
+| ---------------------------------------------------------------------------- | ------- | --------------------------------------------------- |
+| [`@tauri-apps/cli`](https://www.npmjs.com/package/@tauri-apps/cli)           | ^2      | `tauri dev` / `tauri build`                         |
+| [`vite`](https://www.npmjs.com/package/vite)                                 | ^7      | Dev server + bundler for the chrome webview         |
+| [`@vitejs/plugin-react`](https://www.npmjs.com/package/@vitejs/plugin-react) | ^4      | Fast Refresh                                        |
+| [`typescript`](https://www.npmjs.com/package/typescript)                     | ~5.8    | Strict mode, `noUnusedLocals`, `noUnusedParameters` |
 
 ### External services (optional)
 
-| Service | URL | Used by |
-|---|---|---|
+| Service                       | URL                             | Used by                                                 |
+| ----------------------------- | ------------------------------- | ------------------------------------------------------- |
 | App Directory (FDC3 2.2 AppD) | `http://localhost:3005/v2/apps` | Header launcher only — the manager runs fine without it |
 
 ---

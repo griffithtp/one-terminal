@@ -29,13 +29,15 @@ function typeBadge(type: string) {
 
 export default function AppList({ apps, loading, error, onEdit, onDelete }: Props) {
   if (loading) return <div className="status-msg">Loading…</div>;
-  if (error)   return <div className="status-msg is-error">{error}</div>;
+  if (error) return <div className="status-msg is-error">{error}</div>;
 
   if (apps.length === 0) {
     return (
       <div className="empty-state">
         <p>No applications registered yet.</p>
-        <p style={{ fontSize: 13 }}>Click <strong>+ Register App</strong> to add your first FDC3 app.</p>
+        <p style={{ fontSize: 13 }}>
+          Click <strong>+ Register App</strong> to add your first FDC3 app.
+        </p>
       </div>
     );
   }
@@ -73,7 +75,9 @@ export default function AppList({ apps, loading, error, onEdit, onDelete }: Prop
             const raisesNames = Object.keys(app.interop?.intents?.raises ?? {});
             return (
               <tr key={app.appId}>
-                <td><code>{app.appId}</code></td>
+                <td>
+                  <code>{app.appId}</code>
+                </td>
                 <td style={{ fontWeight: 500 }}>{app.name}</td>
                 <td>{typeBadge(app.type)}</td>
                 <td>
@@ -105,7 +109,9 @@ export default function AppList({ apps, loading, error, onEdit, onDelete }: Prop
                 <td style={{ fontSize: 12 }}>
                   {intentNames.length > 0 && (
                     <div>
-                      <span style={{ color: "var(--text-secondary)", fontSize: 11 }}>Listens: </span>
+                      <span style={{ color: "var(--text-secondary)", fontSize: 11 }}>
+                        Listens:{" "}
+                      </span>
                       {intentNames.join(", ")}
                     </div>
                   )}

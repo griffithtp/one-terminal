@@ -3,12 +3,12 @@ import type { WindowHandle, PeerInfo } from "../types";
 
 // ── Physics constants ──────────────────────────────────────────────────────────
 
-const REPULSION   = 6000;  // Coulomb constant
-const SPRING_K    = 0.04;  // Hooke spring stiffness
-const SPRING_REST = 130;   // natural spring length (px)
-const GRAVITY     = 0.03;  // pull toward center
-const DAMPING     = 0.82;  // velocity damping per frame
-const MIN_DIST    = 25;    // avoid division by zero
+const REPULSION = 6000; // Coulomb constant
+const SPRING_K = 0.04; // Hooke spring stiffness
+const SPRING_REST = 130; // natural spring length (px)
+const GRAVITY = 0.03; // pull toward center
+const DAMPING = 0.82; // velocity damping per frame
+const MIN_DIST = 25; // avoid division by zero
 
 // ── Node type ─────────────────────────────────────────────────────────────────
 
@@ -29,13 +29,13 @@ interface PhysicsNode {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function color(kind: NodeKind): string {
-  if (kind === "hub")   return "#388bfd";
-  if (kind === "peer")  return "#f0a040";
+  if (kind === "hub") return "#388bfd";
+  if (kind === "peer") return "#f0a040";
   return "#3fb950";
 }
 
 function radius(kind: NodeKind): number {
-  if (kind === "hub")  return 26;
+  if (kind === "hub") return 26;
   if (kind === "peer") return 18;
   return 14;
 }
@@ -48,19 +48,19 @@ interface Props {
 }
 
 export function BridgeVisualizer({ connections, peers }: Props) {
-  const svgRef    = useRef<SVGSVGElement>(null);
-  const nodesRef  = useRef<PhysicsNode[]>([]);
-  const frameRef  = useRef<number>(0);
-  const dragRef   = useRef<{ id: string; ox: number; oy: number } | null>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+  const nodesRef = useRef<PhysicsNode[]>([]);
+  const frameRef = useRef<number>(0);
+  const dragRef = useRef<{ id: string; ox: number; oy: number } | null>(null);
   const [renderKey, setRenderKey] = useState(0);
 
   // Sync physics nodes when data changes — preserve positions for existing nodes.
   useEffect(() => {
-    const svg    = svgRef.current;
-    const W      = svg?.clientWidth  ?? 600;
-    const H      = svg?.clientHeight ?? 400;
-    const cx     = W / 2;
-    const cy     = H / 2;
+    const svg = svgRef.current;
+    const W = svg?.clientWidth ?? 600;
+    const H = svg?.clientHeight ?? 400;
+    const cx = W / 2;
+    const cy = H / 2;
 
     const prev = new Map(nodesRef.current.map((n) => [n.id, n]));
 
@@ -68,8 +68,15 @@ export function BridgeVisualizer({ connections, peers }: Props) {
 
     // Hub node (always present, pinned at center)
     const hub = prev.get("__hub__") ?? {
-      id: "__hub__", label: "CDA", sublabel: "hub", kind: "hub" as NodeKind,
-      x: cx, y: cy, vx: 0, vy: 0, pinned: true,
+      id: "__hub__",
+      label: "CDA",
+      sublabel: "hub",
+      kind: "hub" as NodeKind,
+      x: cx,
+      y: cy,
+      vx: 0,
+      vy: 0,
+      pinned: true,
     };
     hub.pinned = true;
     hub.x = cx;
@@ -82,17 +89,19 @@ export function BridgeVisualizer({ connections, peers }: Props) {
       const angle = (i / Math.max(connections.length, 1)) * 2 * Math.PI;
       next.push(
         existing ?? {
-          id:       c.instanceId,
-          label:    c.displayName ?? c.appId,
+          id: c.instanceId,
+          label: c.displayName ?? c.appId,
           sublabel: c.currentChannel,
-          kind:     "spoke",
-          x:        cx + Math.cos(angle) * 120,
-          y:        cy + Math.sin(angle) * 120,
-          vx: 0, vy: 0, pinned: false,
-        },
+          kind: "spoke",
+          x: cx + Math.cos(angle) * 120,
+          y: cy + Math.sin(angle) * 120,
+          vx: 0,
+          vy: 0,
+          pinned: false,
+        }
       );
       if (existing) {
-        existing.label    = c.displayName ?? c.appId;
+        existing.label = c.displayName ?? c.appId;
         existing.sublabel = c.currentChannel;
       }
     });
@@ -103,17 +112,19 @@ export function BridgeVisualizer({ connections, peers }: Props) {
       const angle = (i / Math.max(peers.length, 1)) * 2 * Math.PI + Math.PI / 6;
       next.push(
         existing ?? {
-          id:       p.desktopAgentId,
-          label:    p.desktopAgentId,
+          id: p.desktopAgentId,
+          label: p.desktopAgentId,
           sublabel: p.url,
-          kind:     "peer",
-          x:        cx + Math.cos(angle) * 190,
-          y:        cy + Math.sin(angle) * 190,
-          vx: 0, vy: 0, pinned: false,
-        },
+          kind: "peer",
+          x: cx + Math.cos(angle) * 190,
+          y: cy + Math.sin(angle) * 190,
+          vx: 0,
+          vy: 0,
+          pinned: false,
+        }
       );
       if (existing) {
-        existing.label    = p.desktopAgentId;
+        existing.label = p.desktopAgentId;
         existing.sublabel = p.url;
       }
     });
@@ -125,10 +136,13 @@ export function BridgeVisualizer({ connections, peers }: Props) {
   useEffect(() => {
     function tick() {
       const nodes = nodesRef.current;
-      const svg   = svgRef.current;
-      if (!svg) { frameRef.current = requestAnimationFrame(tick); return; }
-      const W  = svg.clientWidth  || 600;
-      const H  = svg.clientHeight || 400;
+      const svg = svgRef.current;
+      if (!svg) {
+        frameRef.current = requestAnimationFrame(tick);
+        return;
+      }
+      const W = svg.clientWidth || 600;
+      const H = svg.clientHeight || 400;
       const cx = W / 2;
       const cy = H / 2;
 
@@ -136,16 +150,17 @@ export function BridgeVisualizer({ connections, peers }: Props) {
         const n = nodes[i];
         if (n.pinned) continue;
 
-        let fx = 0, fy = 0;
+        let fx = 0,
+          fy = 0;
 
         // Coulomb repulsion from all other nodes
         for (let j = 0; j < nodes.length; j++) {
           if (i === j) continue;
-          const m  = nodes[j];
+          const m = nodes[j];
           const dx = n.x - m.x;
           const dy = n.y - m.y;
           const d2 = dx * dx + dy * dy;
-          const d  = Math.max(Math.sqrt(d2), MIN_DIST);
+          const d = Math.max(Math.sqrt(d2), MIN_DIST);
           fx += (REPULSION / d2) * (dx / d);
           fy += (REPULSION / d2) * (dy / d);
         }
@@ -194,7 +209,7 @@ export function BridgeVisualizer({ connections, peers }: Props) {
   // Drag handlers
   const onMouseDown = useCallback((e: React.MouseEvent, id: string) => {
     e.preventDefault();
-    const svg  = svgRef.current!;
+    const svg = svgRef.current!;
     const rect = svg.getBoundingClientRect();
     dragRef.current = { id, ox: e.clientX - rect.left, oy: e.clientY - rect.top };
   }, []);
@@ -203,19 +218,24 @@ export function BridgeVisualizer({ connections, peers }: Props) {
     function onMove(e: MouseEvent) {
       const d = dragRef.current;
       if (!d) return;
-      const svg  = svgRef.current!;
+      const svg = svgRef.current!;
       const rect = svg.getBoundingClientRect();
-      const nx   = e.clientX - rect.left;
-      const ny   = e.clientY - rect.top;
+      const nx = e.clientX - rect.left;
+      const ny = e.clientY - rect.top;
       const node = nodesRef.current.find((n) => n.id === d.id);
-      if (node) { node.x = nx; node.y = ny; }
+      if (node) {
+        node.x = nx;
+        node.y = ny;
+      }
     }
-    function onUp() { dragRef.current = null; }
+    function onUp() {
+      dragRef.current = null;
+    }
     window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup",   onUp);
+    window.addEventListener("mouseup", onUp);
     return () => {
       window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup",   onUp);
+      window.removeEventListener("mouseup", onUp);
     };
   }, []);
 
@@ -226,8 +246,12 @@ export function BridgeVisualizer({ connections, peers }: Props) {
     <section className="panel bv">
       <h2 className="panel__title">
         Bridge Visualizer
-        <span className="panel__badge">{peers.length} peer{peers.length !== 1 ? "s" : ""}</span>
-        <span className="panel__badge">{connections.length} spoke{connections.length !== 1 ? "s" : ""}</span>
+        <span className="panel__badge">
+          {peers.length} peer{peers.length !== 1 ? "s" : ""}
+        </span>
+        <span className="panel__badge">
+          {connections.length} spoke{connections.length !== 1 ? "s" : ""}
+        </span>
       </h2>
       <svg
         ref={svgRef}
@@ -241,8 +265,10 @@ export function BridgeVisualizer({ connections, peers }: Props) {
           return (
             <line
               key={`edge-${n.id}`}
-              x1={hub.x} y1={hub.y}
-              x2={n.x}   y2={n.y}
+              x1={hub.x}
+              y1={hub.y}
+              x2={n.x}
+              y2={n.y}
               stroke={n.kind === "peer" ? "#f0a04055" : "#388bfd33"}
               strokeWidth={n.kind === "peer" ? 2 : 1.5}
               strokeDasharray={n.kind === "peer" ? "6 4" : undefined}
@@ -252,8 +278,8 @@ export function BridgeVisualizer({ connections, peers }: Props) {
 
         {/* Nodes */}
         {nodes.map((n) => {
-          const r  = radius(n.kind);
-          const c  = color(n.kind);
+          const r = radius(n.kind);
+          const c = color(n.kind);
           const isHub = n.kind === "hub";
           return (
             <g
@@ -263,15 +289,8 @@ export function BridgeVisualizer({ connections, peers }: Props) {
               onMouseDown={n.pinned ? undefined : (e) => onMouseDown(e, n.id)}
             >
               {/* Outer glow ring for hub */}
-              {isHub && (
-                <circle r={r + 8} fill="none" stroke={c} strokeWidth={1} opacity={0.2} />
-              )}
-              <circle
-                r={r}
-                fill={`${c}22`}
-                stroke={c}
-                strokeWidth={isHub ? 2.5 : 1.5}
-              />
+              {isHub && <circle r={r + 8} fill="none" stroke={c} strokeWidth={1} opacity={0.2} />}
+              <circle r={r} fill={`${c}22`} stroke={c} strokeWidth={isHub ? 2.5 : 1.5} />
               <text
                 textAnchor="middle"
                 dominantBaseline="middle"
@@ -300,9 +319,18 @@ export function BridgeVisualizer({ connections, peers }: Props) {
 
       {/* Legend */}
       <div className="bv__legend">
-        <span><span className="bv__dot" style={{ background: "#388bfd" }} />Hub (CDA)</span>
-        <span><span className="bv__dot" style={{ background: "#3fb950" }} />Spoke app</span>
-        <span><span className="bv__dot" style={{ background: "#f0a040" }} />Peer bridge</span>
+        <span>
+          <span className="bv__dot" style={{ background: "#388bfd" }} />
+          Hub (CDA)
+        </span>
+        <span>
+          <span className="bv__dot" style={{ background: "#3fb950" }} />
+          Spoke app
+        </span>
+        <span>
+          <span className="bv__dot" style={{ background: "#f0a040" }} />
+          Peer bridge
+        </span>
       </div>
     </section>
   );

@@ -32,23 +32,23 @@ A reusable desktop container framework built on [Tauri 2](https://tauri.app) tha
 
 **Packages:**
 
-| Path | Purpose |
-|---|---|
-| `apps/one-terminal` | Window manager (Tauri 2 app) |
-| `apps/desktop-agent` | FDC3 desktop agent + engine launcher |
-| `apps/tauri-webview-host` | Thin Tauri shell spawned for pinned WebView2/WKWebView apps |
-| `apps/electron-host` | Thin Electron shell spawned for Electron-engine apps |
-| `apps/app-directory` | Express server serving FDC3 AppD REST API |
-| `packages/ot-core` | Tauri-agnostic shared Rust crate (engine abstraction, plugin manifests) |
-| `packages/fdc3-plugin` | Browser-side FDC3 2.2 client (`DesktopAgentClient`) |
-| `packages/fdc3-client` | TypeScript FDC3 type definitions |
+| Path                      | Purpose                                                                 |
+| ------------------------- | ----------------------------------------------------------------------- |
+| `apps/one-terminal`       | Window manager (Tauri 2 app)                                            |
+| `apps/desktop-agent`      | FDC3 desktop agent + engine launcher                                    |
+| `apps/tauri-webview-host` | Thin Tauri shell spawned for pinned WebView2/WKWebView apps             |
+| `apps/electron-host`      | Thin Electron shell spawned for Electron-engine apps                    |
+| `apps/app-directory`      | Express server serving FDC3 AppD REST API                               |
+| `packages/ot-core`        | Tauri-agnostic shared Rust crate (engine abstraction, plugin manifests) |
+| `packages/fdc3-plugin`    | Browser-side FDC3 2.2 client (`DesktopAgentClient`)                     |
+| `packages/fdc3-client`    | TypeScript FDC3 type definitions                                        |
 
 **Sample apps** (development / demo):
 
-| Path | Port | Description |
-|---|---|---|
-| `apps/sample-ticker` | 3010 | Market data ticker — broadcasts `fx.rate` on the Green channel |
-| `apps/sample-chart` | 3011 | Candlestick chart — mock EUR/USD stream, handles `ViewChart`/`ViewQuote` intents |
+| Path                 | Port | Description                                                                      |
+| -------------------- | ---- | -------------------------------------------------------------------------------- |
+| `apps/sample-ticker` | 3010 | Market data ticker — broadcasts `fx.rate` on the Green channel                   |
+| `apps/sample-chart`  | 3011 | Candlestick chart — mock EUR/USD stream, handles `ViewChart`/`ViewQuote` intents |
 
 ---
 
@@ -56,11 +56,11 @@ A reusable desktop container framework built on [Tauri 2](https://tauri.app) tha
 
 ### Prerequisites
 
-| Tool | Version |
-|---|---|
-| [Rust](https://rustup.rs) | stable ≥ 1.77 |
-| [Node.js](https://nodejs.org) | ≥ 20 LTS |
-| Xcode Command Line Tools | macOS only — `xcode-select --install` |
+| Tool                          | Version                               |
+| ----------------------------- | ------------------------------------- |
+| [Rust](https://rustup.rs)     | stable ≥ 1.77                         |
+| [Node.js](https://nodejs.org) | ≥ 20 LTS                              |
+| Xcode Command Line Tools      | macOS only — `xcode-select --install` |
 
 ### Run in development
 
@@ -113,28 +113,28 @@ Located at `apps/desktop-agent/src-tauri/resources/agent.config.json`:
     "dacpBridge": 4475
   },
   "userChannels": [
-    { "id": "Red",    "displayName": "Red",    "color": "#E74C3C" },
+    { "id": "Red", "displayName": "Red", "color": "#E74C3C" },
     { "id": "Orange", "displayName": "Orange", "color": "#E67E22" },
     { "id": "Yellow", "displayName": "Yellow", "color": "#F1C40F" },
-    { "id": "Green",  "displayName": "Green",  "color": "#2ECC71" },
-    { "id": "Teal",   "displayName": "Teal",   "color": "#1ABC9C" },
-    { "id": "Blue",   "displayName": "Blue",   "color": "#3498DB" },
+    { "id": "Green", "displayName": "Green", "color": "#2ECC71" },
+    { "id": "Teal", "displayName": "Teal", "color": "#1ABC9C" },
+    { "id": "Blue", "displayName": "Blue", "color": "#3498DB" },
     { "id": "Purple", "displayName": "Purple", "color": "#9B59B6" },
-    { "id": "Pink",   "displayName": "Pink",   "color": "#EC407A" }
+    { "id": "Pink", "displayName": "Pink", "color": "#EC407A" }
   ]
 }
 ```
 
 ### Environment variable overrides
 
-| Variable | Overrides |
-|---|---|
-| `OT_TITLE` | Window title |
-| `OT_APP_DIR_URL` | `appDirectoryUrl` |
-| `OT_CATALOG_URL` | `engineCatalogUrl` |
-| `OT_TCP_PORT` | `ports.tcpBroker` |
-| `OT_FDC3_BUS_PORT` | `ports.fdc3Bus` |
-| `OT_DACP_PORT` | `ports.dacpBridge` |
+| Variable           | Overrides          |
+| ------------------ | ------------------ |
+| `OT_TITLE`         | Window title       |
+| `OT_APP_DIR_URL`   | `appDirectoryUrl`  |
+| `OT_CATALOG_URL`   | `engineCatalogUrl` |
+| `OT_TCP_PORT`      | `ports.tcpBroker`  |
+| `OT_FDC3_BUS_PORT` | `ports.fdc3Bus`    |
+| `OT_DACP_PORT`     | `ports.dacpBridge` |
 
 ---
 
@@ -142,12 +142,12 @@ Located at `apps/desktop-agent/src-tauri/resources/agent.config.json`:
 
 OneTerminal supports four engine families:
 
-| Family | Description |
-|---|---|
-| `wkwebview` | macOS system WebKit — always available, no download |
-| `webview2` | Windows system WebView2 — always available, no download |
-| `electron` | Electron — requires `apps/electron-host` to be set up |
-| _custom_ | Any engine via a plugin manifest (see below) |
+| Family      | Description                                             |
+| ----------- | ------------------------------------------------------- |
+| `wkwebview` | macOS system WebKit — always available, no download     |
+| `webview2`  | Windows system WebView2 — always available, no download |
+| `electron`  | Electron — requires `apps/electron-host` to be set up   |
+| _custom_    | Any engine via a plugin manifest (see below)            |
 
 ### Selecting an engine per app
 
@@ -187,9 +187,9 @@ Drop a `manifest.json` into `<engine-cache>/plugins/<family>/` to register a new
     "type": "spawnBinary",
     "binaryName": "cef-host",
     "envTemplates": [
-      { "key": "CEF_URL",          "value": "{{url}}" },
-      { "key": "CEF_TITLE",        "value": "{{title}}" },
-      { "key": "CEF_APP_ID",       "value": "{{app_id}}" },
+      { "key": "CEF_URL", "value": "{{url}}" },
+      { "key": "CEF_TITLE", "value": "{{title}}" },
+      { "key": "CEF_APP_ID", "value": "{{app_id}}" },
       { "key": "CEF_RUNTIME_PATH", "value": "{{runtime_path}}" }
     ]
   }
@@ -198,20 +198,20 @@ Drop a `manifest.json` into `<engine-cache>/plugins/<family>/` to register a new
 
 **`launchMode.type` values:**
 
-| Type | Behaviour |
-|---|---|
-| `inProcess` | Render inside the Desktop Agent Tauri webview |
-| `spawnTauriHost` | Spawn `tauri-webview-host` binary |
-| `spawnElectronHost` | Spawn `apps/electron-host` via Electron |
-| `spawnBinary` | Spawn an arbitrary binary with env vars from `envTemplates` |
+| Type                | Behaviour                                                   |
+| ------------------- | ----------------------------------------------------------- |
+| `inProcess`         | Render inside the Desktop Agent Tauri webview               |
+| `spawnTauriHost`    | Spawn `tauri-webview-host` binary                           |
+| `spawnElectronHost` | Spawn `apps/electron-host` via Electron                     |
+| `spawnBinary`       | Spawn an arbitrary binary with env vars from `envTemplates` |
 
 **Template variables** in `envTemplates.value`:
 
-| Variable | Resolved value |
-|---|---|
-| `{{url}}` | App URL from App Directory |
-| `{{title}}` | App display name |
-| `{{app_id}}` | FDC3 `appId` |
+| Variable           | Resolved value                                 |
+| ------------------ | ---------------------------------------------- |
+| `{{url}}`          | App URL from App Directory                     |
+| `{{title}}`        | App display name                               |
+| `{{app_id}}`       | FDC3 `appId`                                   |
 | `{{runtime_path}}` | Absolute path to the downloaded engine runtime |
 
 A sample CEF manifest is shipped at `apps/desktop-agent/src-tauri/resources/plugins/cef/manifest.json`.
@@ -265,13 +265,13 @@ During development (`npm run dev:app-directory`) the server hot-reloads and serv
 
 The server exposes a standard FDC3 AppD CRUD API while it is running:
 
-| Method | Path | Action |
-|---|---|---|
-| `GET` | `/v2/apps` | List all apps (supports `?$filter=`) |
-| `GET` | `/v2/apps/:appId` | Get one app |
-| `POST` | `/v2/apps` | Register a new app |
-| `PUT` | `/v2/apps/:appId` | Replace an existing app |
-| `DELETE` | `/v2/apps/:appId` | Remove an app |
+| Method   | Path              | Action                               |
+| -------- | ----------------- | ------------------------------------ |
+| `GET`    | `/v2/apps`        | List all apps (supports `?$filter=`) |
+| `GET`    | `/v2/apps/:appId` | Get one app                          |
+| `POST`   | `/v2/apps`        | Register a new app                   |
+| `PUT`    | `/v2/apps/:appId` | Replace an existing app              |
+| `DELETE` | `/v2/apps/:appId` | Remove an app                        |
 
 ```sh
 # Add an app
@@ -298,28 +298,32 @@ Browser apps use `fdc3-plugin.js` as the FDC3 desktop agent proxy over WebSocket
 
 ```html
 <script type="module">
-import { DesktopAgentClient } from '/fdc3-plugin.js';
+  import { DesktopAgentClient } from "/fdc3-plugin.js";
 
-const fdc3 = await DesktopAgentClient.connect('my-app-id');
+  const fdc3 = await DesktopAgentClient.connect("my-app-id");
 
-// Join a user channel
-await fdc3.joinUserChannel('Green');
+  // Join a user channel
+  await fdc3.joinUserChannel("Green");
 
-// Broadcast context
-await fdc3.broadcast({
-  type: 'fdc3.instrument',
-  id:   { ticker: 'EUR/USD' },
-  name: 'EUR/USD',
-});
+  // Broadcast context
+  await fdc3.broadcast({
+    type: "fdc3.instrument",
+    id: { ticker: "EUR/USD" },
+    name: "EUR/USD",
+  });
 
-// Listen for context
-await fdc3.addContextListener('fdc3.instrument', (ctx) => { /* ... */ });
+  // Listen for context
+  await fdc3.addContextListener("fdc3.instrument", (ctx) => {
+    /* ... */
+  });
 
-// Raise an intent
-await fdc3.raiseIntent('ViewChart', context);
+  // Raise an intent
+  await fdc3.raiseIntent("ViewChart", context);
 
-// Handle an intent
-await fdc3.addIntentListener('ViewChart', (ctx, meta) => { /* ... */ });
+  // Handle an intent
+  await fdc3.addIntentListener("ViewChart", (ctx, meta) => {
+    /* ... */
+  });
 </script>
 ```
 
@@ -332,7 +336,7 @@ The plugin connects to `ws://localhost:7891/fdc3` by default. Override via:
 
 ```js
 // Or global before the module loads
-window.OT_FDC3_BUS_URL = 'ws://myhost:7891/fdc3';
+window.OT_FDC3_BUS_URL = "ws://myhost:7891/fdc3";
 ```
 
 ---
@@ -360,11 +364,11 @@ cargo test -p desktop-agent engines::router
 
 `packages/ot-core` contains:
 
-| Module | Contents |
-|---|---|
-| `ot_core::engine` | `EngineFamily`, `EngineBinding`, cache-path helpers, install sentinel |
-| `ot_core::plugin` | `EngineManifest`, `LaunchMode`, template expansion, plugin-dir scanner |
-| `ot_core::electron_host` | Electron binary/shell resolution, spawn helpers |
+| Module                   | Contents                                                               |
+| ------------------------ | ---------------------------------------------------------------------- |
+| `ot_core::engine`        | `EngineFamily`, `EngineBinding`, cache-path helpers, install sentinel  |
+| `ot_core::plugin`        | `EngineManifest`, `LaunchMode`, template expansion, plugin-dir scanner |
+| `ot_core::electron_host` | Electron binary/shell resolution, spawn helpers                        |
 
 Both `desktop-agent` and `one-terminal` depend on it via `{ workspace = true }`.
 

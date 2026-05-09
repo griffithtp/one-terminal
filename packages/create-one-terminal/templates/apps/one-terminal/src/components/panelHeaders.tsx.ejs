@@ -15,9 +15,7 @@ const DefaultContent: PanelHeaderContent = ({ title }) => (
 
 const TickerPlantContent: PanelHeaderContent = ({ title }) => (
   <>
-    <span className="wm-panel-header__badge wm-panel-header__badge--live">
-      LIVE
-    </span>
+    <span className="wm-panel-header__badge wm-panel-header__badge--live">LIVE</span>
     <span className="wm-panel-header__title" title={title}>
       {title}
     </span>

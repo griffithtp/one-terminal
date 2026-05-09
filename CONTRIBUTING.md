@@ -40,11 +40,11 @@ This guide covers how the framework is structured for contribution, with a focus
 
 ### Prerequisites
 
-| Tool | Version |
-|---|---|
-| [Rust](https://rustup.rs) | stable ≥ 1.77 |
-| [Node.js](https://nodejs.org) | ≥ 20 LTS |
-| Xcode Command Line Tools | macOS only — `xcode-select --install` |
+| Tool                          | Version                               |
+| ----------------------------- | ------------------------------------- |
+| [Rust](https://rustup.rs)     | stable ≥ 1.77                         |
+| [Node.js](https://nodejs.org) | ≥ 20 LTS                              |
+| Xcode Command Line Tools      | macOS only — `xcode-select --install` |
 
 ### Install dependencies
 
@@ -185,13 +185,13 @@ The substitution table in [scripts/extract-templates.ts](scripts/extract-templat
 
 Example entries:
 
-| Literal in source app | EJS in template |
-|---|---|
-| `com.one-terminal.desktop-agent` | `<%= tauriIdentifier %>.agent` |
-| `com.one-terminal` | `<%= tauriIdentifier %>` |
-| `@one-terminal/desktop-agent` | `@<%= orgScope %>/desktop-agent` |
-| `http://localhost:1422` | `http://localhost:<%= terminalDevPort %>` |
-| `"port": 1421` | `"port": <%= agentDevPort %>` |
+| Literal in source app            | EJS in template                           |
+| -------------------------------- | ----------------------------------------- |
+| `com.one-terminal.desktop-agent` | `<%= tauriIdentifier %>.agent`            |
+| `com.one-terminal`               | `<%= tauriIdentifier %>`                  |
+| `@one-terminal/desktop-agent`    | `@<%= orgScope %>/desktop-agent`          |
+| `http://localhost:1422`          | `http://localhost:<%= terminalDevPort %>` |
+| `"port": 1421`                   | `"port": <%= agentDevPort %>`             |
 
 To add a new substitutable value:
 
@@ -205,11 +205,13 @@ To add a new substitutable value:
 A source line annotated with `# ot:if varName` (shell/TOML) or `// ot:if varName` (JS/Rust/JSON) is wrapped in an EJS `if` block during extraction.
 
 **Source line:**
+
 ```toml
 ot-fdc3 = { workspace = true }  # ot:if includeFdc3
 ```
 
 **Generated template:**
+
 ```ejs
 <% if (includeFdc3) { %>
 ot-fdc3 = { workspace = true }
@@ -239,33 +241,33 @@ If you add a new framework-internal script to the root `package.json` that shoul
 
 ### The `create/` module
 
-| File | Responsibility |
-|---|---|
-| `context.ts` | `ScaffoldContext` type + `buildContext()` derivations |
-| `prompts.ts` | Interactive CLI prompts using `@clack/prompts` |
-| `render.ts` | Walks `templates/`, renders `.ejs` files, writes atomically |
+| File               | Responsibility                                                                             |
+| ------------------ | ------------------------------------------------------------------------------------------ |
+| `context.ts`       | `ScaffoldContext` type + `buildContext()` derivations                                      |
+| `prompts.ts`       | Interactive CLI prompts using `@clack/prompts`                                             |
+| `render.ts`        | Walks `templates/`, renders `.ejs` files, writes atomically                                |
 | `post-scaffold.ts` | Injects `oneTerminal.version` into generated `package.json`, prints next-step instructions |
 
 ### The `upgrade/` module
 
-| File | Responsibility |
-|---|---|
-| `index.ts` | Orchestrates the 9-step upgrade flow |
-| `detect.ts` | Reads `oneTerminal.version` from target `package.json` |
-| `manifest.ts` | Fetches `versions.json` from the installed package |
-| `chain.ts` | Builds the ordered list of migrations to apply |
-| `backup.ts` | Snapshots affected files to `.one-terminal/upgrade-backup-<ver>/` |
-| `restore.ts` | Restores snapshot on failure |
-| `conflict.ts` | Handles `_managed`-field conflicts: auto / skip / merge |
-| `report.ts` | Writes `.one-terminal/upgrade-report-<ver>.md` |
-| `migrations/types.ts` | `MigrationSpec`, `VersionEntry`, `VersionsManifest` types |
+| File                  | Responsibility                                                    |
+| --------------------- | ----------------------------------------------------------------- |
+| `index.ts`            | Orchestrates the 9-step upgrade flow                              |
+| `detect.ts`           | Reads `oneTerminal.version` from target `package.json`            |
+| `manifest.ts`         | Fetches `versions.json` from the installed package                |
+| `chain.ts`            | Builds the ordered list of migrations to apply                    |
+| `backup.ts`           | Snapshots affected files to `.one-terminal/upgrade-backup-<ver>/` |
+| `restore.ts`          | Restores snapshot on failure                                      |
+| `conflict.ts`         | Handles `_managed`-field conflicts: auto / skip / merge           |
+| `report.ts`           | Writes `.one-terminal/upgrade-report-<ver>.md`                    |
+| `migrations/types.ts` | `MigrationSpec`, `VersionEntry`, `VersionsManifest` types         |
 
 ### The `merge/` module
 
-| File | Responsibility |
-|---|---|
-| `json-deep-merge.ts` | Deep merges patch into JSON, respects `_managed` annotations |
-| `toml-dep-bump.ts` | Bumps versions in `Cargo.toml` workspace deps and `package.json` |
+| File                 | Responsibility                                                   |
+| -------------------- | ---------------------------------------------------------------- |
+| `json-deep-merge.ts` | Deep merges patch into JSON, respects `_managed` annotations     |
+| `toml-dep-bump.ts`   | Bumps versions in `Cargo.toml` workspace deps and `package.json` |
 
 ---
 
@@ -314,9 +316,7 @@ Use this for: updating `ot-fdc3`, `ot-core`, or any shared package version shipp
   "id": "0.2.0-bump-ot-fdc3",
   "target": "Cargo.toml",
   "description": "Bump ot-fdc3 to 0.2.0",
-  "deps": [
-    { "name": "ot-fdc3", "ecosystem": "cargo", "newVersion": "0.2.0" }
-  ]
+  "deps": [{ "name": "ot-fdc3", "ecosystem": "cargo", "newVersion": "0.2.0" }]
 }
 ```
 
@@ -326,9 +326,7 @@ Use this for: updating `ot-fdc3`, `ot-core`, or any shared package version shipp
   "id": "0.2.0-bump-fdc3-client",
   "target": "package.json",
   "description": "Bump @one-terminal/fdc3-client to 0.2.0",
-  "deps": [
-    { "name": "@one-terminal/fdc3-client", "ecosystem": "npm", "newVersion": "0.2.0" }
-  ]
+  "deps": [{ "name": "@one-terminal/fdc3-client", "ecosystem": "npm", "newVersion": "0.2.0" }]
 }
 ```
 
@@ -354,11 +352,11 @@ Applies line-level patch operations to any file. Use for changes that cannot be 
 
 **Available operations:**
 
-| `op` | Behaviour |
-|---|---|
+| `op`                         | Behaviour                                                                         |
+| ---------------------------- | --------------------------------------------------------------------------------- |
 | `insert-after-line-matching` | Inserts `content` on the line immediately after the first line matching `pattern` |
-| `replace-line-matching` | Replaces the first line matching `pattern` with `replacement` |
-| `add-file` | Copies `sourcePath` (relative to package root) to `targetPath` in the workspace |
+| `replace-line-matching`      | Replaces the first line matching `pattern` with `replacement`                     |
+| `add-file`                   | Copies `sourcePath` (relative to package root) to `targetPath` in the workspace   |
 
 Structural migrations are applied in declaration order. Keep operations minimal and targeted — prefer `config-merge` or `dep-bump` when they cover the use case.
 
@@ -418,6 +416,7 @@ node packages/create-one-terminal/dist/index.js
 ```
 
 The prompts are:
+
 1. **Workspace name** — kebab-case, e.g. `acme-trading`
 2. **Output folder** — defaults to `./<workspace-name>`, accept or change it
 3. **Reverse-domain identifier** — e.g. `com.acme.trading`
@@ -460,13 +459,13 @@ npm run dev:terminal
 
 **Passing signal:**
 
-| Check | Expected |
-|---|---|
-| `cargo check --workspace` | exits 0 |
-| `npm install` | no peer dep errors |
-| App Directory starts | responds at `http://localhost:<port>` |
-| Desktop Agent starts | connects to App Directory, no crash |
-| Terminal starts | window opens, app list loads |
+| Check                     | Expected                              |
+| ------------------------- | ------------------------------------- |
+| `cargo check --workspace` | exits 0                               |
+| `npm install`             | no peer dep errors                    |
+| App Directory starts      | responds at `http://localhost:<port>` |
+| Desktop Agent starts      | connects to App Directory, no crash   |
+| Terminal starts           | window opens, app list loads          |
 
 ---
 

@@ -2,7 +2,7 @@ use dashmap::DashMap;
 use std::sync::Arc;
 use tokio::sync::mpsc::UnboundedSender;
 
-use super::types::{WindowHandle, new_uuid, now_ms};
+use super::types::{new_uuid, now_ms, WindowHandle};
 
 /// Thread-safe, clone-safe registry of all connected spoke app instances.
 ///

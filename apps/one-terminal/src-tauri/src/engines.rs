@@ -20,10 +20,9 @@ use sha2::{Digest, Sha256};
 use tauri::{AppHandle, Emitter};
 
 use ot_core::engine::{
-    binding_path, current_os, is_installed as binding_is_installed, is_system_version, EngineBinding,
-    EngineFamily, OsKey, INSTALL_SENTINEL,
+    binding_path, current_os, is_installed as binding_is_installed, is_system_version,
+    EngineBinding, EngineFamily, OsKey, INSTALL_SENTINEL,
 };
-
 
 // ── Catalog types (mirror app-directory's `/v2/engines` response) ─────────────
 
@@ -232,7 +231,11 @@ struct DownloadEvent<'a> {
 /// install sentinel. Idempotent: a second call is a no-op once the sentinel
 /// exists. Emits `engine:download:start|progress|complete|error` so the
 /// frontend can render a progress bar.
-pub async fn engine_install(binding: &EngineBinding, app: &AppHandle, catalog_url: &str) -> Result<PathBuf, String> {
+pub async fn engine_install(
+    binding: &EngineBinding,
+    app: &AppHandle,
+    catalog_url: &str,
+) -> Result<PathBuf, String> {
     if binding.family == EngineFamily::Electron {
         return Err(
             "Electron uses a local npm binary, not the download catalog. \
@@ -255,15 +258,13 @@ pub async fn engine_install(binding: &EngineBinding, app: &AppHandle, catalog_ur
     }
 
     let catalog = fetch_catalog(catalog_url).await?;
-    let entry = catalog
-        .find(current_os(), binding)
-        .ok_or_else(|| {
-            format!(
-                "{}@{} is not in the engine catalog",
-                binding.family.as_dir(),
-                binding.version
-            )
-        })?;
+    let entry = catalog.find(current_os(), binding).ok_or_else(|| {
+        format!(
+            "{}@{} is not in the engine catalog",
+            binding.family.as_dir(),
+            binding.version
+        )
+    })?;
     let download = entry.download.as_ref().ok_or_else(|| {
         format!(
             "{}@{} has no download in the catalog",
@@ -373,8 +374,7 @@ async fn install_inner(
     extract_zip(&tmp_path, dir).map_err(|e| format!("extract: {e}"))?;
     let _ = fs::remove_file(&tmp_path);
 
-    fs::write(dir.join(INSTALL_SENTINEL), b"ok\n")
-        .map_err(|e| format!("sentinel: {e}"))?;
+    fs::write(dir.join(INSTALL_SENTINEL), b"ok\n").map_err(|e| format!("sentinel: {e}"))?;
     Ok(())
 }
 
@@ -402,4 +402,3 @@ fn extract_zip(archive: &Path, dest: &Path) -> Result<(), String> {
     }
     Ok(())
 }
-

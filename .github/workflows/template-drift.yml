@@ -5,6 +5,7 @@ on:
     paths:
       - "package.json"
       - "package-lock.json"
+      - "scripts/**"
       - "apps/**"
       - "packages/ot-core/**"
       - "packages/ot-fdc3/**"
@@ -41,14 +42,20 @@ jobs:
 
       - name: Diff extracted templates against committed templates
         run: |
-          diff -rq /tmp/extracted-templates packages/create-one-terminal/templates
-        id: diff
-
-      - name: Show diff on failure
-        if: failure() && steps.diff.outcome == 'failure'
-        run: |
-          diff -r /tmp/extracted-templates packages/create-one-terminal/templates || true
-          echo ""
-          echo "Templates are out of sync with the source apps."
-          echo "Run 'npm run extract-templates' locally and commit the updated templates."
-        shell: bash
+          if ! diff -rq /tmp/extracted-templates packages/create-one-terminal/templates; then
+            diff -r /tmp/extracted-templates packages/create-one-terminal/templates || true
+            echo ""
+            echo "Templates are out of sync with the source apps."
+            echo ""
+            echo "To fix, run the following steps locally:"
+            echo ""
+            echo "  1. npm run create-migration   # recommended: extracts templates, authors"
+            echo "                                #   migrations, and bumps the version"
+            echo "     -- OR --"
+            echo "     npm run extract-templates  # re-extract templates only (no migration)"
+            echo ""
+            echo "  2. npm run build:scaffolder   # recompile the scaffolder"
+            echo ""
+            echo "  3. git add packages/create-one-terminal/ && git commit"
+            exit 1
+          fi

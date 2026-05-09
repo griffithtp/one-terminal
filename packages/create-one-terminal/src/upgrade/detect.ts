@@ -12,7 +12,9 @@ export async function detectProject(cwd: string): Promise<ProjectMeta> {
   try {
     raw = await readFile(pkgPath, "utf8");
   } catch {
-    throw new Error(`No package.json found in ${cwd}. Run this command from your OneTerminal workspace root.`);
+    throw new Error(
+      `No package.json found in ${cwd}. Run this command from your OneTerminal workspace root.`
+    );
   }
 
   const pkg = JSON.parse(raw) as Record<string, unknown>;
@@ -20,7 +22,7 @@ export async function detectProject(cwd: string): Promise<ProjectMeta> {
   if (!meta?.version) {
     throw new Error(
       "package.json is missing the oneTerminal.version field.\n" +
-        "This does not appear to be a OneTerminal scaffolded project.",
+        "This does not appear to be a OneTerminal scaffolded project."
     );
   }
 

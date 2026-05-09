@@ -8,9 +8,9 @@
     "type": "spawnBinary",
     "binaryName": "cef-host",
     "envTemplates": [
-      { "key": "CEF_URL",          "value": "{{url}}" },
-      { "key": "CEF_TITLE",        "value": "{{title}}" },
-      { "key": "CEF_APP_ID",       "value": "{{app_id}}" },
+      { "key": "CEF_URL", "value": "{{url}}" },
+      { "key": "CEF_TITLE", "value": "{{title}}" },
+      { "key": "CEF_APP_ID", "value": "{{app_id}}" },
       { "key": "CEF_RUNTIME_PATH", "value": "{{runtime_path}}" }
     ]
   }

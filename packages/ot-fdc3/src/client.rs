@@ -7,10 +7,8 @@ use tokio::sync::mpsc;
 
 use crate::state::OtFdc3State;
 use crate::types::{
-    CdaRequest, CdaResponse,
-    FdcChannelJoinedEvent, FdcContextEvent, FdcErrorEvent,
-    FdcIntentEvent, FdcReadyEvent, RaiseIntentResult, IntentResolution, AppIdentifier,
-    CDA_TCP_PORT,
+    AppIdentifier, CdaRequest, CdaResponse, FdcChannelJoinedEvent, FdcContextEvent, FdcErrorEvent,
+    FdcIntentEvent, FdcReadyEvent, IntentResolution, RaiseIntentResult, CDA_TCP_PORT,
 };
 
 fn broker_port() -> u16 {
@@ -35,13 +33,9 @@ pub async fn run<R: Runtime>(state: Arc<OtFdc3State>, app_id: String, app: AppHa
     }
 }
 
-async fn connect_once<R: Runtime>(
-    state: Arc<OtFdc3State>,
-    app_id: String,
-    app: AppHandle<R>,
-) {
+async fn connect_once<R: Runtime>(state: Arc<OtFdc3State>, app_id: String, app: AppHandle<R>) {
     let stream = match TcpStream::connect(("127.0.0.1", broker_port())).await {
-        Ok(s)  => s,
+        Ok(s) => s,
         Err(e) => {
             eprintln!("[ot-fdc3] cannot connect to CDA: {e}");
             return;
@@ -57,8 +51,11 @@ async fn connect_once<R: Runtime>(
         display_name: Some(app_id.clone()),
     };
     let hello_json = match serde_json::to_string(&hello) {
-        Ok(j)  => j,
-        Err(e) => { eprintln!("[ot-fdc3] serialise Hello: {e}"); return; }
+        Ok(j) => j,
+        Err(e) => {
+            eprintln!("[ot-fdc3] serialise Hello: {e}");
+            return;
+        }
     };
     if let Err(e) = writer.write_all(format!("{hello_json}\n").as_bytes()).await {
         eprintln!("[ot-fdc3] send Hello: {e}");
@@ -69,10 +66,13 @@ async fn connect_once<R: Runtime>(
     let (instance_id, channels) = loop {
         match lines.next_line().await {
             Ok(Some(line)) => match serde_json::from_str::<CdaResponse>(&line) {
-                Ok(CdaResponse::Welcome { instance_id, channels }) => {
+                Ok(CdaResponse::Welcome {
+                    instance_id,
+                    channels,
+                }) => {
                     break (instance_id, channels);
                 }
-                Ok(_)  => continue,
+                Ok(_) => continue,
                 Err(e) => {
                     eprintln!("[ot-fdc3] handshake parse error: {e}");
                     return;
@@ -94,33 +94,36 @@ async fn connect_once<R: Runtime>(
     let (tx, mut rx) = mpsc::unbounded_channel::<String>();
     *state.tx.lock().await = Some(tx);
 
-    let _ = app.emit("fdc3:ready", FdcReadyEvent { instance_id, channels });
+    let _ = app.emit(
+        "fdc3:ready",
+        FdcReadyEvent {
+            instance_id,
+            channels,
+        },
+    );
 
     // ── Writer task ───────────────────────────────────────────────────────────
     tokio::spawn(async move {
         while let Some(line) = rx.recv().await {
-            if writer.write_all(format!("{line}\n").as_bytes()).await.is_err() {
+            if writer
+                .write_all(format!("{line}\n").as_bytes())
+                .await
+                .is_err()
+            {
                 break;
             }
         }
     });
 
     // ── Inbound message loop ──────────────────────────────────────────────────
-    loop {
-        match lines.next_line().await {
-            Ok(Some(line)) => handle_line(&line, &state, &app).await,
-            Ok(None) | Err(_) => break,
-        }
+    while let Ok(Some(line)) = lines.next_line().await {
+        handle_line(&line, &state, &app).await;
     }
 }
 
-async fn handle_line<R: Runtime>(
-    line: &str,
-    state: &Arc<OtFdc3State>,
-    app: &AppHandle<R>,
-) {
+async fn handle_line<R: Runtime>(line: &str, state: &Arc<OtFdc3State>, app: &AppHandle<R>) {
     let msg = match serde_json::from_str::<CdaResponse>(line) {
-        Ok(m)  => m,
+        Ok(m) => m,
         Err(e) => {
             eprintln!("[ot-fdc3] parse error: {e} — raw: {line}");
             return;
@@ -129,30 +132,46 @@ async fn handle_line<R: Runtime>(
 
     match msg {
         CdaResponse::ContextBroadcast {
-            channel_id, context, source_instance_id, source_app_id,
+            channel_id,
+            context,
+            source_instance_id,
+            source_app_id,
         } => {
-            let _ = app.emit("fdc3:context", FdcContextEvent {
-                channel_id,
-                context,
-                source_app_id,
-                source_instance_id,
-            });
+            let _ = app.emit(
+                "fdc3:context",
+                FdcContextEvent {
+                    channel_id,
+                    context,
+                    source_app_id,
+                    source_instance_id,
+                },
+            );
         }
 
         CdaResponse::IntentDelivery {
-            intent, context, source_instance_id, source_app_id, request_id,
+            intent,
+            context,
+            source_instance_id,
+            source_app_id,
+            request_id,
         } => {
-            let _ = app.emit("fdc3:intent", FdcIntentEvent {
-                intent,
-                context,
-                source_app_id,
-                source_instance_id,
-                request_id,
-            });
+            let _ = app.emit(
+                "fdc3:intent",
+                FdcIntentEvent {
+                    intent,
+                    context,
+                    source_app_id,
+                    source_instance_id,
+                    request_id,
+                },
+            );
         }
 
         CdaResponse::IntentResolved {
-            intent, handler_instance_id, handler_app_id, request_id,
+            intent,
+            handler_instance_id,
+            handler_app_id,
+            request_id,
         } => {
             if let Some((_, tx)) = state.pending_intents.remove(&request_id) {
                 let resolution = RaiseIntentResult::Resolved(IntentResolution {
@@ -177,14 +196,25 @@ async fn handle_line<R: Runtime>(
             let _ = app.emit("fdc3:channel_left", ());
         }
 
-        CdaResponse::Error { code, message, request_id } => {
+        CdaResponse::Error {
+            code,
+            message,
+            request_id,
+        } => {
             // Reject any pending intent waiting for this request_id.
             if let Some(rid) = &request_id {
                 if let Some((_, tx)) = state.pending_intents.remove(rid) {
                     let _ = tx.send(Err(format!("[{code}] {message}")));
                 }
             }
-            let _ = app.emit("fdc3:error", FdcErrorEvent { code, message, request_id });
+            let _ = app.emit(
+                "fdc3:error",
+                FdcErrorEvent {
+                    code,
+                    message,
+                    request_id,
+                },
+            );
         }
 
         CdaResponse::Pong | CdaResponse::Welcome { .. } => {}

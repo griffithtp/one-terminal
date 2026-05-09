@@ -24,26 +24,26 @@ npx create-one-terminal
 
 The CLI walks you through a short set of prompts:
 
-| Prompt | Example | Notes |
-|---|---|---|
-| Workspace name | `acme-trading` | kebab-case, used as the npm scope and Cargo workspace name |
-| Output folder | `./acme-trading` | defaults to `./<workspace-name>` |
-| Tauri bundle identifier | `com.acme.trading` | reverse-domain, dot-separated lowercase segments |
-| Include FDC3 integration | Yes | adds `ot-fdc3`, `fdc3-client`, and `fdc3-plugin` |
-| Customize default ports | No | optional — see port table below |
+| Prompt                   | Example            | Notes                                                      |
+| ------------------------ | ------------------ | ---------------------------------------------------------- |
+| Workspace name           | `acme-trading`     | kebab-case, used as the npm scope and Cargo workspace name |
+| Output folder            | `./acme-trading`   | defaults to `./<workspace-name>`                           |
+| Tauri bundle identifier  | `com.acme.trading` | reverse-domain, dot-separated lowercase segments           |
+| Include FDC3 integration | Yes                | adds `ot-fdc3`, `fdc3-client`, and `fdc3-plugin`           |
+| Customize default ports  | No                 | optional — see port table below                            |
 
 After confirming, the CLI renders the full monorepo and prints next steps.
 
 ### Default ports
 
-| Service | Default | Notes |
-|---|---|---|
-| App Directory | 3005 | Express AppD API + management UI |
-| TCP Broker | 7890 | `OT_TCP_PORT` |
-| FDC3 Bus WebSocket | 7891 | `OT_FDC3_BUS_PORT` |
-| DACP Bridge | 4475 | `OT_DACP_PORT` |
-| Terminal Vite dev | 1422 | |
-| Desktop Agent Vite dev | 1421 | |
+| Service                | Default | Notes                            |
+| ---------------------- | ------- | -------------------------------- |
+| App Directory          | 3005    | Express AppD API + management UI |
+| TCP Broker             | 7890    | `OT_TCP_PORT`                    |
+| FDC3 Bus WebSocket     | 7891    | `OT_FDC3_BUS_PORT`               |
+| DACP Bridge            | 4475    | `OT_DACP_PORT`                   |
+| Terminal Vite dev      | 1422    |                                  |
+| Desktop Agent Vite dev | 1421    |                                  |
 
 All ports can be customized during scaffolding or overridden at runtime via `OT_*` environment variables.
 

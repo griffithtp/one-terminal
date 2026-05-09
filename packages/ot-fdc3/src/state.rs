@@ -1,16 +1,16 @@
 use std::sync::atomic::AtomicBool;
 
 use dashmap::DashMap;
-use tokio::sync::{Mutex, RwLock, mpsc::UnboundedSender, oneshot, watch};
+use tokio::sync::{mpsc::UnboundedSender, oneshot, watch, Mutex, RwLock};
 
-use crate::types::{ChannelInfoSummary, CdaRequest, RaiseIntentResult};
+use crate::types::{CdaRequest, ChannelInfoSummary, RaiseIntentResult};
 
 pub struct OtFdc3State {
     // ── Connection identity ───────────────────────────────────────────────────
     /// Set to `Some(instance_id)` once the CDA Welcome is received;
     /// reset to `None` on disconnect.  Used by `fdc3_register` to block-wait.
     pub instance_id_tx: watch::Sender<Option<String>>,
-    pub instance_id:    watch::Receiver<Option<String>>,
+    pub instance_id: watch::Receiver<Option<String>>,
 
     // ── Channel state ─────────────────────────────────────────────────────────
     /// Full channel list received in Welcome.
@@ -37,12 +37,12 @@ impl OtFdc3State {
         let (tx, rx) = watch::channel(None);
         Self {
             instance_id_tx: tx,
-            instance_id:    rx,
-            channels:        RwLock::new(Vec::new()),
+            instance_id: rx,
+            channels: RwLock::new(Vec::new()),
             current_channel: RwLock::new(None),
-            tx:              Mutex::new(None),
+            tx: Mutex::new(None),
             pending_intents: DashMap::new(),
-            started:         AtomicBool::new(false),
+            started: AtomicBool::new(false),
         }
     }
 
@@ -123,4 +123,3 @@ impl Default for OtFdc3State {
         Self::new()
     }
 }
-

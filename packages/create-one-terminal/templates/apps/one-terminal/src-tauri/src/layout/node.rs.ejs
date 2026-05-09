@@ -53,7 +53,9 @@ pub enum LayoutNode {
     },
 }
 
-fn default_weight() -> f64 { 1.0 }
+fn default_weight() -> f64 {
+    1.0
+}
 
 pub fn gen_stack_id() -> String {
     uuid::Uuid::new_v4().to_string()[..8].to_string()

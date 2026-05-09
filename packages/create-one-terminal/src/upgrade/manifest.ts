@@ -3,10 +3,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { VersionsManifest } from "./migrations/types.js";
 
-const BUNDLED_PATH = join(
-  dirname(fileURLToPath(import.meta.url)),
-  "../../versions.json",
-);
+const BUNDLED_PATH = join(dirname(fileURLToPath(import.meta.url)), "../../versions.json");
 
 export async function fetchManifest(): Promise<VersionsManifest> {
   // Try npm registry for latest published manifest

@@ -76,11 +76,7 @@ export class BridgeAgentProxy {
     { resolve: (r: IntentResolution) => void; reject: (e: Error) => void }
   >();
 
-  private constructor(
-    inner: Fdc3Agent,
-    ws: WebSocket,
-    desktopAgentId: string
-  ) {
+  private constructor(inner: Fdc3Agent, ws: WebSocket, desktopAgentId: string) {
     this._inner = inner;
     this._ws = ws;
     this.desktopAgentId = desktopAgentId;
@@ -117,10 +113,7 @@ export class BridgeAgentProxy {
         ws.onerror = () => reject(new Error("Bridge WS connection failed"));
       }),
       new Promise<never>((_, reject) =>
-        setTimeout(
-          () => reject(new Error("Bridge connection timed out")),
-          CONNECT_TIMEOUT_MS
-        )
+        setTimeout(() => reject(new Error("Bridge connection timed out")), CONNECT_TIMEOUT_MS)
       ),
     ]);
 
@@ -152,18 +145,13 @@ export class BridgeAgentProxy {
         ws.onerror = () => reject(new Error("Bridge handshake error"));
       }),
       new Promise<never>((_, reject) =>
-        setTimeout(
-          () => reject(new Error("WCPHelloResponse timed out")),
-          CONNECT_TIMEOUT_MS
-        )
+        setTimeout(() => reject(new Error("WCPHelloResponse timed out")), CONNECT_TIMEOUT_MS)
       ),
     ]);
 
     if (response.type !== "WCPHelloResponse") {
       ws.close();
-      throw new Error(
-        `Unexpected bridge response during handshake: ${response.type}`
-      );
+      throw new Error(`Unexpected bridge response during handshake: ${response.type}`);
     }
 
     const desktopAgentId = response.payload.desktopAgentId as string;
@@ -183,19 +171,13 @@ export class BridgeAgentProxy {
         // Deliver to typed handlers
         this._contextHandlers.get(ctx.type)?.forEach((h) => h(ctx, meta));
         // Deliver to wildcard handlers
-        this._contextHandlers
-          .get("__wildcard__")
-          ?.forEach((h) => h(ctx, meta));
+        this._contextHandlers.get("__wildcard__")?.forEach((h) => h(ctx, meta));
         break;
       }
 
       case "raiseIntentBridge": {
-        const intent = msg.payload.intent as
-          | { name: string }
-          | string
-          | undefined;
-        const intentName =
-          typeof intent === "string" ? intent : intent?.name ?? "";
+        const intent = msg.payload.intent as { name: string } | string | undefined;
+        const intentName = typeof intent === "string" ? intent : (intent?.name ?? "");
         const ctx = msg.payload.context as Context | undefined;
         if (!ctx || !intentName) return;
 
@@ -227,11 +209,7 @@ export class BridgeAgentProxy {
         const pending = this._pendingIntents.get(uuid);
         if (pending) {
           this._pendingIntents.delete(uuid);
-          pending.reject(
-            new Error(
-              (msg.payload.message as string | undefined) ?? "Bridge error"
-            )
-          );
+          pending.reject(new Error((msg.payload.message as string | undefined) ?? "Bridge error"));
         }
         break;
       }
@@ -270,10 +248,7 @@ export class BridgeAgentProxy {
    * Registers a context listener with the local broker AND notifies the bridge
    * so that external agents can deliver matching context to this instance.
    */
-  addContextListener(
-    contextType: string | null,
-    handler: ContextHandler
-  ): Listener {
+  addContextListener(contextType: string | null, handler: ContextHandler): Listener {
     const innerListener = this._inner.addContextListener(contextType, handler);
 
     const key = contextType ?? "__wildcard__";
@@ -348,11 +323,7 @@ export class BridgeAgentProxy {
     target?: BridgeAppIdentifier
   ): Promise<IntentResolution> {
     if (target?.desktopAgent && target.desktopAgent !== this.desktopAgentId) {
-      return this._raiseBridgeIntent(
-        context.type,
-        context,
-        target
-      );
+      return this._raiseBridgeIntent(context.type, context, target);
     }
     return this._inner.raiseIntentForContext(context, target);
   }

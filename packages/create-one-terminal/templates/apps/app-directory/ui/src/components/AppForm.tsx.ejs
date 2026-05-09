@@ -1,12 +1,5 @@
 import React, { useEffect, useState } from "react";
-import type {
-  AppD,
-  AppType,
-  EngineBinding,
-  EngineCatalog,
-  EngineFamily,
-  OsKey,
-} from "../types";
+import type { AppD, AppType, EngineBinding, EngineCatalog, EngineFamily, OsKey } from "../types";
 
 function detectCurrentOs(): OsKey {
   const ua = navigator.userAgent;
@@ -17,8 +10,8 @@ function detectCurrentOs(): OsKey {
 
 const OS_LABELS: Record<OsKey, string> = {
   windows: "Windows",
-  macos:   "macOS",
-  linux:   "Linux",
+  macos: "macOS",
+  linux: "Linux",
 };
 
 // ── Form state types ───────────────────────────────────────────────────────────
@@ -26,13 +19,13 @@ const OS_LABELS: Record<OsKey, string> = {
 interface IntentListener {
   intentName: string;
   displayName: string;
-  contexts: string;   // comma-separated FDC3 context types
+  contexts: string; // comma-separated FDC3 context types
   resultType: string;
 }
 
 interface IntentRaise {
   intentName: string;
-  contexts: string;   // comma-separated FDC3 context types
+  contexts: string; // comma-separated FDC3 context types
 }
 
 interface FormState {
@@ -66,52 +59,56 @@ interface FormState {
 
 function appDToForm(app: AppD): FormState {
   return {
-    appId:       app.appId,
-    name:        app.name,
-    type:        app.type,
-    url:         app.details.url,
-    title:       app.title        ?? "",
-    description: app.description  ?? "",
-    version:     app.version      ?? "",
-    tooltip:     app.tooltip      ?? "",
-    lang:        app.lang         ?? "",
-    publisher:   app.publisher    ?? "",
-    contactEmail:  app.contactEmail  ?? "",
-    supportEmail:  app.supportEmail  ?? "",
-    moreInfo:    app.moreInfo     ?? "",
-    categories:  app.categories?.join(", ") ?? "",
+    appId: app.appId,
+    name: app.name,
+    type: app.type,
+    url: app.details.url,
+    title: app.title ?? "",
+    description: app.description ?? "",
+    version: app.version ?? "",
+    tooltip: app.tooltip ?? "",
+    lang: app.lang ?? "",
+    publisher: app.publisher ?? "",
+    contactEmail: app.contactEmail ?? "",
+    supportEmail: app.supportEmail ?? "",
+    moreInfo: app.moreInfo ?? "",
+    categories: app.categories?.join(", ") ?? "",
     intentListeners: Object.entries(app.interop?.intents?.listensFor ?? {}).map(
       ([intentName, def]) => ({
         intentName,
         displayName: def.displayName ?? "",
-        contexts:    def.contexts.join(", "),
-        resultType:  def.resultType ?? "",
-      }),
+        contexts: def.contexts.join(", "),
+        resultType: def.resultType ?? "",
+      })
     ),
-    intentRaises: Object.entries(app.interop?.intents?.raises ?? {}).map(
-      ([intentName, ctxs]) => ({
-        intentName,
-        contexts: ctxs.join(", "),
-      }),
-    ),
+    intentRaises: Object.entries(app.interop?.intents?.raises ?? {}).map(([intentName, ctxs]) => ({
+      intentName,
+      contexts: ctxs.join(", "),
+    })),
     channelBroadcasts: app.interop?.userChannels?.broadcasts.join(", ") ?? "",
-    channelListensFor: app.interop?.userChannels?.listensFor.join(", ")  ?? "",
+    channelListensFor: app.interop?.userChannels?.listensFor.join(", ") ?? "",
     engineBindings: Object.fromEntries(
       Object.entries(app.engineBindings ?? {})
         .filter(([, list]) => Array.isArray(list))
-        .map(([os, list]) => [
-          os,
-          (list as EngineBinding[]).map((b) => ({ ...b })),
-        ]),
+        .map(([os, list]) => [os, (list as EngineBinding[]).map((b) => ({ ...b }))])
     ) as Partial<Record<OsKey, EngineBinding[]>>,
   };
 }
 
 const BLANK_FORM: FormState = {
-  appId: "", name: "", type: "web", url: "",
-  title: "", description: "", version: "",
-  tooltip: "", lang: "en-US", publisher: "",
-  contactEmail: "", supportEmail: "", moreInfo: "",
+  appId: "",
+  name: "",
+  type: "web",
+  url: "",
+  title: "",
+  description: "",
+  version: "",
+  tooltip: "",
+  lang: "en-US",
+  publisher: "",
+  contactEmail: "",
+  supportEmail: "",
+  moreInfo: "",
   categories: "",
   intentListeners: [],
   intentRaises: [],
@@ -121,21 +118,31 @@ const BLANK_FORM: FormState = {
 };
 
 function splitCsv(s: string): string[] {
-  return s.split(",").map((t) => t.trim()).filter(Boolean);
+  return s
+    .split(",")
+    .map((t) => t.trim())
+    .filter(Boolean);
 }
 
 function formToAppD(form: FormState): AppD {
   const app: AppD = {
-    appId:   form.appId.trim(),
-    name:    form.name.trim(),
-    type:    form.type,
+    appId: form.appId.trim(),
+    name: form.name.trim(),
+    type: form.type,
     details: { url: form.url.trim() },
   };
 
   // Optional scalar fields
   const scalars = [
-    "title", "description", "version", "tooltip", "lang",
-    "publisher", "contactEmail", "supportEmail", "moreInfo",
+    "title",
+    "description",
+    "version",
+    "tooltip",
+    "lang",
+    "publisher",
+    "contactEmail",
+    "supportEmail",
+    "moreInfo",
   ] as const;
   for (const key of scalars) {
     const v = form[key].trim();
@@ -153,7 +160,7 @@ function formToAppD(form: FormState): AppD {
     listensFor[name] = {
       contexts: splitCsv(il.contexts),
       ...(il.displayName.trim() && { displayName: il.displayName.trim() }),
-      ...(il.resultType.trim()  && { resultType:  il.resultType.trim()  }),
+      ...(il.resultType.trim() && { resultType: il.resultType.trim() }),
     };
   }
 
@@ -165,10 +172,10 @@ function formToAppD(form: FormState): AppD {
     raises[name] = splitCsv(ir.contexts);
   }
 
-  const broadcasts   = splitCsv(form.channelBroadcasts);
+  const broadcasts = splitCsv(form.channelBroadcasts);
   const chListensFor = splitCsv(form.channelListensFor);
 
-  const hasIntents  = Object.keys(listensFor).length > 0 || Object.keys(raises).length > 0;
+  const hasIntents = Object.keys(listensFor).length > 0 || Object.keys(raises).length > 0;
   const hasChannels = broadcasts.length > 0 || chListensFor.length > 0;
 
   if (hasIntents || hasChannels) {
@@ -176,7 +183,7 @@ function formToAppD(form: FormState): AppD {
     if (hasIntents) {
       app.interop.intents = {};
       if (Object.keys(listensFor).length) app.interop.intents.listensFor = listensFor;
-      if (Object.keys(raises).length)     app.interop.intents.raises     = raises;
+      if (Object.keys(raises).length) app.interop.intents.raises = raises;
     }
     if (hasChannels) {
       app.interop.userChannels = { broadcasts, listensFor: chListensFor };
@@ -211,14 +218,16 @@ interface Props {
 export default function AppForm({ existingApp, onSave, onCancel }: Props) {
   const isEdit = existingApp !== null;
 
-  const [form, setForm]           = useState<FormState>(() => isEdit ? appDToForm(existingApp!) : { ...BLANK_FORM });
-  const [errors, setErrors]       = useState<Partial<Record<keyof FormState, string>>>({});
+  const [form, setForm] = useState<FormState>(() =>
+    isEdit ? appDToForm(existingApp!) : { ...BLANK_FORM }
+  );
+  const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const [submitting, setSubmitting] = useState(false);
-  const [apiError, setApiError]   = useState<string | null>(null);
+  const [apiError, setApiError] = useState<string | null>(null);
 
-  const [catalog, setCatalog]           = useState<EngineCatalog>({});
+  const [catalog, setCatalog] = useState<EngineCatalog>({});
   const [catalogError, setCatalogError] = useState<string | null>(null);
-  const [engineOsTab, setEngineOsTab]   = useState<OsKey>(() => detectCurrentOs());
+  const [engineOsTab, setEngineOsTab] = useState<OsKey>(() => detectCurrentOs());
 
   useEffect(() => {
     let cancelled = false;
@@ -233,7 +242,9 @@ export default function AppForm({ existingApp, onSave, onCancel }: Props) {
       .catch((e: unknown) => {
         if (!cancelled) setCatalogError(e instanceof Error ? e.message : String(e));
       });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const osEntries = catalog[engineOsTab] ?? [];
@@ -255,10 +266,7 @@ export default function AppForm({ existingApp, onSave, onCancel }: Props) {
     const takenKeys = new Set(osBindings.map((b) => `${b.family}@${b.version}`));
     const firstFree =
       osEntries.find((e) => !takenKeys.has(`${e.family}@${e.version}`)) ?? osEntries[0];
-    setOsBindings([
-      ...osBindings,
-      { family: firstFree.family, version: firstFree.version },
-    ]);
+    setOsBindings([...osBindings, { family: firstFree.family, version: firstFree.version }]);
   }
 
   function removeEngineRow(index: number) {
@@ -291,19 +299,33 @@ export default function AppForm({ existingApp, onSave, onCancel }: Props) {
 
   function set<K extends keyof FormState>(field: K, value: FormState[K]) {
     setForm((f) => ({ ...f, [field]: value }));
-    if (errors[field]) setErrors((e) => { const n = { ...e }; delete n[field]; return n; });
+    if (errors[field])
+      setErrors((e) => {
+        const n = { ...e };
+        delete n[field];
+        return n;
+      });
   }
 
   // ── Intent listeners ─────────────────────────────────────────────────────────
 
   const addListener = () =>
-    set("intentListeners", [...form.intentListeners, { intentName: "", displayName: "", contexts: "", resultType: "" }]);
+    set("intentListeners", [
+      ...form.intentListeners,
+      { intentName: "", displayName: "", contexts: "", resultType: "" },
+    ]);
 
   const removeListener = (i: number) =>
-    set("intentListeners", form.intentListeners.filter((_, idx) => idx !== i));
+    set(
+      "intentListeners",
+      form.intentListeners.filter((_, idx) => idx !== i)
+    );
 
   const updateListener = (i: number, field: keyof IntentListener, value: string) =>
-    set("intentListeners", form.intentListeners.map((il, idx) => idx === i ? { ...il, [field]: value } : il));
+    set(
+      "intentListeners",
+      form.intentListeners.map((il, idx) => (idx === i ? { ...il, [field]: value } : il))
+    );
 
   // ── Intent raises ────────────────────────────────────────────────────────────
 
@@ -311,10 +333,16 @@ export default function AppForm({ existingApp, onSave, onCancel }: Props) {
     set("intentRaises", [...form.intentRaises, { intentName: "", contexts: "" }]);
 
   const removeRaise = (i: number) =>
-    set("intentRaises", form.intentRaises.filter((_, idx) => idx !== i));
+    set(
+      "intentRaises",
+      form.intentRaises.filter((_, idx) => idx !== i)
+    );
 
   const updateRaise = (i: number, field: keyof IntentRaise, value: string) =>
-    set("intentRaises", form.intentRaises.map((ir, idx) => idx === i ? { ...ir, [field]: value } : ir));
+    set(
+      "intentRaises",
+      form.intentRaises.map((ir, idx) => (idx === i ? { ...ir, [field]: value } : ir))
+    );
 
   // ── Validation ───────────────────────────────────────────────────────────────
 
@@ -332,8 +360,11 @@ export default function AppForm({ existingApp, onSave, onCancel }: Props) {
     if (!form.url.trim()) {
       e.url = "Launch URL is required";
     } else {
-      try { new URL(form.url.trim()); }
-      catch { e.url = "Enter a valid URL (e.g. http://localhost:3010)"; }
+      try {
+        new URL(form.url.trim());
+      } catch {
+        e.url = "Enter a valid URL (e.g. http://localhost:3010)";
+      }
     }
 
     setErrors(e);
@@ -350,9 +381,9 @@ export default function AppForm({ existingApp, onSave, onCancel }: Props) {
     setApiError(null);
 
     try {
-      const body  = formToAppD(form);
+      const body = formToAppD(form);
       const method = isEdit ? "PUT" : "POST";
-      const url    = isEdit ? `/v2/apps/${existingApp!.appId}` : "/v2/apps";
+      const url = isEdit ? `/v2/apps/${existingApp!.appId}` : "/v2/apps";
 
       const res = await fetch(url, {
         method,
@@ -365,7 +396,9 @@ export default function AppForm({ existingApp, onSave, onCancel }: Props) {
         throw new Error((data as { message?: string }).message ?? `HTTP ${res.status}`);
       }
 
-      onSave(isEdit ? `"${body.name}" updated successfully.` : `"${body.name}" registered successfully.`);
+      onSave(
+        isEdit ? `"${body.name}" updated successfully.` : `"${body.name}" registered successfully.`
+      );
     } catch (e: unknown) {
       setApiError(e instanceof Error ? e.message : "Unknown error");
     } finally {
@@ -379,17 +412,20 @@ export default function AppForm({ existingApp, onSave, onCancel }: Props) {
     <div className="app-form">
       <div className="form-header">
         <h2>{isEdit ? `Edit: ${existingApp!.name}` : "Register New Application"}</h2>
-        <button className="btn btn-secondary" onClick={onCancel}>Cancel</button>
+        <button className="btn btn-secondary" onClick={onCancel}>
+          Cancel
+        </button>
       </div>
 
       <form onSubmit={handleSubmit} noValidate>
-
         {/* ── Identity ──────────────────────────────────────────────────────── */}
         <div className="form-section">
           <div className="section-title">Identity — FDC3 Required Fields</div>
           <div className="form-grid-3">
             <div className="field">
-              <label>App ID<span className="req">*</span></label>
+              <label>
+                App ID<span className="req">*</span>
+              </label>
               <input
                 type="text"
                 value={form.appId}
@@ -401,7 +437,9 @@ export default function AppForm({ existingApp, onSave, onCancel }: Props) {
               {errors.appId && <span className="field-error">{errors.appId}</span>}
             </div>
             <div className="field">
-              <label>Name<span className="req">*</span></label>
+              <label>
+                Name<span className="req">*</span>
+              </label>
               <input
                 type="text"
                 value={form.name}
@@ -412,7 +450,9 @@ export default function AppForm({ existingApp, onSave, onCancel }: Props) {
               {errors.name && <span className="field-error">{errors.name}</span>}
             </div>
             <div className="field">
-              <label>Type<span className="req">*</span></label>
+              <label>
+                Type<span className="req">*</span>
+              </label>
               <select value={form.type} onChange={(e) => set("type", e.target.value as AppType)}>
                 <option value="web">web</option>
                 <option value="native">native</option>
@@ -446,46 +486,96 @@ export default function AppForm({ existingApp, onSave, onCancel }: Props) {
           <div className="form-grid">
             <div className="field">
               <label>Title</label>
-              <input type="text" value={form.title} onChange={(e) => set("title", e.target.value)} placeholder="Human-readable display title" />
+              <input
+                type="text"
+                value={form.title}
+                onChange={(e) => set("title", e.target.value)}
+                placeholder="Human-readable display title"
+              />
             </div>
             <div className="field">
               <label>Version</label>
-              <input type="text" value={form.version} onChange={(e) => set("version", e.target.value)} placeholder="e.g. 1.0.0" />
+              <input
+                type="text"
+                value={form.version}
+                onChange={(e) => set("version", e.target.value)}
+                placeholder="e.g. 1.0.0"
+              />
             </div>
             <div className="field col-span-2">
               <label>Description</label>
-              <textarea value={form.description} onChange={(e) => set("description", e.target.value)} rows={3} placeholder="Short description of the application…" />
+              <textarea
+                value={form.description}
+                onChange={(e) => set("description", e.target.value)}
+                rows={3}
+                placeholder="Short description of the application…"
+              />
             </div>
             <div className="field">
               <label>Tooltip</label>
-              <input type="text" value={form.tooltip} onChange={(e) => set("tooltip", e.target.value)} placeholder="Short hover tooltip text" />
+              <input
+                type="text"
+                value={form.tooltip}
+                onChange={(e) => set("tooltip", e.target.value)}
+                placeholder="Short hover tooltip text"
+              />
             </div>
             <div className="field">
               <label>Language</label>
-              <input type="text" value={form.lang} onChange={(e) => set("lang", e.target.value)} placeholder="en-US" />
+              <input
+                type="text"
+                value={form.lang}
+                onChange={(e) => set("lang", e.target.value)}
+                placeholder="en-US"
+              />
             </div>
             <div className="field">
               <label>Publisher</label>
-              <input type="text" value={form.publisher} onChange={(e) => set("publisher", e.target.value)} placeholder="Organisation name" />
+              <input
+                type="text"
+                value={form.publisher}
+                onChange={(e) => set("publisher", e.target.value)}
+                placeholder="Organisation name"
+              />
             </div>
             <div className="field">
               <label>More Info URL</label>
-              <input type="text" value={form.moreInfo} onChange={(e) => set("moreInfo", e.target.value)} placeholder="https://docs.example.com/app" />
+              <input
+                type="text"
+                value={form.moreInfo}
+                onChange={(e) => set("moreInfo", e.target.value)}
+                placeholder="https://docs.example.com/app"
+              />
             </div>
             <div className="field">
               <label>Contact Email</label>
-              <input type="email" value={form.contactEmail} onChange={(e) => set("contactEmail", e.target.value)} placeholder="contact@example.com" />
+              <input
+                type="email"
+                value={form.contactEmail}
+                onChange={(e) => set("contactEmail", e.target.value)}
+                placeholder="contact@example.com"
+              />
             </div>
             <div className="field">
               <label>Support Email</label>
-              <input type="email" value={form.supportEmail} onChange={(e) => set("supportEmail", e.target.value)} placeholder="support@example.com" />
+              <input
+                type="email"
+                value={form.supportEmail}
+                onChange={(e) => set("supportEmail", e.target.value)}
+                placeholder="support@example.com"
+              />
             </div>
             <div className="field col-span-2">
               <label>
                 Categories
                 <span className="hint">(comma-separated)</span>
               </label>
-              <input type="text" value={form.categories} onChange={(e) => set("categories", e.target.value)} placeholder="Analytics, Charting, FX, Trading" />
+              <input
+                type="text"
+                value={form.categories}
+                onChange={(e) => set("categories", e.target.value)}
+                placeholder="Analytics, Charting, FX, Trading"
+              />
             </div>
           </div>
         </div>
@@ -494,14 +584,18 @@ export default function AppForm({ existingApp, onSave, onCancel }: Props) {
         <div className="form-section">
           <div className="section-title">
             Interop — Intent Listeners
-            <span className="hint" style={{ marginLeft: 8 }}>interop.intents.listensFor</span>
+            <span className="hint" style={{ marginLeft: 8 }}>
+              interop.intents.listensFor
+            </span>
           </div>
 
           {form.intentListeners.length > 0 && (
             <div className="dyn-header dyn-header-listener" style={{ marginBottom: 4 }}>
               <span>Intent Name</span>
               <span>Display Name</span>
-              <span>Context Types <em style={{ fontStyle: "normal", opacity: 0.7 }}>(comma-sep)</em></span>
+              <span>
+                Context Types <em style={{ fontStyle: "normal", opacity: 0.7 }}>(comma-sep)</em>
+              </span>
               <span>Result Type</span>
               <span />
             </div>
@@ -534,7 +628,9 @@ export default function AppForm({ existingApp, onSave, onCancel }: Props) {
                   onChange={(e) => updateListener(i, "resultType", e.target.value)}
                   placeholder="fdc3.chart"
                 />
-                <button type="button" className="btn-remove" onClick={() => removeListener(i)}>✕</button>
+                <button type="button" className="btn-remove" onClick={() => removeListener(i)}>
+                  ✕
+                </button>
               </div>
             ))}
           </div>
@@ -547,13 +643,17 @@ export default function AppForm({ existingApp, onSave, onCancel }: Props) {
         <div className="form-section">
           <div className="section-title">
             Interop — Intent Raises
-            <span className="hint" style={{ marginLeft: 8 }}>interop.intents.raises</span>
+            <span className="hint" style={{ marginLeft: 8 }}>
+              interop.intents.raises
+            </span>
           </div>
 
           {form.intentRaises.length > 0 && (
             <div className="dyn-header dyn-header-raises" style={{ marginBottom: 4 }}>
               <span>Intent Name</span>
-              <span>Context Types <em style={{ fontStyle: "normal", opacity: 0.7 }}>(comma-sep)</em></span>
+              <span>
+                Context Types <em style={{ fontStyle: "normal", opacity: 0.7 }}>(comma-sep)</em>
+              </span>
               <span />
             </div>
           )}
@@ -573,7 +673,9 @@ export default function AppForm({ existingApp, onSave, onCancel }: Props) {
                   onChange={(e) => updateRaise(i, "contexts", e.target.value)}
                   placeholder="fdc3.instrument"
                 />
-                <button type="button" className="btn-remove" onClick={() => removeRaise(i)}>✕</button>
+                <button type="button" className="btn-remove" onClick={() => removeRaise(i)}>
+                  ✕
+                </button>
               </div>
             ))}
           </div>
@@ -586,7 +688,9 @@ export default function AppForm({ existingApp, onSave, onCancel }: Props) {
         <div className="form-section">
           <div className="section-title">
             Interop — User Channels
-            <span className="hint" style={{ marginLeft: 8 }}>interop.userChannels</span>
+            <span className="hint" style={{ marginLeft: 8 }}>
+              interop.userChannels
+            </span>
           </div>
           <div className="form-grid">
             <div className="field">
@@ -621,8 +725,8 @@ export default function AppForm({ existingApp, onSave, onCancel }: Props) {
           <div className="section-title">
             Browser Engines
             <span className="hint" style={{ marginLeft: 8 }}>
-              engineBindings — supported runtimes per OS; the user picks one
-              when opening a tab. Empty means launcher default.
+              engineBindings — supported runtimes per OS; the user picks one when opening a tab.
+              Empty means launcher default.
             </span>
           </div>
 
@@ -654,12 +758,15 @@ export default function AppForm({ existingApp, onSave, onCancel }: Props) {
           )}
 
           {osBindings.length > 0 && (
-            <div className="dyn-header" style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 2fr auto",
-              gap: 8,
-              marginBottom: 4,
-            }}>
+            <div
+              className="dyn-header"
+              style={{
+                display: "grid",
+                gridTemplateColumns: "1fr 2fr auto",
+                gap: 8,
+                marginBottom: 4,
+              }}
+            >
               <span>Engine family</span>
               <span>Version</span>
               <span />
@@ -668,18 +775,24 @@ export default function AppForm({ existingApp, onSave, onCancel }: Props) {
 
           <div className="dyn-list">
             {osBindings.map((b, i) => (
-              <div key={i} className="dyn-row" style={{
-                display: "grid",
-                gridTemplateColumns: "1fr 2fr auto",
-                gap: 8,
-              }}>
+              <div
+                key={i}
+                className="dyn-row"
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 2fr auto",
+                  gap: 8,
+                }}
+              >
                 <select
                   value={b.family}
                   onChange={(e) => updateEngineRow(i, { family: e.target.value as EngineFamily })}
                   disabled={osEntries.length === 0}
                 >
                   {familyOptionsForRow().map((family) => (
-                    <option key={family} value={family}>{family}</option>
+                    <option key={family} value={family}>
+                      {family}
+                    </option>
                   ))}
                 </select>
                 <select
@@ -729,11 +842,7 @@ export default function AppForm({ existingApp, onSave, onCancel }: Props) {
             Cancel
           </button>
           <button type="submit" className="btn btn-primary" disabled={submitting}>
-            {submitting
-              ? "Saving…"
-              : isEdit
-                ? "Save Changes"
-                : "Register Application"}
+            {submitting ? "Saving…" : isEdit ? "Save Changes" : "Register Application"}
           </button>
         </div>
       </form>

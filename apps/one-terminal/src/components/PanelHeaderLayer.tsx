@@ -1,4 +1,4 @@
-import { useCallback, useRef } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { PanelBounds } from "../types";
 import { headerContentFor } from "./panelHeaders";
@@ -36,17 +36,14 @@ function PanelHeader({
 }) {
   const dragging = useRef(false);
 
-  const handlePointerDown = useCallback(
-    (e: React.PointerEvent<HTMLDivElement>) => {
-      if (e.button !== 0) return;
-      // Close button handles its own pointerdown — don't start a drag.
-      if ((e.target as HTMLElement).closest("[data-panel-close]")) return;
-      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-      dragging.current = true;
-      e.preventDefault();
-    },
-    [],
-  );
+  const handlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return;
+    // Close button handles its own pointerdown — don't start a drag.
+    if ((e.target as HTMLElement).closest("[data-panel-close]")) return;
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    dragging.current = true;
+    e.preventDefault();
+  }, []);
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
@@ -57,21 +54,18 @@ function PanelHeader({
         windowY: e.clientY,
       }).catch(console.error);
     },
-    [panel.id],
+    [panel.id]
   );
 
-  const handlePointerUp = useCallback(
-    (e: React.PointerEvent<HTMLDivElement>) => {
-      if (!dragging.current) return;
-      dragging.current = false;
-      try {
-        (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
-      } catch {}
-    },
-    [],
-  );
+  const handlePointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!dragging.current) return;
+    dragging.current = false;
+    try {
+      (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+    } catch {}
+  }, []);
 
-  const Content = headerContentFor(panel.appId);
+  const Content = useMemo(() => headerContentFor(panel.appId), [panel.appId]);
 
   return (
     <div
