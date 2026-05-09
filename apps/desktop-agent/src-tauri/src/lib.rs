@@ -560,6 +560,11 @@ async fn launch_app_from_tray(app: AppHandle, app_id: String) {
 pub fn run() {
     let cfg = AgentConfig::load();
 
+    if let Err(msg) = cfg.ports.check_availability() {
+        eprintln!("[desktop-agent] {msg}");
+        std::process::exit(1);
+    }
+
     let app_dir_cache = AppDirectoryCache::new(&cfg.app_directory_url);
     let engine_catalog = EngineCatalogClient::new(&cfg.engine_catalog_url);
     let channel_manager = ChannelManager::new();

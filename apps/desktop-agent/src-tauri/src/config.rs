@@ -1,5 +1,6 @@
 use serde::Deserialize;
 use std::fs;
+use std::net::TcpListener;
 use std::path::PathBuf;
 
 // ── Sub-structs ───────────────────────────────────────────────────────────────
@@ -10,6 +11,35 @@ pub struct PortsConfig {
     pub tcp_broker: u16,
     pub fdc3_bus: u16,
     pub dacp_bridge: u16,
+}
+
+impl PortsConfig {
+    /// Probe each port by attempting a short-lived bind on `127.0.0.1`.
+    /// Returns `Err` listing every conflict so the caller can print them all at once.
+    pub fn check_availability(&self) -> Result<(), String> {
+        let checks = [
+            (self.tcp_broker, "OT_TCP_PORT"),
+            (self.fdc3_bus, "OT_FDC3_BUS_PORT"),
+            (self.dacp_bridge, "OT_DACP_PORT"),
+        ];
+        let conflicts: Vec<String> = checks
+            .iter()
+            .filter_map(|&(port, env_var)| {
+                TcpListener::bind(("127.0.0.1", port)).err().map(|_| {
+                    format!("  port {port} is already in use — set {env_var}=<port> to override")
+                })
+            })
+            .collect();
+
+        if conflicts.is_empty() {
+            Ok(())
+        } else {
+            Err(format!(
+                "startup aborted: port conflict(s) detected\n{}",
+                conflicts.join("\n")
+            ))
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize)]
