@@ -62,7 +62,7 @@ pub async fn connect_to_peer(url: String, registry: PeerRegistry, app: AppHandle
             return;
         }
     };
-    if sink.send(Message::Text(hello_json.into())).await.is_err() {
+    if sink.send(Message::Text(hello_json)).await.is_err() {
         eprintln!("[dacp] send WCPHello to {url} failed");
         registry.release_url(&url);
         return;
@@ -135,7 +135,7 @@ pub async fn connect_to_peer(url: String, registry: PeerRegistry, app: AppHandle
             outbound = rx.recv() => match outbound {
                 Some(bmp) => {
                     if let Ok(json) = serde_json::to_string(&bmp) {
-                        if sink.send(Message::Text(json.into())).await.is_err() {
+                        if sink.send(Message::Text(json)).await.is_err() {
                             break;
                         }
                     }

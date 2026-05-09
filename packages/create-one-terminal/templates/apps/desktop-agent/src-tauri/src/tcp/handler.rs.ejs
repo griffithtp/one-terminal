@@ -160,6 +160,7 @@ pub async fn handle_connection(
 
 // ── Dispatch ───────────────────────────────────────────────────────────────────
 
+#[allow(clippy::too_many_arguments)]
 async fn dispatch(
     req: CdaRequest,
     instance_id: &str,
@@ -261,6 +262,7 @@ async fn dispatch(
 
 /// Fan-out a context broadcast to all local channel members and all connected
 /// external bridge peers.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn fan_out_broadcast(
     source_instance_id: &str,
     source_app_id: &str,
@@ -321,6 +323,7 @@ pub(crate) fn fan_out_broadcast(
 ///    emit `cda:intent_needs_resolution` so the frontend resolver can launch one.
 ///
 /// If all tiers fail, `Error { NoIntentHandlers }` is sent to the raiser.
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn deliver_intent(
     source_instance_id: &str,
     intent: &str,

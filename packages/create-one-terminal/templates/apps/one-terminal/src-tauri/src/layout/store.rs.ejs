@@ -138,12 +138,14 @@ impl LayoutTree {
     }
 
     /// Currently-active panel label, if any.
+    #[allow(dead_code)]
     pub fn active_panel(&self) -> Option<String> {
         self.0.read().unwrap().active_panel.clone()
     }
 
     /// Mark `label` as the active panel. Caller is responsible for ensuring
     /// `label` exists in the tree.
+    #[allow(dead_code)]
     pub fn set_active_panel(&self, label: &str) {
         self.0.write().unwrap().active_panel = Some(label.to_string());
     }
@@ -266,8 +268,8 @@ impl LayoutTree {
     /// - Tree empty → new leaf becomes root (bare Leaf, no Stack wrapper).
     /// - `dir = Some(d)` → split `target` (or active, or first) along `d`.
     /// - `dir = None`  → tab-insert:
-    ///     • target's parent is a Stack → append as new sibling tab.
-    ///     • otherwise                  → wrap target + new leaf into a Stack.
+    ///   • target's parent is a Stack → append as new sibling tab.
+    ///   • otherwise                  → wrap target + new leaf into a Stack.
     ///
     /// The new leaf becomes the active panel. Returns the new webview label.
     pub fn add_panel(

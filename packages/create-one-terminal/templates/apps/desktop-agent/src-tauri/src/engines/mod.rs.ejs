@@ -14,7 +14,6 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 pub use catalog::EngineCatalogClient;
-pub use ot_core::plugin::EngineManifest;
 pub use runtime::EngineRuntimeStore;
 
 // Re-export shared types so existing `engines::OsKey`, `engines::EngineBinding`

@@ -45,9 +45,7 @@ function ChromeApp() {
   const tabDrag = useTabDrag();
 
   // Show a status banner while the Electron binary is being auto-installed.
-  const [electronStatus, setElectronStatus] = useState<
-    "idle" | "installing" | "error"
-  >("idle");
+  const [electronStatus, setElectronStatus] = useState<"idle" | "installing" | "error">("idle");
   useEffect(() => {
     let errorTimer: ReturnType<typeof setTimeout>;
     const unlistenInstalling = listen("wm:electron-installing", () => {

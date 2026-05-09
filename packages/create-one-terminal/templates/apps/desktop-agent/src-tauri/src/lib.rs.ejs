@@ -258,6 +258,7 @@ async fn cda_refresh_app_directory(
 /// use the system browser.
 /// `engine_override` is debug-only: in release builds it is silently ignored
 /// so dev-only UI state can't influence production launch decisions.
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 async fn cda_launch_app(
     app_id: String,

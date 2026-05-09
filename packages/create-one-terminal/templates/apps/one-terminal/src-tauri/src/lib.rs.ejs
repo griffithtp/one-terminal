@@ -215,6 +215,7 @@ fn wm_snapshot(tree: State<'_, LayoutTree>) -> Option<LayoutSnapshot> {
 ///                      as a tab; otherwise the launch is sent to a
 ///                      stand-alone `tauri-webview-host` and the WM layout
 ///                      is left unchanged.
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 async fn wm_open(
     app_id: String,

@@ -143,9 +143,9 @@ function DownloadPromptDialog({
           Download <strong>{label}</strong>?
         </div>
         <p className="wm-engine-picker__note">
-          {binding.family}@{binding.version} isn&apos;t installed on this machine. The window manager
-          needs to download <strong>{formatBytes(sizeBytes)}</strong> before it can launch a new
-          external window with this engine.
+          {binding.family}@{binding.version} isn&apos;t installed on this machine. The window
+          manager needs to download <strong>{formatBytes(sizeBytes)}</strong> before it can launch a
+          new external window with this engine.
         </p>
 
         {busy && (

@@ -3,7 +3,7 @@
 //! - `Leaf`     → `set_position` + `set_size` on the webview for this rect.
 //! - `Splitter` → split the rect along `direction` by each child's weight share.
 //! - `Stack`    → the active child fills the rect below the tab strip; every
-//!               other child is parked offscreen so it stays loaded but hidden.
+//!   other child is parked offscreen so it stays loaded but hidden.
 
 use tauri::{AppHandle, LogicalPosition, LogicalSize, Manager};
 

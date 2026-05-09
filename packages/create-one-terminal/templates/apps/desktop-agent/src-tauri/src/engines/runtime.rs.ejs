@@ -64,6 +64,7 @@ impl EngineRuntimeStore {
         }
     }
 
+    #[allow(dead_code)]
     pub fn root(&self) -> &Path {
         &self.root
     }
@@ -215,7 +216,7 @@ impl EngineRuntimeStore {
 
         self.install_from_download(binding, entry, download, &dir, app)
             .await
-            .map_err(|e| {
+            .inspect_err(|e| {
                 let _ = app.emit(
                     "engine:download:error",
                     DownloadEvent {
@@ -229,7 +230,6 @@ impl EngineRuntimeStore {
                 );
                 // Leave a partial install cleaned up; next call will retry.
                 let _ = fs::remove_dir_all(&dir);
-                e
             })?;
 
         Ok(InstalledEngine {
