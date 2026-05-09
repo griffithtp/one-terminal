@@ -17,7 +17,7 @@ use commands::*;
 /// Initialise the `ot-fdc3` Tauri plugin.
 ///
 /// Call once in your app's `tauri::Builder`:
-/// ```rust
+/// ```rust,ignore
 /// tauri::Builder::default()
 ///     .plugin(ot_fdc3::init())
 ///     // ...
