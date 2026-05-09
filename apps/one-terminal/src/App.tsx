@@ -14,8 +14,9 @@
  * z-ordering naturally routes events to the correct webview.
  */
 
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { useLayout } from "./hooks/useLayout";
 import { useHostLayout } from "./hooks/useHostLayout";
 import { useTabDrag } from "./hooks/useTabDrag";
@@ -42,6 +43,30 @@ function ChromeApp() {
   const { layout, openPanel, closePanel } = useLayout();
   const { host: hostLayout, removeTab } = useHostLayout();
   const tabDrag = useTabDrag();
+
+  // Show a status banner while the Electron binary is being auto-installed.
+  const [electronStatus, setElectronStatus] = useState<
+    "idle" | "installing" | "error"
+  >("idle");
+  useEffect(() => {
+    let errorTimer: ReturnType<typeof setTimeout>;
+    const unlistenInstalling = listen("wm:electron-installing", () => {
+      setElectronStatus("installing");
+    });
+    const unlistenReady = listen("wm:electron-ready", () => {
+      setElectronStatus("idle");
+    });
+    const unlistenFailed = listen("wm:electron-install-failed", () => {
+      setElectronStatus("error");
+      errorTimer = setTimeout(() => setElectronStatus("idle"), 6000);
+    });
+    return () => {
+      clearTimeout(errorTimer);
+      unlistenInstalling.then((fn) => fn());
+      unlistenReady.then((fn) => fn());
+      unlistenFailed.then((fn) => fn());
+    };
+  }, []);
 
   const handleTabPointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>, stack: StackHeader, tabIndex: number) => {
@@ -149,6 +174,18 @@ function ChromeApp() {
             <p>No panels open — launch an app from the header.</p>
           </div>
         )}
+
+      {/* Electron auto-install status banner */}
+      {electronStatus === "installing" && (
+        <div className="wm-electron-status">
+          Installing Electron… this may take a moment on first launch
+        </div>
+      )}
+      {electronStatus === "error" && (
+        <div className="wm-electron-status wm-electron-status--error">
+          Electron install failed — check the terminal for details
+        </div>
+      )}
     </div>
   );
 }

@@ -115,10 +115,24 @@ fn electron_binary_in_node_modules(shell_dir: &Path) -> Option<PathBuf> {
     }
 }
 
+/// Return `true` if both the electron-host shell and the Electron binary can
+/// be located right now. Cheap (no subprocess). Used for pre-flight checks.
+pub fn is_ready(binding: &EngineBinding, cache_root: &Path) -> bool {
+    locate_electron_shell()
+        .and_then(|shell| locate_electron_binary(binding, cache_root, &shell))
+        .is_ok()
+}
+
 /// Spawn the electron-host shell pointed at `url`. The Electron binary is
 /// invoked as `<bin> <shell-folder>` with `OT_URL` / `OT_TITLE` / `OT_APP_ID`
 /// passed via env. Returns once the child is launched (Electron's own
 /// startup is async and not awaited here — the Terminal/desktop-agent do not block on it).
+///
+/// If the Electron binary is missing and `OT_ELECTRON_HOST_OVERRIDE` is set
+/// (dev mode), this function automatically runs
+/// `npm install -w @one-terminal/electron-host` from the derived workspace
+/// root before retrying. The install is blocking and may take ~30 s on the
+/// first run; subsequent launches are instant (binary cached in node_modules).
 pub fn spawn_electron_app(
     binding: &EngineBinding,
     cache_root: &Path,
@@ -127,7 +141,20 @@ pub fn spawn_electron_app(
     title: &str,
 ) -> Result<(), String> {
     let shell = locate_electron_shell()?;
-    let bin = locate_electron_binary(binding, cache_root, &shell)?;
+    let bin = match locate_electron_binary(binding, cache_root, &shell) {
+        Ok(b) => b,
+        Err(e) => {
+            // Auto-install only in dev mode (when the shell override is set).
+            // In release builds the binary must ship alongside the app.
+            if std::env::var("OT_ELECTRON_HOST_OVERRIDE").is_ok() {
+                eprintln!("[electron-host] {e}");
+                auto_install_binary(&shell)?;
+                locate_electron_binary(binding, cache_root, &shell)?
+            } else {
+                return Err(e);
+            }
+        }
+    };
     let mut cmd = std::process::Command::new(&bin);
     cmd.arg(&shell)
         .env("OT_APP_ID", app_id)
@@ -136,4 +163,44 @@ pub fn spawn_electron_app(
     cmd.spawn()
         .map(|_| ())
         .map_err(|e| format!("spawn electron {}: {e}", bin.display()))
+}
+
+/// Run `npm install -w @one-terminal/electron-host` from the workspace root
+/// derived from the shell directory (`shell_dir/../../`).
+fn auto_install_binary(shell_dir: &Path) -> Result<(), String> {
+    let workspace_root = shell_dir
+        .parent() // apps/
+        .and_then(|p| p.parent()) // workspace root
+        .filter(|p| p.join("package.json").exists())
+        .ok_or_else(|| {
+            format!(
+                "cannot locate npm workspace root from {}; \
+                 run `npm install -w @one-terminal/electron-host` manually",
+                shell_dir.display()
+            )
+        })?;
+
+    eprintln!(
+        "[electron-host] running `npm install -w @one-terminal/electron-host` \
+         from {} …",
+        workspace_root.display()
+    );
+
+    let npm = if cfg!(windows) { "npm.cmd" } else { "npm" };
+    let status = std::process::Command::new(npm)
+        .args(["install", "-w", "@one-terminal/electron-host"])
+        .current_dir(workspace_root)
+        .status()
+        .map_err(|e| format!("failed to run npm: {e}"))?;
+
+    if status.success() {
+        eprintln!("[electron-host] install complete — Electron binary ready");
+        Ok(())
+    } else {
+        Err(format!(
+            "npm install -w @one-terminal/electron-host failed; \
+             run it manually from {}",
+            workspace_root.display()
+        ))
+    }
 }

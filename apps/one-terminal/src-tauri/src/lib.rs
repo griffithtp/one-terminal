@@ -72,20 +72,35 @@ fn spawn_external_host(
 
     match &binding.family {
         EngineFamily::Electron => {
-            // Delegate to the shared launcher: it locates the electron-host
-            // shell folder (via OT_ELECTRON_HOST_OVERRIDE or sibling-of-exe)
-            // and the Electron binary (via OT_ELECTRON_BIN, the cache, or
-            // the shell's local node_modules) and spawns the pair with our
-            // OT_* env vars. No install-sentinel precheck here — the shared
-            // helper accepts multiple resolution paths (dev override, npm
-            // install, catalog install).
-            ot_core::electron_host::spawn_electron_app(
+            // Pre-flight: if the binary is absent and OT_ELECTRON_HOST_OVERRIDE
+            // is set, spawn_electron_app will auto-install (blocking ~30 s on
+            // first run). Emit a UI event so the chrome can show a status banner
+            // instead of appearing frozen.
+            let needs_install = !ot_core::electron_host::is_ready(binding, &identity.cache_root);
+            if needs_install {
+                let _ = app.emit("wm:electron-installing", serde_json::json!(null));
+            }
+            let result = ot_core::electron_host::spawn_electron_app(
                 binding,
                 &identity.cache_root,
                 app_id,
                 url,
                 title,
-            )?;
+            );
+            if needs_install {
+                match &result {
+                    Ok(_) => {
+                        let _ = app.emit("wm:electron-ready", serde_json::json!(null));
+                    }
+                    Err(e) => {
+                        let _ = app.emit(
+                            "wm:electron-install-failed",
+                            serde_json::json!({ "error": e }),
+                        );
+                    }
+                }
+            }
+            result?;
         }
         EngineFamily::Webview2 | EngineFamily::Wkwebview => {
             let runtime_dir = if is_system_version(&binding.version) {

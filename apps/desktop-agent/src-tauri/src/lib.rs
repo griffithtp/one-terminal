@@ -556,6 +556,40 @@ async fn launch_app_from_tray(app: AppHandle, app_id: String) {
 
 // ── App entry point ────────────────────────────────────────────────────────────
 
+/// When `OT_ELECTRON_HOST_OVERRIDE` is set, probe both the shell directory and
+/// the Electron binary so the user gets an actionable warning at startup
+/// instead of a cryptic error when they first try to launch an Electron app.
+fn validate_electron_override() {
+    let Ok(raw) = std::env::var("OT_ELECTRON_HOST_OVERRIDE") else {
+        return;
+    };
+
+    // ── Shell directory check ──────────────────────────────────────────────
+    let shell = {
+        let path = std::path::PathBuf::from(&raw);
+        if path.is_dir() && path.join("main.js").is_file() {
+            path
+        } else {
+            eprintln!(
+                "[desktop-agent] warning: OT_ELECTRON_HOST_OVERRIDE={raw} is not a valid \
+                 electron-host directory (expected main.js inside)\n  \
+                 Fix: run `npm run setup:electron-host` from the workspace root, then retry."
+            );
+            return;
+        }
+    };
+
+    // ── Electron binary check ──────────────────────────────────────────────
+    let cache_root = ot_core::engine::default_cache_root();
+    let probe = ot_core::engine::EngineBinding {
+        family: ot_core::engine::EngineFamily::Electron,
+        version: "system".to_string(),
+    };
+    if let Err(msg) = ot_core::electron_host::locate_electron_binary(&probe, &cache_root, &shell) {
+        eprintln!("[desktop-agent] warning: Electron binary not available — {msg}");
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let cfg = AgentConfig::load();
@@ -564,6 +598,8 @@ pub fn run() {
         eprintln!("[desktop-agent] {msg}");
         std::process::exit(1);
     }
+
+    validate_electron_override();
 
     let app_dir_cache = AppDirectoryCache::new(&cfg.app_directory_url);
     let engine_catalog = EngineCatalogClient::new(&cfg.engine_catalog_url);

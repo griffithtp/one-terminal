@@ -91,8 +91,14 @@ let _apps: AppD[] = [
     },
 
     engineBindings: {
-      windows: [{ family: "webview2", version: "system" }],
-      macos: [{ family: "wkwebview", version: "system" }],
+      windows: [
+        { family: "webview2", version: "system" },
+        { family: "electron", version: "system" },
+      ],
+      macos: [
+        { family: "wkwebview", version: "system" },
+        { family: "electron", version: "system" },
+      ],
     },
   },
 
@@ -196,8 +202,12 @@ let _apps: AppD[] = [
       windows: [
         { family: "webview2", version: "system" },
         { family: "webview2", version: "124.0.2478.97" },
+        { family: "electron", version: "system" },
       ],
-      macos: [{ family: "wkwebview", version: "system" }],
+      macos: [
+        { family: "wkwebview", version: "system" },
+        { family: "electron", version: "system" },
+      ],
     },
   },
 ];
