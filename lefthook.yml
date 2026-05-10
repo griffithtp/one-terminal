@@ -10,3 +10,6 @@ pre-push:
     ts-lint:
       run: npm run lint
       fail_text: "To fix, run: npm run lint:fix"
+    rust-clippy:
+      run: cargo clippy --workspace -- -D warnings
+      fail_text: "To fix, run: cargo clippy --workspace --fix -- -D warnings"
