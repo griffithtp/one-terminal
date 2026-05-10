@@ -7,7 +7,8 @@ use config::TerminalConfig;
 use engine::WmHostIdentity;
 use layout::commands::{
     close_tab, update_layout, wm_begin_tab_drag, wm_close_leaf, wm_close_stack, wm_end_tab_drag,
-    wm_rename_tab, wm_set_active_tab, wm_splitter_drag, wm_toggle_maximize_stack,
+    wm_rename_panel, wm_rename_tab, wm_set_active_tab, wm_set_zoom, wm_splitter_drag,
+    wm_toggle_maximize_stack,
 };
 use layout::drag::wm_drag_move;
 use layout::store::LayoutTree;
@@ -385,12 +386,17 @@ fn wm_overlay_ready(overlay: State<'_, OverlayState>) {
 /// was opened since it was last created), it is closed and recreated on the
 /// main thread so it regains the topmost z-order, then this function awaits
 /// the overlay's ready signal before emitting `wm:ctx-menu`.
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 async fn wm_ctx_menu_open(
     x: f64,
     y: f64,
     stack_path: Vec<usize>,
     n_tabs: usize,
+    tab_label: Option<String>,
+    app_id: Option<String>,
+    display_name: Option<String>,
+    zoom_factor: Option<f64>,
     overlay: State<'_, OverlayState>,
     app: AppHandle,
 ) -> Result<(), String> {
@@ -485,11 +491,23 @@ async fn wm_ctx_menu_open(
             "y": y,
             "stackPath": stack_path,
             "nTabs": n_tabs,
+            "tabLabel": tab_label,
+            "appId": app_id,
+            "displayName": display_name,
+            "zoomFactor": zoom_factor,
         }),
     )
     .map_err(|e| e.to_string())?;
 
     Ok(())
+}
+
+/// Signal the chrome webview to enter inline rename mode for `label`.
+/// Emitted as `wm:request-rename` so the tab strip can focus the input
+/// without a backend round-trip for state.
+#[tauri::command]
+fn wm_request_rename(label: String, app: AppHandle) {
+    let _ = app.emit("wm:request-rename", serde_json::json!({ "label": label }));
 }
 
 /// Hide the overlay by parking it offscreen.  Called by the overlay itself
@@ -556,9 +574,14 @@ pub fn run() {
     tauri::Builder::default()
         .manage(tree.clone())
         .manage(identity.clone())
-        .manage(overlay_state)
+        .manage(overlay_state.clone())
         .manage(cfg.clone())
         .setup(move |app| {
+            // ── Load persisted layout state ───────────────────────────────
+            // Hydrates the LayoutTree from layout.json if it exists. Must run
+            // before any webview is created so the restored tree is in place.
+            tree.init(app.handle())?;
+
             // ── Create the bare container window (no default webview) ──────
             let win = tauri::WindowBuilder::new(app.handle(), WIN)
                 .title(&cfg.title)
@@ -606,6 +629,37 @@ pub fn run() {
                 LogicalPosition::new(-20000.0, -20000.0),
                 LogicalSize::new(init_w, init_h),
             )?;
+
+            // ── Restore persisted panel webviews ──────────────────────────
+            // Re-create webview children for every leaf in the hydrated tree.
+            // The overlay must be marked stale if any panels are added so
+            // wm_ctx_menu_open knows to push it to the back of the z-order.
+            let panels_to_restore = tree.panels_for_restore();
+            if !panels_to_restore.is_empty() {
+                for (label, url) in &panels_to_restore {
+                    if let Ok(parsed_url) = url.parse::<tauri::Url>() {
+                        if let Err(e) = win.add_child(
+                            WebviewBuilder::new(label, WebviewUrl::External(parsed_url)),
+                            LogicalPosition::new(0.0, 0.0),
+                            LogicalSize::new(1.0, 1.0),
+                        ) {
+                            eprintln!("[wm] restore panel '{label}': {e}");
+                        }
+                    } else {
+                        eprintln!("[wm] restore panel '{label}': invalid url '{url}'");
+                    }
+                }
+                {
+                    let mut inner = overlay_state.lock().unwrap();
+                    inner.stale = true;
+                    inner.is_ready = false;
+                }
+                tree.reflow(app.handle());
+                tree.emit_host(app.handle());
+                if let Some(snap) = tree.snapshot() {
+                    let _ = app.handle().emit("wm:layout", &snap);
+                }
+            }
 
             // ── Resize listener — reposition all webviews on window resize ─
             let app_h = app.handle().clone();
@@ -658,11 +712,14 @@ pub fn run() {
             close_tab,
             wm_engine_status,
             wm_engine_install,
+            wm_rename_panel,
+            wm_set_zoom,
             wm_park_panels,
             wm_unpark_panels,
             wm_overlay_ready,
             wm_ctx_menu_open,
             wm_ctx_menu_close,
+            wm_request_rename,
         ])
         .run(tauri::generate_context!())
         .expect("error while running one-terminal");

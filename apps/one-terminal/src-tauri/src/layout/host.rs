@@ -47,12 +47,16 @@ pub struct StackHeader {
 pub struct StackTab {
     /// Webview label — stable identity for rename/close commands.
     pub label: String,
-    /// Human-readable title shown in the tab strip. Defaults to the app name
-    /// at open time; overridden by the user via `wm_rename_tab`.
+    /// App-provided title (from the App Directory record or `wm_open` arg).
     pub title: String,
     /// FDC3 App Directory identifier — lets the tab strip render the same
     /// custom header content as the single-panel overlay (e.g. LIVE badge).
     pub app_id: String,
+    /// User-set display name override. `None` means show `title`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
+    /// Webview zoom multiplier; `1.0` is 100 %.
+    pub zoom_factor: f64,
 }
 
 #[derive(Clone, Serialize)]
@@ -79,6 +83,8 @@ pub fn compute_host_layout(
     content_h: f64,
     titles: &HashMap<String, String>,
     app_ids: &HashMap<String, String>,
+    display_names: &HashMap<String, Option<String>>,
+    zoom_factors: &HashMap<String, f64>,
 ) -> HostLayout {
     let mut stacks = Vec::new();
     let mut splitters = Vec::new();
@@ -91,7 +97,7 @@ pub fn compute_host_layout(
                 active, children, ..
             }) = resolve(root, path)
             {
-                let tabs = stack_tabs(children, titles, app_ids);
+                let tabs = stack_tabs(children, titles, app_ids, display_names, zoom_factors);
                 stacks.push(StackHeader {
                     path: path.to_vec(),
                     x: origin_x,
@@ -116,6 +122,8 @@ pub fn compute_host_layout(
                 &mut splitters,
                 titles,
                 app_ids,
+                display_names,
+                zoom_factors,
             );
         }
     }
@@ -144,6 +152,8 @@ fn stack_tabs(
     children: &[LayoutNode],
     titles: &HashMap<String, String>,
     app_ids: &HashMap<String, String>,
+    display_names: &HashMap<String, Option<String>>,
+    zoom_factors: &HashMap<String, f64>,
 ) -> Vec<StackTab> {
     children
         .iter()
@@ -155,10 +165,14 @@ fn stack_tabs(
                     .filter(|t| !t.is_empty())
                     .unwrap_or_else(|| label.clone());
                 let app_id = app_ids.get(label).cloned().unwrap_or_default();
+                let display_name = display_names.get(label).and_then(|v| v.clone());
+                let zoom_factor = zoom_factors.get(label).copied().unwrap_or(1.0);
                 Some(StackTab {
                     label: label.clone(),
                     title,
                     app_id,
+                    display_name,
+                    zoom_factor,
                 })
             }
             _ => None,
@@ -178,6 +192,8 @@ fn walk(
     splitters: &mut Vec<SplitterHandle>,
     titles: &HashMap<String, String>,
     app_ids: &HashMap<String, String>,
+    display_names: &HashMap<String, Option<String>>,
+    zoom_factors: &HashMap<String, f64>,
 ) {
     match node {
         LayoutNode::Leaf { .. } => {}
@@ -213,7 +229,18 @@ fn walk(
                 };
                 path.push(i);
                 walk(
-                    child, path, cx, cy, cw, ch, stacks, splitters, titles, app_ids,
+                    child,
+                    path,
+                    cx,
+                    cy,
+                    cw,
+                    ch,
+                    stacks,
+                    splitters,
+                    titles,
+                    app_ids,
+                    display_names,
+                    zoom_factors,
                 );
                 path.pop();
                 offset += axis_share;
@@ -242,7 +269,7 @@ fn walk(
         } => {
             // `simplify()` guarantees a Stack's children are all Leaves, so
             // non-Leaf cases are unreachable here.
-            let tabs = stack_tabs(children, titles, app_ids);
+            let tabs = stack_tabs(children, titles, app_ids, display_names, zoom_factors);
 
             stacks.push(StackHeader {
                 path: path.clone(),
@@ -270,6 +297,8 @@ fn walk(
                     splitters,
                     titles,
                     app_ids,
+                    display_names,
+                    zoom_factors,
                 );
                 path.pop();
             }

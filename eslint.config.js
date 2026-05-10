@@ -8,6 +8,7 @@ export default tseslint.config(
     ignores: [
       "**/dist/**",
       "**/node_modules/**",
+      "**/target/**",
       "packages/create-one-terminal/templates/**",
       "packages/fdc3-plugin/**",
       "apps/sample-ticker/**",

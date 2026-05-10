@@ -201,6 +201,52 @@ pub fn wm_rename_tab(
     Ok(())
 }
 
+/// Set the user-visible display name for the panel identified by `label`.
+///
+/// `display_name: null` clears the override and reverts to the app-provided
+/// title. Persists immediately (no debounce) and emits `wm:host-layout` +
+/// `wm:layout` so the tab strip and any panel headers update in real time.
+#[tauri::command]
+pub async fn wm_rename_panel(
+    label: String,
+    display_name: Option<String>,
+    store: State<'_, LayoutTree>,
+    app: AppHandle,
+) -> Result<(), String> {
+    if !store.set_display_name(&label, display_name) {
+        return Err(format!("no panel with label '{label}'"));
+    }
+    store.emit_host(&app);
+    if let Some(snap) = store.snapshot() {
+        let _ = app.emit("wm:layout", &snap);
+    }
+    Ok(())
+}
+
+/// Apply a zoom multiplier to the webview for `label`.
+///
+/// `zoom_factor` is clamped to `[0.5, 2.0]` before being stored or applied.
+/// Persists immediately (no debounce) and emits `wm:host-layout` + `wm:layout`.
+#[tauri::command]
+pub async fn wm_set_zoom(
+    label: String,
+    zoom_factor: f64,
+    store: State<'_, LayoutTree>,
+    app: AppHandle,
+) -> Result<(), String> {
+    let Some(clamped) = store.set_zoom_factor(&label, zoom_factor) else {
+        return Err(format!("no panel with label '{label}'"));
+    };
+    if let Some(wv) = app.get_webview(&label) {
+        wv.set_zoom(clamped).map_err(|e| e.to_string())?;
+    }
+    store.emit_host(&app);
+    if let Some(snap) = store.snapshot() {
+        let _ = app.emit("wm:layout", &snap);
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub fn wm_end_tab_drag(
     source_label: String,

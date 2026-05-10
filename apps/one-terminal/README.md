@@ -142,36 +142,41 @@ When no panels are open, the chrome shows a "No panels open — launch an app fr
 
 All registered in [`lib.rs`](src-tauri/src/lib.rs) via `tauri::generate_handler!`.
 
-| Command             | Args                                               | Description                                                                                                                                                                                                              |
-| ------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `wm_snapshot`       | —                                                  | Return the current `LayoutSnapshot` or `null`                                                                                                                                                                            |
-| `wm_open`           | `appId, url, title, target?, dir?, engineBinding?` | Open a new panel. `dir=null` → tab into active Stack; `dir="horizontal"\|"vertical"` → split target. When `engineBinding` doesn't match the WM's pinned engine, the app is launched in a stand-alone host window instead |
-| `wm_engine_status`  | `binding`                                          | Check whether an engine binding is `ready`, `needs-download`, or `unsupported`. For `electron`, resolves via `electron-host` binary lookup rather than the download catalog                                              |
-| `wm_engine_install` | `binding`                                          | Download + verify + extract the runtime for a `webview2` binding. Emits `engine:download:start\|progress\|complete\|error` events during the transfer                                                                    |
-| `wm_close`          | `panelId`                                          | Close a panel, destroy its webview, reflow                                                                                                                                                                               |
-| `wm_split`          | `panelId, dir, appId, url, title`                  | Convenience wrapper over `wm_open` with an explicit target                                                                                                                                                               |
-| `update_layout`     | `jsonTree`                                         | Replace the tree wholesale (FlexLayout-shaped JSON — `{type: "leaf"\|"splitter"\|"stack", …}`)                                                                                                                           |
-| `wm_splitter_drag`  | `path, childIndex, positionX, positionY`           | Place the Splitter boundary under the cursor. High-frequency; called on `pointermove`                                                                                                                                    |
-| `wm_begin_tab_drag` | —                                                  | Park every panel offscreen so chrome is fully visible during a drag                                                                                                                                                      |
-| `wm_end_tab_drag`   | `sourceLabel, targetPath?, zone?, insertIndex?`    | Complete a drop (reparent + reflow) or cancel (reflow only → panels restored)                                                                                                                                            |
-| `wm_set_active_tab` | `path, tabIndex`                                   | Switch which child of a Stack is visible                                                                                                                                                                                 |
-| `wm_close_leaf`     | `label`                                            | Close a leaf by its webview label                                                                                                                                                                                        |
-| `close_tab`         | `label`                                            | Same as above — mutate tree + destroy webview + reflow                                                                                                                                                                   |
-| `wm_close_stack`    | `path`                                             | Close every tab in a Stack ("Close group")                                                                                                                                                                               |
-| `wm_rename_tab`     | `label, title`                                     | Update the display title for a panel (rejects empty)                                                                                                                                                                     |
+| Command                    | Args                                               | Description                                                                                                                                                                                                              |
+| -------------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `wm_snapshot`              | —                                                  | Return the current `LayoutSnapshot` or `null`                                                                                                                                                                            |
+| `wm_open`                  | `appId, url, title, target?, dir?, engineBinding?` | Open a new panel. `dir=null` → tab into active Stack; `dir="horizontal"\|"vertical"` → split target. When `engineBinding` doesn't match the WM's pinned engine, the app is launched in a stand-alone host window instead |
+| `wm_engine_status`         | `binding`                                          | Check whether an engine binding is `ready`, `needs-download`, or `unsupported`. For `electron`, resolves via `electron-host` binary lookup rather than the download catalog                                              |
+| `wm_engine_install`        | `binding`                                          | Download + verify + extract the runtime for a `webview2` binding. Emits `engine:download:start\|progress\|complete\|error` events during the transfer                                                                    |
+| `wm_close`                 | `panelId`                                          | Close a panel, destroy its webview, reflow                                                                                                                                                                               |
+| `wm_split`                 | `panelId, dir, appId, url, title`                  | Convenience wrapper over `wm_open` with an explicit target                                                                                                                                                               |
+| `update_layout`            | `jsonTree`                                         | Replace the tree wholesale (FlexLayout-shaped JSON — `{type: "leaf"\|"splitter"\|"stack", …}`)                                                                                                                           |
+| `wm_splitter_drag`         | `path, childIndex, positionX, positionY`           | Place the Splitter boundary under the cursor. High-frequency; called on `pointermove`                                                                                                                                    |
+| `wm_begin_tab_drag`        | —                                                  | Park every panel offscreen so chrome is fully visible during a drag                                                                                                                                                      |
+| `wm_end_tab_drag`          | `sourceLabel, targetPath?, zone?, insertIndex?`    | Complete a drop (reparent + reflow) or cancel (reflow only → panels restored)                                                                                                                                            |
+| `wm_set_active_tab`        | `path, tabIndex`                                   | Switch which child of a Stack is visible                                                                                                                                                                                 |
+| `wm_close_leaf`            | `label`                                            | Close a leaf by its webview label                                                                                                                                                                                        |
+| `close_tab`                | `label`                                            | Same as above — mutate tree + destroy webview + reflow                                                                                                                                                                   |
+| `wm_close_stack`           | `path`                                             | Close every tab in a Stack ("Close group")                                                                                                                                                                               |
+| `wm_rename_panel`          | `label, displayName`                               | Set a user display name override; `displayName: null` resets to the app-provided title. Persisted across restarts                                                                                                        |
+| `wm_set_zoom`              | `label, zoomFactor`                                | Apply a zoom multiplier (`0.5`–`2.0`) to a panel's webview. Clamped silently; persisted across restarts                                                                                                                  |
+| `wm_request_rename`        | `label`                                            | Signal the chrome webview to enter inline rename mode for the given tab (emits `wm:request-rename` cross-webview)                                                                                                        |
+| `wm_toggle_maximize_stack` | `path`                                             | Toggle maximized state for a Stack — expands it to fill the full content area; a second call restores the previous layout                                                                                                |
 
 ## Events (Rust → chrome)
 
-| Event                      | Payload                                                              | Emitted by                                                               |
-| -------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| `wm:layout`                | `LayoutSnapshot` (panels not in Stacks + window size)                | Every tree mutation                                                      |
-| `wm:host-layout`           | `HostLayout` (`stacks[]` with `tabs[{label,title}]` + `splitters[]`) | Every tree mutation + on window resize                                   |
-| `wm:external-launched`     | `{ appId, url, title, family, version }`                             | `wm_open` when a panel is sent to an out-of-process host                 |
-| `wm:engine-missing`        | `{ family, version, path, hint }`                                    | `spawn_external_host` when a non-Electron runtime folder isn't installed |
-| `engine:download:start`    | `{ family, version, total }`                                         | `wm_engine_install` — download begins                                    |
-| `engine:download:progress` | `{ family, version, total, downloaded }`                             | `wm_engine_install` — bytes received                                     |
-| `engine:download:complete` | `{ family, version, total, downloaded, path }`                       | `wm_engine_install` — install finished                                   |
-| `engine:download:error`    | `{ family, version, message }`                                       | `wm_engine_install` — download or verification failed                    |
+| Event                      | Payload                                                                    | Emitted by                                                                                   |
+| -------------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `wm:layout`                | `LayoutSnapshot` (panels not in Stacks + window size)                      | Every tree mutation                                                                          |
+| `wm:host-layout`           | `HostLayout` (`stacks[]` with `tabs[{label,title}]` + `splitters[]`)       | Every tree mutation + on window resize                                                       |
+| `wm:external-launched`     | `{ appId, url, title, family, version }`                                   | `wm_open` when a panel is sent to an out-of-process host                                     |
+| `wm:engine-missing`        | `{ family, version, path, hint }`                                          | `spawn_external_host` when a non-Electron runtime folder isn't installed                     |
+| `engine:download:start`    | `{ family, version, total }`                                               | `wm_engine_install` — download begins                                                        |
+| `engine:download:progress` | `{ family, version, total, downloaded }`                                   | `wm_engine_install` — bytes received                                                         |
+| `engine:download:complete` | `{ family, version, total, downloaded, path }`                             | `wm_engine_install` — install finished                                                       |
+| `engine:download:error`    | `{ family, version, message }`                                             | `wm_engine_install` — download or verification failed                                        |
+| `wm:ctx-menu`              | `{ x, y, stackPath, nTabs, tabLabel?, appId?, displayName?, zoomFactor? }` | `wm_ctx_menu_open` — tells the overlay webview to show a menu                                |
+| `wm:request-rename`        | `{ label }`                                                                | `wm_request_rename` — tells the chrome webview to enter inline rename mode for the given tab |
 
 ---
 
@@ -274,15 +279,15 @@ Colors, spacing, and hover states live in [`src/wm.css`](src/wm.css). Key blocks
 
 ### Customising the tab context menu
 
-Right-clicking any tab or tab-group strip opens a floating menu rendered by a dedicated `wm-overlay` child webview. Because the overlay sits above all content webviews in z-order, the menu is always visible — even over native browser panels.
+Right-clicking any tab opens a floating menu rendered by a dedicated `wm-overlay` child webview. Because the overlay sits above all content webviews in z-order, the menu is always visible — even over native browser panels.
 
 #### How the overlay works
 
 ```
-Right-click on .wm-tabstrip (chrome webview)
+Right-click on a tab (.wm-tabstrip, chrome webview)
   │
   ├─ e.preventDefault()        ← suppresses native browser menu
-  └─ invoke("wm_ctx_menu_open", { x, y, stackPath, nTabs })
+  └─ invoke("wm_ctx_menu_open", { x, y, stackPath, nTabs, tabLabel, appId, … })
        │
        ▼ Rust (lib.rs)
        ├─ recreates wm-overlay webview as last child if stale
@@ -296,152 +301,134 @@ Right-click on .wm-tabstrip (chrome webview)
 
 Clicking outside the menu (or pressing Escape) calls `wm_ctx_menu_close`, which parks the overlay back off-screen at `(-20000, -20000)` without destroying it.
 
-#### Adding a new menu item — frontend only
+#### Built-in menu layout
 
-For actions that are already expressible via an existing IPC command, no Rust changes are needed. Edit [`src/components/OverlayApp.tsx`](src/components/OverlayApp.tsx):
-
-```tsx
-// OverlayApp.tsx — add a second button inside the menu div
-<button
-  type="button"
-  role="menuitem"
-  className="wm-tab-ctx-menu__item"
-  onClick={() => {
-    invoke("wm_rename_tab", {
-      label: menu.activeTabLabel, // see "passing extra data" below
-      title: "New Title",
-    }).catch(console.error);
-    dismiss();
-  }}
->
-  Rename tab
-</button>
+```
+┌─────────────────────┐
+│ Rename              │  double-click shortcut → inline tab rename
+│ Reset name          │  clears user override, reverts to app title
+├─────────────────────┤
+│ Zoom              › │  fly-out: 75 / 90 / 100 / 110 / 125 / 150 / 200 %
+│ Reset zoom          │  returns webview to 100 %
+├─────────────────────┤  ← separator auto-inserted when custom items present
+│ [your items here]   │  ← registry items (see below)
+├─────────────────────┤
+│ Close tab           │  destroys the webview
+├─────────────────────┤
+│ Close group (N tabs)│  always shown, even on strip right-click
+└─────────────────────┘
 ```
 
-Use `wm-tab-ctx-menu__item--danger` for destructive actions (red hover):
+#### Adding custom items via the registry
 
-```tsx
-className = "wm-tab-ctx-menu__item wm-tab-ctx-menu__item--danger";
-```
+**File:** [`src/components/contextMenuItems.ts`](src/components/contextMenuItems.ts)
 
-#### Passing extra data to the menu
-
-`CtxMenuPayload` is the interface shared between Rust and the overlay. Extend it when the menu needs more context.
-
-**1. Update the Rust struct** in `wm_ctx_menu_open` (`lib.rs`):
-
-```rust
-app.emit(
-    "wm:ctx-menu",
-    serde_json::json!({
-        "x": x,
-        "y": y,
-        "stackPath": stack_path,
-        "nTabs": n_tabs,
-        "activeTabLabel": active_tab_label,  // ← new field
-    }),
-)
-```
-
-Retrieve the value from the layout tree before the emit:
-
-```rust
-// inside wm_ctx_menu_open, after the ready-wait
-let active_tab_label: String = {
-    // tree is a State<'_, LayoutTree> — add it to the command signature
-    tree.with(|inner| {
-        let node = inner.find_stack(&stack_path)?;
-        node.tabs.get(node.active).map(|t| t.label.clone())
-    }).unwrap_or_default()
-};
-```
-
-**2. Update the TypeScript interface** in `OverlayApp.tsx`:
+Custom items are registered per FDC3 `appId`. Use the special key `"*"` for items that appear on every tab regardless of app. Global items render before app-specific ones; both render between the built-in zoom section and Close tab.
 
 ```ts
-interface CtxMenuPayload {
-  x: number;
-  y: number;
-  stackPath: number[];
-  nTabs: number;
-  activeTabLabel: string; // ← new field
+import { registerCtxMenuItems } from "./components/contextMenuItems";
+import { invoke } from "@tauri-apps/api/core";
+
+registerCtxMenuItems("my-app-id", [
+  {
+    label: "Reload",
+    onClick: ({ label }, dismiss) => {
+      invoke("wm_reload_panel", { label }).catch(console.error);
+      dismiss();
+    },
+  },
+  {
+    label: "Clear data",
+    danger: true, // renders with a red hover state
+    onClick: ({ label }, dismiss) => {
+      invoke("my_clear_command", { label }).catch(console.error);
+      dismiss();
+    },
+  },
+]);
+```
+
+Call `registerCtxMenuItems` at module load time from a file imported in [`src/main.tsx`](src/main.tsx) — before any user interaction occurs.
+
+**`CtxMenuItemDef` shape:**
+
+```ts
+interface CtxMenuItemDef {
+  label: string; // text shown in the menu button
+  danger?: boolean; // true → red hover; use for destructive actions
+  onClick: (ctx: CtxMenuContext, dismiss: () => void) => void;
 }
 ```
 
-**3. Add the Rust command signature** if the command is new:
+Always call `dismiss()` inside `onClick` to close the menu after the action.
+
+**`CtxMenuContext` fields available in `onClick`:**
+
+| Field         | Type                  | Description                                               |
+| ------------- | --------------------- | --------------------------------------------------------- |
+| `appId`       | `string`              | FDC3 App Directory identifier                             |
+| `label`       | `string`              | Stable webview label — use this to target Tauri commands  |
+| `title`       | `string`              | App-provided title                                        |
+| `displayName` | `string \| undefined` | User-set display name override; `undefined` = no override |
+| `stackPath`   | `number[]`            | Path to the containing Stack node in the layout tree      |
+| `nTabs`       | `number`              | Total tabs in this stack                                  |
+
+#### Adding a new Rust command for a menu action
+
+If your menu item needs a new backend operation, add it to [`layout/commands.rs`](src-tauri/src/layout/commands.rs) for tree mutations, or inline in [`lib.rs`](src-tauri/src/lib.rs) for anything else:
 
 ```rust
+// layout/commands.rs
 #[tauri::command]
-async fn wm_ctx_menu_open(
-    x: f64,
-    y: f64,
-    stack_path: Vec<usize>,
-    n_tabs: usize,
-    overlay: State<'_, OverlayState>,
-    tree: State<'_, LayoutTree>,   // ← add if reading from the tree
-    app: AppHandle,
-) -> Result<(), String> { … }
-```
-
-Register any new IPC command in the `invoke_handler!` list at the bottom of `lib.rs`.
-
-#### Adding a new Rust command for the action
-
-If the menu item needs a new backend operation:
-
-**1. Define the command in `lib.rs`** (or in `layout/commands.rs` for tree mutations):
-
-```rust
-#[tauri::command]
-fn wm_duplicate_tab(
+pub async fn wm_my_action(
     label: String,
-    tree: State<'_, LayoutTree>,
+    store: State<'_, LayoutTree>,
     app: AppHandle,
 ) -> Result<(), String> {
-    // … mutate tree, reflow, emit …
+    // … mutate store, reflow, emit …
     Ok(())
 }
 ```
 
-**2. Register it**:
+Register it in `lib.rs`:
 
 ```rust
 .invoke_handler(tauri::generate_handler![
     // … existing entries …
-    wm_duplicate_tab,
+    wm_my_action,
 ])
 ```
 
-**3. Call it from the menu button**:
+Then call it from your registry item:
 
-```tsx
-invoke("wm_duplicate_tab", { label: menu.activeTabLabel }).catch(console.error);
-dismiss();
+```ts
+onClick: ({ label }, dismiss) => {
+  invoke("wm_my_action", { label }).catch(console.error);
+  dismiss();
+},
 ```
-
-#### Also pass `stackPath` into the invoke
-
-The IPC command receives `stackPath: number[]` and `nTabs: number` from the menu payload by default. That's enough to target `wm_close_stack` (the built-in "Close group" action). For tab-level actions you also need the active tab's webview `label`, which must be threaded through as described above.
 
 #### Styling
 
-All menu styles are in [`src/wm.css`](src/wm.css) under the `/* Right-click context menu */` block:
+All menu styles live in [`src/wm.css`](src/wm.css). Key classes:
 
-| Class                            | Role                                               |
-| -------------------------------- | -------------------------------------------------- |
-| `.wm-tab-ctx-menu`               | Floating container (dark card, `min-width: 180px`) |
-| `.wm-tab-ctx-menu__item`         | A single menu button (full-width, 12 px text)      |
-| `.wm-tab-ctx-menu__item--danger` | Modifier — red hover state for destructive actions |
+| Class                                 | Role                                               |
+| ------------------------------------- | -------------------------------------------------- |
+| `.wm-tab-ctx-menu`                    | Floating container (`min-width: 180px`, dark card) |
+| `.wm-tab-ctx-menu__item`              | Menu button (full-width, 12 px text)               |
+| `.wm-tab-ctx-menu__item--danger`      | Red hover — destructive actions                    |
+| `.wm-tab-ctx-menu__separator`         | Thin horizontal rule between sections              |
+| `.wm-tab-ctx-menu__submenu-wrap`      | Relative wrapper for fly-out submenus              |
+| `.wm-tab-ctx-menu__submenu`           | Absolutely-positioned fly-out panel                |
+| `.wm-tab-ctx-menu__item--submenu`     | Item with a `›` arrow indicating a submenu         |
+| `.wm-tab-ctx-menu__item--zoom-active` | Highlights the currently active zoom level         |
+| `.wm-tab-ctx-menu__zoom-check`        | Fixed-width checkmark column inside zoom items     |
 
-To widen the menu or change its appearance, edit only those classes. The menu is automatically kept within the viewport (8 px margin) by the clamping logic in `OverlayApp`.
+The menu position is automatically clamped to stay within the viewport (8 px margin).
 
-#### Adding a separator
+#### Epic 08 upgrade path
 
-```tsx
-<hr style={{ margin: "4px 0", border: "none", borderTop: "1px solid #334155" }} />
-```
-
-Place it between `<button>` elements inside the menu `<div>`.
+When the dynamic plugin system (Epic 08) lands, `window.OT.plugins.get("contextMenu")` will supersede this static registry. Existing `registerCtxMenuItems` calls will continue to work without modification.
 
 ### Pointing at a different App Directory
 
@@ -552,6 +539,9 @@ apps/one-terminal/
 │   ├── components/
 │   │   ├── Header.tsx            app launcher + panel chips + window controls
 │   │   ├── TabStripLayer.tsx     tab strips, overflow menu, inline rename
+│   │   ├── OverlayApp.tsx        overlay webview root — context menus
+│   │   ├── panelHeaders.tsx      registry: custom header content per appId
+│   │   ├── contextMenuItems.ts   registry: custom context-menu items per appId
 │   │   ├── SplitterHandleLayer.tsx  draggable resize bars
 │   │   ├── PanelHeaderLayer.tsx  chrome headers on non-stack leaves
 │   │   ├── DropZoneLayer.tsx     drop-target highlight during tab drag

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import type { StackHeader } from "../types";
 import { headerContentFor } from "./panelHeaders";
 
@@ -103,6 +104,19 @@ function TabStrip({ stack, onTabPointerDown, onTabClose }: TabStripProps) {
     return () => document.removeEventListener("pointerdown", onDown);
   }, [menuOpen]);
 
+  // Listen for wm:request-rename from the overlay (via wm_request_rename command).
+  // When a tab in this strip matches the requested label, enter inline edit mode.
+  useEffect(() => {
+    const unlisten = listen<{ label: string }>("wm:request-rename", (e) => {
+      const tab = stack.tabs.find((t) => t.label === e.payload.label);
+      if (!tab) return;
+      setEditing({ label: tab.label, draft: tab.displayName ?? tab.title });
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, [stack.tabs]);
+
   const closeGroup = useCallback(() => {
     invoke("wm_close_stack", { path: stack.path }).catch(console.error);
   }, [stack.path]);
@@ -112,15 +126,11 @@ function TabStrip({ stack, onTabPointerDown, onTabClose }: TabStripProps) {
   }, [stack.path]);
 
   const n = stack.tabs.length;
-  // Reserve space for the always-visible close-group button before deciding
-  // how many tabs fit. Without this, tabs at the right edge get clipped by
-  // the overflow:hidden on `.wm-tabstrip`.
   const tabAreaWidth = Math.max(0, stripWidth - RIGHT_CLUSTER_WIDTH);
   const fullFit = n * MIN_TAB_WIDTH <= tabAreaWidth;
   let visibleCount = fullFit
     ? n
     : Math.max(0, Math.floor((tabAreaWidth - OVERFLOW_BTN_WIDTH) / MIN_TAB_WIDTH));
-  // Keep the active tab visible even if it would otherwise be hidden.
   if (visibleCount <= stack.active && visibleCount > 0) {
     visibleCount = stack.active + 1;
   }
@@ -134,14 +144,16 @@ function TabStrip({ stack, onTabPointerDown, onTabClose }: TabStripProps) {
     [stack.path]
   );
 
-  const commitRename = useCallback((label: string, title: string, fallback: string) => {
-    const trimmed = title.trim();
+  // Commit an inline rename. Empty draft → reset display name to app title (null).
+  // Unchanged → no-op. Otherwise set the user override via wm_rename_panel.
+  const commitRename = useCallback((label: string, draft: string, originalDisplay: string) => {
+    const trimmed = draft.trim();
     setEditing(null);
-    // Empty input → keep the existing title (no backend call). Non-empty
-    // but unchanged → still no-op. Otherwise send to Rust, which emits a
-    // fresh host-layout so the strip re-renders with the new title.
-    if (!trimmed || trimmed === fallback) return;
-    invoke("wm_rename_tab", { label, title: trimmed }).catch(console.error);
+    if (trimmed === originalDisplay) return;
+    invoke("wm_rename_panel", {
+      label,
+      displayName: trimmed || null,
+    }).catch(console.error);
   }, []);
 
   return (
@@ -150,12 +162,16 @@ function TabStrip({ stack, onTabPointerDown, onTabClose }: TabStripProps) {
       className="wm-tabstrip"
       data-stack-path={stack.path.join(".")}
       onContextMenu={(e) => {
+        // Strip-level right-click (not on a tab): show close-group only.
         e.preventDefault();
         invoke("wm_ctx_menu_open", {
           x: e.clientX,
           y: e.clientY,
           stackPath: stack.path,
           nTabs: stack.tabs.length,
+          tabLabel: null,
+          displayName: null,
+          zoomFactor: null,
         }).catch(console.error);
       }}
       style={{
@@ -168,20 +184,35 @@ function TabStrip({ stack, onTabPointerDown, onTabClose }: TabStripProps) {
     >
       {stack.tabs.slice(0, visibleCount).map((tab, i) => {
         const isEditing = editing?.label === tab.label;
+        // Effective display label: user override first, then app-provided title.
+        const displayLabel = tab.displayName ?? tab.title;
         return (
           <div
             key={tab.label}
             className={`wm-tab${i === stack.active ? " wm-tab--active" : ""}`}
-            title={tab.title}
+            title={displayLabel}
             data-tab-index={i}
-            // Swallow pointerdown while editing so the tab-drag gesture
-            // doesn't arm on clicks inside the rename input.
             onPointerDown={(e) => {
               if (isEditing) {
                 e.stopPropagation();
                 return;
               }
               onTabPointerDown?.(e, stack, i);
+            }}
+            onContextMenu={(e) => {
+              // Per-tab right-click: pass full tab metadata to the overlay.
+              e.preventDefault();
+              e.stopPropagation();
+              invoke("wm_ctx_menu_open", {
+                x: e.clientX,
+                y: e.clientY,
+                stackPath: stack.path,
+                nTabs: stack.tabs.length,
+                tabLabel: tab.label,
+                appId: tab.appId,
+                displayName: tab.displayName ?? null,
+                zoomFactor: tab.zoomFactor,
+              }).catch(console.error);
             }}
             style={{ touchAction: "none" }}
           >
@@ -191,11 +222,11 @@ function TabStrip({ stack, onTabPointerDown, onTabClose }: TabStripProps) {
                 autoFocus
                 value={editing.draft}
                 onChange={(e) => setEditing({ label: tab.label, draft: e.target.value })}
-                onBlur={() => commitRename(tab.label, editing.draft, tab.title)}
+                onBlur={() => commitRename(tab.label, editing.draft, displayLabel)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     e.preventDefault();
-                    commitRename(tab.label, editing.draft, tab.title);
+                    commitRename(tab.label, editing.draft, displayLabel);
                   } else if (e.key === "Escape") {
                     e.preventDefault();
                     setEditing(null);
@@ -210,17 +241,19 @@ function TabStrip({ stack, onTabPointerDown, onTabClose }: TabStripProps) {
                 className="wm-tab__label"
                 onDoubleClick={(e) => {
                   e.stopPropagation();
-                  setEditing({ label: tab.label, draft: tab.title });
+                  // Pre-fill with the effective display label so the user edits
+                  // what they see, not the raw app-provided title.
+                  setEditing({ label: tab.label, draft: displayLabel });
                 }}
               >
-                {headerContentFor(tab.appId)({ appId: tab.appId, title: tab.title })}
+                {headerContentFor(tab.appId)({ appId: tab.appId, title: displayLabel })}
               </span>
             )}
             {onTabClose && !isEditing && (
               <button
                 type="button"
                 className="wm-tab__close"
-                aria-label={`Close ${tab.title}`}
+                aria-label={`Close ${displayLabel}`}
                 onPointerDown={(e) => e.stopPropagation()}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -304,7 +337,7 @@ function TabStrip({ stack, onTabPointerDown, onTabClose }: TabStripProps) {
                   className={`wm-tab-overflow-menu__item${realIndex === stack.active ? " wm-tab-overflow-menu__item--active" : ""}`}
                   onClick={() => selectTab(realIndex)}
                 >
-                  {tab.title}
+                  {tab.displayName ?? tab.title}
                 </button>
               );
             })}

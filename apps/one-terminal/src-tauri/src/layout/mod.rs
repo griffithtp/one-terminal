@@ -11,6 +11,7 @@ pub mod docking;
 pub mod drag;
 pub mod host;
 pub mod node;
+pub mod persist;
 pub mod reflow;
 pub mod store;
 
@@ -55,6 +56,16 @@ pub struct PanelBounds {
     /// this as a small badge on the tab.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub engine_binding: Option<ot_core::engine::EngineBinding>,
+    /// User-set display name override. `None` means show `title`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
+    /// Webview zoom multiplier; `1.0` is 100 %.
+    #[serde(default = "default_zoom")]
+    pub zoom_factor: f64,
+}
+
+fn default_zoom() -> f64 {
+    1.0
 }
 
 /// Retained for frontend type compatibility. Always emitted empty by the
