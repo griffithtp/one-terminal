@@ -60,6 +60,7 @@ const ROOT_PACKAGE_SCRIPTS_OMIT = new Set([
   "create-migration",
   "build:scaffolder",
   "scaffold",
+  "test:scaffold",
 ]);
 
 // Root-level files that also become templates
