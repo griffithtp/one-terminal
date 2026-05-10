@@ -9,16 +9,23 @@
  */
 
 import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { extname, join, dirname } from "node:path";
+import { extname, join, dirname, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readdir, stat } from "node:fs/promises";
 
 const ROOT = join(fileURLToPath(import.meta.url), "../..");
+
 const outputArg = process.argv.indexOf("--output");
 const OUTPUT =
   outputArg !== -1
     ? process.argv[outputArg + 1]
     : join(ROOT, "packages/create-one-terminal/templates");
+
+const manifestArg = process.argv.indexOf("--manifest");
+const MANIFEST_PATH =
+  manifestArg !== -1
+    ? process.argv[manifestArg + 1]
+    : join(ROOT, "packages/create-one-terminal/static-manifest.json");
 
 // ── Binary file extensions — copied verbatim ──────────────────────────────────
 const BINARY_EXTENSIONS = new Set([".png", ".ico", ".icns", ".svg"]);
@@ -53,6 +60,7 @@ const ROOT_PACKAGE_SCRIPTS_OMIT = new Set([
   "create-migration",
   "build:scaffolder",
   "scaffold",
+  "test:scaffold",
 ]);
 
 // Root-level files that also become templates
@@ -138,6 +146,35 @@ const SUBSTITUTIONS: Array<[string, string]> = [
 // Matches: `  some content  # ot:if varName` or `  some content  // ot:if varName`
 const OT_IF_PATTERN = /^(.*?)\s*(?:#|\/\/)\s*ot:if\s+(\w+)\s*$/;
 
+// ── Dynamic detection ─────────────────────────────────────────────────────────
+// A file is dynamic if extract-templates inserted a known context variable
+// reference. Checking for the variable names (rather than bare `<%`) prevents
+// false positives from source files that might coincidentally contain `<%`.
+const CONTEXT_VARS = [
+  "workspaceName",
+  "orgScope",
+  "tauriIdentifier",
+  "displayName",
+  "snakeWorkspaceName",
+  "terminalDevPort",
+  "agentDevPort",
+  "tcpBrokerPort",
+  "fdc3BusPort",
+  "dacpBridgePort",
+  "appDirectoryPort",
+  "includeFdc3",
+  "scaffoldVersion",
+  "scaffoldedAt",
+];
+const DYNAMIC_PATTERN = new RegExp(`<%[\\s\\-=]*(?:if\\s*\\(\\s*)?(?:${CONTEXT_VARS.join("|")})`);
+
+function isDynamic(content: string): boolean {
+  return DYNAMIC_PATTERN.test(content);
+}
+
+// Collected during processing; written to MANIFEST_PATH at the end.
+const staticEntries: string[] = [];
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 console.log(`Extracting templates to: ${OUTPUT}`);
 
@@ -155,7 +192,10 @@ for (const { src, templateBase } of SOURCES) {
   await walkAndProcess(src, join(OUTPUT, templateBase));
 }
 
-console.log("Done.");
+await mkdir(dirname(MANIFEST_PATH), { recursive: true });
+await writeFile(MANIFEST_PATH, JSON.stringify({ static: staticEntries }, null, 2) + "\n", "utf8");
+
+console.log(`Done. ${staticEntries.length} static files recorded in manifest.`);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -227,9 +267,13 @@ async function processFile(src: string, destWithoutEjs: string): Promise<void> {
   content = applySubstitutions(content);
   content = applyConditionals(content);
 
-  const dest = destWithoutEjs + ".ejs";
-  await mkdir(dirname(dest), { recursive: true });
-  await writeFile(dest, content, "utf8");
+  if (isDynamic(content)) {
+    const dest = destWithoutEjs + ".ejs";
+    await mkdir(dirname(dest), { recursive: true });
+    await writeFile(dest, content, "utf8");
+  } else {
+    staticEntries.push(relative(ROOT, src));
+  }
 }
 
 function applySubstitutions(content: string): string {
