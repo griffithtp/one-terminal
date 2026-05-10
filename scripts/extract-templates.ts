@@ -150,13 +150,22 @@ const OT_IF_PATTERN = /^(.*?)\s*(?:#|\/\/)\s*ot:if\s+(\w+)\s*$/;
 // reference. Checking for the variable names (rather than bare `<%`) prevents
 // false positives from source files that might coincidentally contain `<%`.
 const CONTEXT_VARS = [
-  "workspaceName", "orgScope", "tauriIdentifier", "displayName", "snakeWorkspaceName",
-  "terminalDevPort", "agentDevPort", "tcpBrokerPort", "fdc3BusPort", "dacpBridgePort",
-  "appDirectoryPort", "includeFdc3", "scaffoldVersion", "scaffoldedAt",
+  "workspaceName",
+  "orgScope",
+  "tauriIdentifier",
+  "displayName",
+  "snakeWorkspaceName",
+  "terminalDevPort",
+  "agentDevPort",
+  "tcpBrokerPort",
+  "fdc3BusPort",
+  "dacpBridgePort",
+  "appDirectoryPort",
+  "includeFdc3",
+  "scaffoldVersion",
+  "scaffoldedAt",
 ];
-const DYNAMIC_PATTERN = new RegExp(
-  `<%[\\s\\-=]*(?:if\\s*\\(\\s*)?(?:${CONTEXT_VARS.join("|")})`
-);
+const DYNAMIC_PATTERN = new RegExp(`<%[\\s\\-=]*(?:if\\s*\\(\\s*)?(?:${CONTEXT_VARS.join("|")})`);
 
 function isDynamic(content: string): boolean {
   return DYNAMIC_PATTERN.test(content);
@@ -183,11 +192,7 @@ for (const { src, templateBase } of SOURCES) {
 }
 
 await mkdir(dirname(MANIFEST_PATH), { recursive: true });
-await writeFile(
-  MANIFEST_PATH,
-  JSON.stringify({ static: staticEntries }, null, 2) + "\n",
-  "utf8"
-);
+await writeFile(MANIFEST_PATH, JSON.stringify({ static: staticEntries }, null, 2) + "\n", "utf8");
 
 console.log(`Done. ${staticEntries.length} static files recorded in manifest.`);
 
