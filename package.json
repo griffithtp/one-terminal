@@ -33,6 +33,7 @@
     "create-migration": "npx tsx scripts/create-migration.ts",
     "build:scaffolder": "npm -w create-one-terminal run build",
     "scaffold": "node packages/create-one-terminal/dist/index.js",
+    "test:scaffold": "npx tsx scripts/test-scaffold.ts",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
