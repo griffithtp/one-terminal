@@ -392,6 +392,9 @@ async fn wm_ctx_menu_open(
     y: f64,
     stack_path: Vec<usize>,
     n_tabs: usize,
+    tab_label: Option<String>,
+    display_name: Option<String>,
+    zoom_factor: Option<f64>,
     overlay: State<'_, OverlayState>,
     app: AppHandle,
 ) -> Result<(), String> {
@@ -486,11 +489,22 @@ async fn wm_ctx_menu_open(
             "y": y,
             "stackPath": stack_path,
             "nTabs": n_tabs,
+            "tabLabel": tab_label,
+            "displayName": display_name,
+            "zoomFactor": zoom_factor,
         }),
     )
     .map_err(|e| e.to_string())?;
 
     Ok(())
+}
+
+/// Signal the chrome webview to enter inline rename mode for `label`.
+/// Emitted as `wm:request-rename` so the tab strip can focus the input
+/// without a backend round-trip for state.
+#[tauri::command]
+fn wm_request_rename(label: String, app: AppHandle) {
+    let _ = app.emit("wm:request-rename", serde_json::json!({ "label": label }));
 }
 
 /// Hide the overlay by parking it offscreen.  Called by the overlay itself
@@ -702,6 +716,7 @@ pub fn run() {
             wm_overlay_ready,
             wm_ctx_menu_open,
             wm_ctx_menu_close,
+            wm_request_rename,
         ])
         .run(tauri::generate_context!())
         .expect("error while running one-terminal");

@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
 import type { HostLayout } from "../types";
 
 interface UseHostLayoutResult {
@@ -20,10 +21,28 @@ interface UseHostLayoutResult {
  */
 export function useHostLayout(): UseHostLayoutResult {
   const [host, setHost] = useState<HostLayout | null>(null);
+  // Track which labels have had zoom restored so we only do it once per session.
+  const zoomRestored = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     const unlisten = listen<HostLayout>("wm:host-layout", (e) => {
       setHost(e.payload);
+
+      // On the first layout snapshot we restore any persisted non-default zoom
+      // values. Rust already has the zoom in its store and applies it when the
+      // webview is created, but wm_set_zoom also calls webview.set_zoom() — we
+      // call it here so WKWebView/WebView2 picks it up after the webview has
+      // fully initialised (which may happen after the first layout event).
+      for (const stack of e.payload.stacks) {
+        for (const tab of stack.tabs) {
+          if (tab.zoomFactor !== 1.0 && !zoomRestored.current.has(tab.label)) {
+            zoomRestored.current.add(tab.label);
+            invoke("wm_set_zoom", { label: tab.label, zoomFactor: tab.zoomFactor }).catch(
+              console.error
+            );
+          }
+        }
+      }
     });
     return () => {
       unlisten.then((fn) => fn());
