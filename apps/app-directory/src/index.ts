@@ -44,9 +44,20 @@ app.use("/v2", router);
 // Serve the built Vite frontend. Any non-API path falls back to index.html so
 // the React router can handle client-side navigation.
 
-app.use(express.static(UI_DIST));
+app.use(
+  express.static(UI_DIST, {
+    maxAge: "1y",
+    immutable: true,
+    setHeaders(res, filePath) {
+      if (filePath.endsWith(".html")) {
+        res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+      }
+    },
+  })
+);
 
 app.get(/^(?!\/v2|\/health).*/, (_req, res) => {
+  res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
   res.sendFile(join(UI_DIST, "index.html"));
 });
 
