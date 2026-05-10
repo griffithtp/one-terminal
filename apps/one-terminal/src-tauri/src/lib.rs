@@ -386,6 +386,7 @@ fn wm_overlay_ready(overlay: State<'_, OverlayState>) {
 /// was opened since it was last created), it is closed and recreated on the
 /// main thread so it regains the topmost z-order, then this function awaits
 /// the overlay's ready signal before emitting `wm:ctx-menu`.
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 async fn wm_ctx_menu_open(
     x: f64,

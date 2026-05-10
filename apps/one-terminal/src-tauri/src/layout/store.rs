@@ -347,9 +347,7 @@ impl LayoutTree {
         let clamped = zoom_factor.clamp(0.5, 2.0);
         let found = {
             let mut g = self.inner.write().unwrap();
-            let Some(meta) = g.meta.get_mut(label) else {
-                return None;
-            };
+            let meta = g.meta.get_mut(label)?;
             meta.zoom_factor = clamped;
             true
         };
