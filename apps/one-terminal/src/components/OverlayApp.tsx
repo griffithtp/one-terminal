@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
+import { ctxMenuItemsFor, type CtxMenuContext } from "./contextMenuItems";
 
 interface CtxMenuPayload {
   x: number;
@@ -9,6 +10,7 @@ interface CtxMenuPayload {
   nTabs: number;
   /** Set when a specific tab was right-clicked. */
   tabLabel?: string;
+  appId?: string;
   displayName?: string;
   zoomFactor?: number;
 }
@@ -86,6 +88,15 @@ export function OverlayApp() {
 
   const currentZoom = menu.zoomFactor ?? 1.0;
   const hasTab = !!menu.tabLabel;
+  const customItems = hasTab ? ctxMenuItemsFor(menu.appId ?? "") : [];
+  const customCtx: CtxMenuContext = {
+    appId: menu.appId ?? "",
+    label: menu.tabLabel ?? "",
+    title: menu.displayName ?? "",
+    displayName: menu.displayName,
+    stackPath: menu.stackPath,
+    nTabs: menu.nTabs,
+  };
 
   return (
     <>
@@ -182,6 +193,23 @@ export function OverlayApp() {
             >
               Reset zoom
             </button>
+
+            {customItems.length > 0 && (
+              <>
+                <div className="wm-tab-ctx-menu__separator" role="separator" />
+                {customItems.map((item, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    role="menuitem"
+                    className={`wm-tab-ctx-menu__item${item.danger ? " wm-tab-ctx-menu__item--danger" : ""}`}
+                    onClick={() => item.onClick(customCtx, dismiss)}
+                  >
+                    {item.label}
+                  </button>
+                ))}
+              </>
+            )}
 
             <div className="wm-tab-ctx-menu__separator" role="separator" />
 

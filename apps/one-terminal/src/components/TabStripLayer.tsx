@@ -209,6 +209,7 @@ function TabStrip({ stack, onTabPointerDown, onTabClose }: TabStripProps) {
                 stackPath: stack.path,
                 nTabs: stack.tabs.length,
                 tabLabel: tab.label,
+                appId: tab.appId,
                 displayName: tab.displayName ?? null,
                 zoomFactor: tab.zoomFactor,
               }).catch(console.error);
