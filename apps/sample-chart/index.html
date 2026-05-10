@@ -462,5 +462,8 @@ try {
 new ResizeObserver(() => { if (chartData.length) drawChart(chartData); }).observe(canvas);
 </script>
 
+<script>
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(console.error);
+</script>
 </body>
 </html>
