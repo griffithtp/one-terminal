@@ -422,6 +422,7 @@ impl LayoutTree {
     /// Like [`add_panel`] but uses a caller-supplied `label` instead of
     /// generating one. Used by the webview pool so the pre-created blank
     /// webview's label and the tree's panel id stay in sync.
+    #[allow(clippy::too_many_arguments)]
     pub fn add_panel_with_label(
         &self,
         label: &str,
@@ -443,6 +444,7 @@ impl LayoutTree {
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn insert_panel(
         &self,
         label: String,
