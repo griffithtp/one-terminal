@@ -6,7 +6,6 @@ mod webview_pool;
 
 use config::TerminalConfig;
 use engine::WmHostIdentity;
-use webview_pool::WebviewPool;
 use layout::commands::{
     close_tab, update_layout, wm_begin_tab_drag, wm_close_leaf, wm_close_stack, wm_end_tab_drag,
     wm_rename_panel, wm_rename_tab, wm_set_active_tab, wm_set_zoom, wm_splitter_drag,
@@ -20,6 +19,7 @@ use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Manager, State, WebviewBuilder, WebviewUrl};
 use tauri::{Emitter, LogicalPosition, LogicalSize};
 use tokio::sync::oneshot;
+use webview_pool::WebviewPool;
 
 const CHROME: &str = "wm-chrome";
 const OVERLAY: &str = "wm-overlay";
@@ -311,11 +311,19 @@ async fn wm_open(
         match &result {
             Ok(_) => eprintln!(
                 "[wm_open] {} (panel={panel_id_for_main}, url={url_for_main})",
-                if using_pool { "pool->navigate Ok" } else { "add_child Ok" }
+                if using_pool {
+                    "pool->navigate Ok"
+                } else {
+                    "add_child Ok"
+                }
             ),
             Err(e) => eprintln!(
                 "[wm_open] {} Err: {e}",
-                if using_pool { "pool->navigate" } else { "add_child" }
+                if using_pool {
+                    "pool->navigate"
+                } else {
+                    "add_child"
+                }
             ),
         }
         let _ = tx.send(result);
