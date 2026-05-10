@@ -229,8 +229,18 @@ fn walk(
                 };
                 path.push(i);
                 walk(
-                    child, path, cx, cy, cw, ch, stacks, splitters, titles, app_ids,
-                    display_names, zoom_factors,
+                    child,
+                    path,
+                    cx,
+                    cy,
+                    cw,
+                    ch,
+                    stacks,
+                    splitters,
+                    titles,
+                    app_ids,
+                    display_names,
+                    zoom_factors,
                 );
                 path.pop();
                 offset += axis_share;

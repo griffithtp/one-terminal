@@ -146,18 +146,15 @@ function TabStrip({ stack, onTabPointerDown, onTabClose }: TabStripProps) {
 
   // Commit an inline rename. Empty draft → reset display name to app title (null).
   // Unchanged → no-op. Otherwise set the user override via wm_rename_panel.
-  const commitRename = useCallback(
-    (label: string, draft: string, originalDisplay: string) => {
-      const trimmed = draft.trim();
-      setEditing(null);
-      if (trimmed === originalDisplay) return;
-      invoke("wm_rename_panel", {
-        label,
-        displayName: trimmed || null,
-      }).catch(console.error);
-    },
-    []
-  );
+  const commitRename = useCallback((label: string, draft: string, originalDisplay: string) => {
+    const trimmed = draft.trim();
+    setEditing(null);
+    if (trimmed === originalDisplay) return;
+    invoke("wm_rename_panel", {
+      label,
+      displayName: trimmed || null,
+    }).catch(console.error);
+  }, []);
 
   return (
     <div

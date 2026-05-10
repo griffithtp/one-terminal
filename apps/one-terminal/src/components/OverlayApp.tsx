@@ -159,9 +159,7 @@ export function OverlayApp() {
                           dismiss();
                         }}
                       >
-                        <span className="wm-tab-ctx-menu__zoom-check">
-                          {active ? "✓" : ""}
-                        </span>
+                        <span className="wm-tab-ctx-menu__zoom-check">{active ? "✓" : ""}</span>
                         {ZOOM_LABEL[level]}
                       </button>
                     );
