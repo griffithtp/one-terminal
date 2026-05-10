@@ -10,6 +10,7 @@
     "apps/one-terminal/src/components/PanelHeaderLayer.tsx",
     "apps/one-terminal/src/components/SplitterHandleLayer.tsx",
     "apps/one-terminal/src/components/TabStripLayer.tsx",
+    "apps/one-terminal/src/components/contextMenuItems.ts",
     "apps/one-terminal/src/components/panelHeaders.tsx",
     "apps/one-terminal/src/hooks/useHostLayout.ts",
     "apps/one-terminal/src/hooks/useLayout.ts",
