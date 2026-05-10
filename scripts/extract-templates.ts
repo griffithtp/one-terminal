@@ -163,7 +163,7 @@ function isDynamic(content: string): boolean {
 }
 
 // Collected during processing; written to MANIFEST_PATH at the end.
-const staticEntries: Array<{ src: string; dest: string }> = [];
+const staticEntries: string[] = [];
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 console.log(`Extracting templates to: ${OUTPUT}`);
@@ -266,10 +266,7 @@ async function processFile(src: string, destWithoutEjs: string): Promise<void> {
     await mkdir(dirname(dest), { recursive: true });
     await writeFile(dest, content, "utf8");
   } else {
-    staticEntries.push({
-      src: relative(ROOT, src),
-      dest: relative(OUTPUT, destWithoutEjs),
-    });
+    staticEntries.push(relative(ROOT, src));
   }
 }
 

@@ -1,456 +1,117 @@
 {
   "static": [
-    {
-      "src": "Cargo.toml",
-      "dest": "Cargo.toml"
-    },
-    {
-      "src": ".gitignore",
-      "dest": ".gitignore"
-    },
-    {
-      "src": "apps/one-terminal/src/App.tsx",
-      "dest": "apps/one-terminal/src/App.tsx"
-    },
-    {
-      "src": "apps/one-terminal/src/components/DropZoneLayer.tsx",
-      "dest": "apps/one-terminal/src/components/DropZoneLayer.tsx"
-    },
-    {
-      "src": "apps/one-terminal/src/components/GhostLayer.tsx",
-      "dest": "apps/one-terminal/src/components/GhostLayer.tsx"
-    },
-    {
-      "src": "apps/one-terminal/src/components/Header.tsx",
-      "dest": "apps/one-terminal/src/components/Header.tsx"
-    },
-    {
-      "src": "apps/one-terminal/src/components/OverlayApp.tsx",
-      "dest": "apps/one-terminal/src/components/OverlayApp.tsx"
-    },
-    {
-      "src": "apps/one-terminal/src/components/PanelHeaderLayer.tsx",
-      "dest": "apps/one-terminal/src/components/PanelHeaderLayer.tsx"
-    },
-    {
-      "src": "apps/one-terminal/src/components/SplitterHandleLayer.tsx",
-      "dest": "apps/one-terminal/src/components/SplitterHandleLayer.tsx"
-    },
-    {
-      "src": "apps/one-terminal/src/components/TabStripLayer.tsx",
-      "dest": "apps/one-terminal/src/components/TabStripLayer.tsx"
-    },
-    {
-      "src": "apps/one-terminal/src/components/panelHeaders.tsx",
-      "dest": "apps/one-terminal/src/components/panelHeaders.tsx"
-    },
-    {
-      "src": "apps/one-terminal/src/hooks/useHostLayout.ts",
-      "dest": "apps/one-terminal/src/hooks/useHostLayout.ts"
-    },
-    {
-      "src": "apps/one-terminal/src/hooks/useLayout.ts",
-      "dest": "apps/one-terminal/src/hooks/useLayout.ts"
-    },
-    {
-      "src": "apps/one-terminal/src/hooks/useTabDrag.ts",
-      "dest": "apps/one-terminal/src/hooks/useTabDrag.ts"
-    },
-    {
-      "src": "apps/one-terminal/src/main.tsx",
-      "dest": "apps/one-terminal/src/main.tsx"
-    },
-    {
-      "src": "apps/one-terminal/src/types.ts",
-      "dest": "apps/one-terminal/src/types.ts"
-    },
-    {
-      "src": "apps/one-terminal/src/wm.css",
-      "dest": "apps/one-terminal/src/wm.css"
-    },
-    {
-      "src": "apps/one-terminal/src-tauri/capabilities/default.json",
-      "dest": "apps/one-terminal/src-tauri/capabilities/default.json"
-    },
-    {
-      "src": "apps/one-terminal/src-tauri/src/config.rs",
-      "dest": "apps/one-terminal/src-tauri/src/config.rs"
-    },
-    {
-      "src": "apps/one-terminal/src-tauri/src/engine.rs",
-      "dest": "apps/one-terminal/src-tauri/src/engine.rs"
-    },
-    {
-      "src": "apps/one-terminal/src-tauri/src/engines.rs",
-      "dest": "apps/one-terminal/src-tauri/src/engines.rs"
-    },
-    {
-      "src": "apps/one-terminal/src-tauri/src/layout/commands.rs",
-      "dest": "apps/one-terminal/src-tauri/src/layout/commands.rs"
-    },
-    {
-      "src": "apps/one-terminal/src-tauri/src/layout/docking.rs",
-      "dest": "apps/one-terminal/src-tauri/src/layout/docking.rs"
-    },
-    {
-      "src": "apps/one-terminal/src-tauri/src/layout/drag.rs",
-      "dest": "apps/one-terminal/src-tauri/src/layout/drag.rs"
-    },
-    {
-      "src": "apps/one-terminal/src-tauri/src/layout/host.rs",
-      "dest": "apps/one-terminal/src-tauri/src/layout/host.rs"
-    },
-    {
-      "src": "apps/one-terminal/src-tauri/src/layout/mod.rs",
-      "dest": "apps/one-terminal/src-tauri/src/layout/mod.rs"
-    },
-    {
-      "src": "apps/one-terminal/src-tauri/src/layout/node.rs",
-      "dest": "apps/one-terminal/src-tauri/src/layout/node.rs"
-    },
-    {
-      "src": "apps/one-terminal/src-tauri/src/layout/reflow.rs",
-      "dest": "apps/one-terminal/src-tauri/src/layout/reflow.rs"
-    },
-    {
-      "src": "apps/one-terminal/src-tauri/src/layout/store.rs",
-      "dest": "apps/one-terminal/src-tauri/src/layout/store.rs"
-    },
-    {
-      "src": "apps/one-terminal/src-tauri/src/lib.rs",
-      "dest": "apps/one-terminal/src-tauri/src/lib.rs"
-    },
-    {
-      "src": "apps/one-terminal/tsconfig.json",
-      "dest": "apps/one-terminal/tsconfig.json"
-    },
-    {
-      "src": "apps/desktop-agent/src/bus/index.ts",
-      "dest": "apps/desktop-agent/src/bus/index.ts"
-    },
-    {
-      "src": "apps/desktop-agent/src/components/ActivityFeed.tsx",
-      "dest": "apps/desktop-agent/src/components/ActivityFeed.tsx"
-    },
-    {
-      "src": "apps/desktop-agent/src/components/BridgeVisualizer.tsx",
-      "dest": "apps/desktop-agent/src/components/BridgeVisualizer.tsx"
-    },
-    {
-      "src": "apps/desktop-agent/src/components/ChannelsPanel.tsx",
-      "dest": "apps/desktop-agent/src/components/ChannelsPanel.tsx"
-    },
-    {
-      "src": "apps/desktop-agent/src/components/ConnectionsPanel.tsx",
-      "dest": "apps/desktop-agent/src/components/ConnectionsPanel.tsx"
-    },
-    {
-      "src": "apps/desktop-agent/src/components/EngineDevOverride.tsx",
-      "dest": "apps/desktop-agent/src/components/EngineDevOverride.tsx"
-    },
-    {
-      "src": "apps/desktop-agent/src/components/IntentResolverModal.tsx",
-      "dest": "apps/desktop-agent/src/components/IntentResolverModal.tsx"
-    },
-    {
-      "src": "apps/desktop-agent/src/components/InteropDashboard.tsx",
-      "dest": "apps/desktop-agent/src/components/InteropDashboard.tsx"
-    },
-    {
-      "src": "apps/desktop-agent/src/components/LauncherPanel.tsx",
-      "dest": "apps/desktop-agent/src/components/LauncherPanel.tsx"
-    },
-    {
-      "src": "apps/desktop-agent/src/hooks/useAppDirectory.ts",
-      "dest": "apps/desktop-agent/src/hooks/useAppDirectory.ts"
-    },
-    {
-      "src": "apps/desktop-agent/src/hooks/useCdaEvents.ts",
-      "dest": "apps/desktop-agent/src/hooks/useCdaEvents.ts"
-    },
-    {
-      "src": "apps/desktop-agent/src/hooks/useEngineOverride.ts",
-      "dest": "apps/desktop-agent/src/hooks/useEngineOverride.ts"
-    },
-    {
-      "src": "apps/desktop-agent/src/hooks/useFdcBus.ts",
-      "dest": "apps/desktop-agent/src/hooks/useFdcBus.ts"
-    },
-    {
-      "src": "apps/desktop-agent/src/main.tsx",
-      "dest": "apps/desktop-agent/src/main.tsx"
-    },
-    {
-      "src": "apps/desktop-agent/src/styles.css",
-      "dest": "apps/desktop-agent/src/styles.css"
-    },
-    {
-      "src": "apps/desktop-agent/src/types.ts",
-      "dest": "apps/desktop-agent/src/types.ts"
-    },
-    {
-      "src": "apps/desktop-agent/src-tauri/capabilities/default.json",
-      "dest": "apps/desktop-agent/src-tauri/capabilities/default.json"
-    },
-    {
-      "src": "apps/desktop-agent/src-tauri/resources/plugins/cef/manifest.json",
-      "dest": "apps/desktop-agent/src-tauri/resources/plugins/cef/manifest.json"
-    },
-    {
-      "src": "apps/desktop-agent/src-tauri/src/app_dir/mod.rs",
-      "dest": "apps/desktop-agent/src-tauri/src/app_dir/mod.rs"
-    },
-    {
-      "src": "apps/desktop-agent/src-tauri/src/broker/channel_manager.rs",
-      "dest": "apps/desktop-agent/src-tauri/src/broker/channel_manager.rs"
-    },
-    {
-      "src": "apps/desktop-agent/src-tauri/src/broker/intent_registry.rs",
-      "dest": "apps/desktop-agent/src-tauri/src/broker/intent_registry.rs"
-    },
-    {
-      "src": "apps/desktop-agent/src-tauri/src/broker/mod.rs",
-      "dest": "apps/desktop-agent/src-tauri/src/broker/mod.rs"
-    },
-    {
-      "src": "apps/desktop-agent/src-tauri/src/broker/types.rs",
-      "dest": "apps/desktop-agent/src-tauri/src/broker/types.rs"
-    },
-    {
-      "src": "apps/desktop-agent/src-tauri/src/broker/window_manager.rs",
-      "dest": "apps/desktop-agent/src-tauri/src/broker/window_manager.rs"
-    },
-    {
-      "src": "apps/desktop-agent/src-tauri/src/dacp/discovery.rs",
-      "dest": "apps/desktop-agent/src-tauri/src/dacp/discovery.rs"
-    },
-    {
-      "src": "apps/desktop-agent/src-tauri/src/dacp/mod.rs",
-      "dest": "apps/desktop-agent/src-tauri/src/dacp/mod.rs"
-    },
-    {
-      "src": "apps/desktop-agent/src-tauri/src/dacp/peer.rs",
-      "dest": "apps/desktop-agent/src-tauri/src/dacp/peer.rs"
-    },
-    {
-      "src": "apps/desktop-agent/src-tauri/src/dacp/registry.rs",
-      "dest": "apps/desktop-agent/src-tauri/src/dacp/registry.rs"
-    },
-    {
-      "src": "apps/desktop-agent/src-tauri/src/dacp/server.rs",
-      "dest": "apps/desktop-agent/src-tauri/src/dacp/server.rs"
-    },
-    {
-      "src": "apps/desktop-agent/src-tauri/src/dacp/types.rs",
-      "dest": "apps/desktop-agent/src-tauri/src/dacp/types.rs"
-    },
-    {
-      "src": "apps/desktop-agent/src-tauri/src/engines/catalog.rs",
-      "dest": "apps/desktop-agent/src-tauri/src/engines/catalog.rs"
-    },
-    {
-      "src": "apps/desktop-agent/src-tauri/src/engines/commands.rs",
-      "dest": "apps/desktop-agent/src-tauri/src/engines/commands.rs"
-    },
-    {
-      "src": "apps/desktop-agent/src-tauri/src/engines/mod.rs",
-      "dest": "apps/desktop-agent/src-tauri/src/engines/mod.rs"
-    },
-    {
-      "src": "apps/desktop-agent/src-tauri/src/engines/router.rs",
-      "dest": "apps/desktop-agent/src-tauri/src/engines/router.rs"
-    },
-    {
-      "src": "apps/desktop-agent/src-tauri/src/engines/runtime.rs",
-      "dest": "apps/desktop-agent/src-tauri/src/engines/runtime.rs"
-    },
-    {
-      "src": "apps/desktop-agent/src-tauri/src/fdc3_bus/mod.rs",
-      "dest": "apps/desktop-agent/src-tauri/src/fdc3_bus/mod.rs"
-    },
-    {
-      "src": "apps/desktop-agent/src-tauri/src/tcp/handler.rs",
-      "dest": "apps/desktop-agent/src-tauri/src/tcp/handler.rs"
-    },
-    {
-      "src": "apps/desktop-agent/src-tauri/src/tcp/mod.rs",
-      "dest": "apps/desktop-agent/src-tauri/src/tcp/mod.rs"
-    },
-    {
-      "src": "apps/desktop-agent/src-tauri/src/tcp/server.rs",
-      "dest": "apps/desktop-agent/src-tauri/src/tcp/server.rs"
-    },
-    {
-      "src": "apps/desktop-agent/tsconfig.json",
-      "dest": "apps/desktop-agent/tsconfig.json"
-    },
-    {
-      "src": "apps/desktop-agent/tsconfig.node.json",
-      "dest": "apps/desktop-agent/tsconfig.node.json"
-    },
-    {
-      "src": "apps/tauri-webview-host/src-tauri/Cargo.toml",
-      "dest": "apps/tauri-webview-host/src-tauri/Cargo.toml"
-    },
-    {
-      "src": "apps/tauri-webview-host/src-tauri/capabilities/default.json",
-      "dest": "apps/tauri-webview-host/src-tauri/capabilities/default.json"
-    },
-    {
-      "src": "apps/tauri-webview-host/src-tauri/src/main.rs",
-      "dest": "apps/tauri-webview-host/src-tauri/src/main.rs"
-    },
-    {
-      "src": "apps/app-directory/src/data.ts",
-      "dest": "apps/app-directory/src/data.ts"
-    },
-    {
-      "src": "apps/app-directory/src/engines.ts",
-      "dest": "apps/app-directory/src/engines.ts"
-    },
-    {
-      "src": "apps/app-directory/src/index.ts",
-      "dest": "apps/app-directory/src/index.ts"
-    },
-    {
-      "src": "apps/app-directory/src/router.ts",
-      "dest": "apps/app-directory/src/router.ts"
-    },
-    {
-      "src": "apps/app-directory/src/types.ts",
-      "dest": "apps/app-directory/src/types.ts"
-    },
-    {
-      "src": "apps/app-directory/tsconfig.json",
-      "dest": "apps/app-directory/tsconfig.json"
-    },
-    {
-      "src": "apps/app-directory/ui/index.html",
-      "dest": "apps/app-directory/ui/index.html"
-    },
-    {
-      "src": "apps/app-directory/ui/src/App.tsx",
-      "dest": "apps/app-directory/ui/src/App.tsx"
-    },
-    {
-      "src": "apps/app-directory/ui/src/components/AppForm.tsx",
-      "dest": "apps/app-directory/ui/src/components/AppForm.tsx"
-    },
-    {
-      "src": "apps/app-directory/ui/src/components/AppList.tsx",
-      "dest": "apps/app-directory/ui/src/components/AppList.tsx"
-    },
-    {
-      "src": "apps/app-directory/ui/src/index.css",
-      "dest": "apps/app-directory/ui/src/index.css"
-    },
-    {
-      "src": "apps/app-directory/ui/src/main.tsx",
-      "dest": "apps/app-directory/ui/src/main.tsx"
-    },
-    {
-      "src": "apps/app-directory/ui/src/types.ts",
-      "dest": "apps/app-directory/ui/src/types.ts"
-    },
-    {
-      "src": "apps/app-directory/vite.config.ts",
-      "dest": "apps/app-directory/vite.config.ts"
-    },
-    {
-      "src": "apps/sample-ticker/README.md",
-      "dest": "apps/sample-ticker/README.md"
-    },
-    {
-      "src": "apps/sample-ticker/index.html",
-      "dest": "apps/sample-ticker/index.html"
-    },
-    {
-      "src": "apps/sample-ticker/server.js",
-      "dest": "apps/sample-ticker/server.js"
-    },
-    {
-      "src": "apps/sample-chart/README.md",
-      "dest": "apps/sample-chart/README.md"
-    },
-    {
-      "src": "apps/sample-chart/index.html",
-      "dest": "apps/sample-chart/index.html"
-    },
-    {
-      "src": "apps/sample-chart/server.js",
-      "dest": "apps/sample-chart/server.js"
-    },
-    {
-      "src": "apps/electron-host/main.js",
-      "dest": "apps/electron-host/main.js"
-    },
-    {
-      "src": "packages/ot-core/Cargo.toml",
-      "dest": "packages/ot-core/Cargo.toml"
-    },
-    {
-      "src": "packages/ot-core/README.md",
-      "dest": "packages/ot-core/README.md"
-    },
-    {
-      "src": "packages/ot-core/src/engine.rs",
-      "dest": "packages/ot-core/src/engine.rs"
-    },
-    {
-      "src": "packages/ot-core/src/lib.rs",
-      "dest": "packages/ot-core/src/lib.rs"
-    },
-    {
-      "src": "packages/ot-core/src/plugin.rs",
-      "dest": "packages/ot-core/src/plugin.rs"
-    },
-    {
-      "src": "packages/ot-fdc3/Cargo.toml",
-      "dest": "packages/ot-fdc3/Cargo.toml"
-    },
-    {
-      "src": "packages/ot-fdc3/src/client.rs",
-      "dest": "packages/ot-fdc3/src/client.rs"
-    },
-    {
-      "src": "packages/ot-fdc3/src/commands.rs",
-      "dest": "packages/ot-fdc3/src/commands.rs"
-    },
-    {
-      "src": "packages/ot-fdc3/src/lib.rs",
-      "dest": "packages/ot-fdc3/src/lib.rs"
-    },
-    {
-      "src": "packages/ot-fdc3/src/state.rs",
-      "dest": "packages/ot-fdc3/src/state.rs"
-    },
-    {
-      "src": "packages/ot-fdc3/src/types.rs",
-      "dest": "packages/ot-fdc3/src/types.rs"
-    },
-    {
-      "src": "packages/fdc3-plugin/fdc3-plugin.js",
-      "dest": "packages/fdc3-plugin/fdc3-plugin.js"
-    },
-    {
-      "src": "packages/fdc3-client/src/agent.ts",
-      "dest": "packages/fdc3-client/src/agent.ts"
-    },
-    {
-      "src": "packages/fdc3-client/src/bridge-agent.ts",
-      "dest": "packages/fdc3-client/src/bridge-agent.ts"
-    },
-    {
-      "src": "packages/fdc3-client/src/index.ts",
-      "dest": "packages/fdc3-client/src/index.ts"
-    },
-    {
-      "src": "packages/fdc3-client/src/types.ts",
-      "dest": "packages/fdc3-client/src/types.ts"
-    },
-    {
-      "src": "packages/fdc3-client/tsconfig.json",
-      "dest": "packages/fdc3-client/tsconfig.json"
-    }
+    "Cargo.toml",
+    ".gitignore",
+    "apps/one-terminal/src/App.tsx",
+    "apps/one-terminal/src/components/DropZoneLayer.tsx",
+    "apps/one-terminal/src/components/GhostLayer.tsx",
+    "apps/one-terminal/src/components/Header.tsx",
+    "apps/one-terminal/src/components/OverlayApp.tsx",
+    "apps/one-terminal/src/components/PanelHeaderLayer.tsx",
+    "apps/one-terminal/src/components/SplitterHandleLayer.tsx",
+    "apps/one-terminal/src/components/TabStripLayer.tsx",
+    "apps/one-terminal/src/components/panelHeaders.tsx",
+    "apps/one-terminal/src/hooks/useHostLayout.ts",
+    "apps/one-terminal/src/hooks/useLayout.ts",
+    "apps/one-terminal/src/hooks/useTabDrag.ts",
+    "apps/one-terminal/src/main.tsx",
+    "apps/one-terminal/src/types.ts",
+    "apps/one-terminal/src/wm.css",
+    "apps/one-terminal/src-tauri/capabilities/default.json",
+    "apps/one-terminal/src-tauri/src/config.rs",
+    "apps/one-terminal/src-tauri/src/engine.rs",
+    "apps/one-terminal/src-tauri/src/engines.rs",
+    "apps/one-terminal/src-tauri/src/layout/commands.rs",
+    "apps/one-terminal/src-tauri/src/layout/docking.rs",
+    "apps/one-terminal/src-tauri/src/layout/drag.rs",
+    "apps/one-terminal/src-tauri/src/layout/host.rs",
+    "apps/one-terminal/src-tauri/src/layout/mod.rs",
+    "apps/one-terminal/src-tauri/src/layout/node.rs",
+    "apps/one-terminal/src-tauri/src/layout/reflow.rs",
+    "apps/one-terminal/src-tauri/src/layout/store.rs",
+    "apps/one-terminal/src-tauri/src/lib.rs",
+    "apps/one-terminal/tsconfig.json",
+    "apps/desktop-agent/src/bus/index.ts",
+    "apps/desktop-agent/src/components/ActivityFeed.tsx",
+    "apps/desktop-agent/src/components/BridgeVisualizer.tsx",
+    "apps/desktop-agent/src/components/ChannelsPanel.tsx",
+    "apps/desktop-agent/src/components/ConnectionsPanel.tsx",
+    "apps/desktop-agent/src/components/EngineDevOverride.tsx",
+    "apps/desktop-agent/src/components/IntentResolverModal.tsx",
+    "apps/desktop-agent/src/components/InteropDashboard.tsx",
+    "apps/desktop-agent/src/components/LauncherPanel.tsx",
+    "apps/desktop-agent/src/hooks/useAppDirectory.ts",
+    "apps/desktop-agent/src/hooks/useCdaEvents.ts",
+    "apps/desktop-agent/src/hooks/useEngineOverride.ts",
+    "apps/desktop-agent/src/hooks/useFdcBus.ts",
+    "apps/desktop-agent/src/main.tsx",
+    "apps/desktop-agent/src/styles.css",
+    "apps/desktop-agent/src/types.ts",
+    "apps/desktop-agent/src-tauri/capabilities/default.json",
+    "apps/desktop-agent/src-tauri/resources/plugins/cef/manifest.json",
+    "apps/desktop-agent/src-tauri/src/app_dir/mod.rs",
+    "apps/desktop-agent/src-tauri/src/broker/channel_manager.rs",
+    "apps/desktop-agent/src-tauri/src/broker/intent_registry.rs",
+    "apps/desktop-agent/src-tauri/src/broker/mod.rs",
+    "apps/desktop-agent/src-tauri/src/broker/types.rs",
+    "apps/desktop-agent/src-tauri/src/broker/window_manager.rs",
+    "apps/desktop-agent/src-tauri/src/dacp/discovery.rs",
+    "apps/desktop-agent/src-tauri/src/dacp/mod.rs",
+    "apps/desktop-agent/src-tauri/src/dacp/peer.rs",
+    "apps/desktop-agent/src-tauri/src/dacp/registry.rs",
+    "apps/desktop-agent/src-tauri/src/dacp/server.rs",
+    "apps/desktop-agent/src-tauri/src/dacp/types.rs",
+    "apps/desktop-agent/src-tauri/src/engines/catalog.rs",
+    "apps/desktop-agent/src-tauri/src/engines/commands.rs",
+    "apps/desktop-agent/src-tauri/src/engines/mod.rs",
+    "apps/desktop-agent/src-tauri/src/engines/router.rs",
+    "apps/desktop-agent/src-tauri/src/engines/runtime.rs",
+    "apps/desktop-agent/src-tauri/src/fdc3_bus/mod.rs",
+    "apps/desktop-agent/src-tauri/src/tcp/handler.rs",
+    "apps/desktop-agent/src-tauri/src/tcp/mod.rs",
+    "apps/desktop-agent/src-tauri/src/tcp/server.rs",
+    "apps/desktop-agent/tsconfig.json",
+    "apps/desktop-agent/tsconfig.node.json",
+    "apps/tauri-webview-host/src-tauri/Cargo.toml",
+    "apps/tauri-webview-host/src-tauri/capabilities/default.json",
+    "apps/tauri-webview-host/src-tauri/src/main.rs",
+    "apps/app-directory/src/data.ts",
+    "apps/app-directory/src/engines.ts",
+    "apps/app-directory/src/index.ts",
+    "apps/app-directory/src/router.ts",
+    "apps/app-directory/src/types.ts",
+    "apps/app-directory/tsconfig.json",
+    "apps/app-directory/ui/index.html",
+    "apps/app-directory/ui/src/App.tsx",
+    "apps/app-directory/ui/src/components/AppForm.tsx",
+    "apps/app-directory/ui/src/components/AppList.tsx",
+    "apps/app-directory/ui/src/index.css",
+    "apps/app-directory/ui/src/main.tsx",
+    "apps/app-directory/ui/src/types.ts",
+    "apps/app-directory/vite.config.ts",
+    "apps/sample-ticker/README.md",
+    "apps/sample-ticker/index.html",
+    "apps/sample-ticker/server.js",
+    "apps/sample-chart/README.md",
+    "apps/sample-chart/index.html",
+    "apps/sample-chart/server.js",
+    "apps/electron-host/main.js",
+    "packages/ot-core/Cargo.toml",
+    "packages/ot-core/README.md",
+    "packages/ot-core/src/engine.rs",
+    "packages/ot-core/src/lib.rs",
+    "packages/ot-core/src/plugin.rs",
+    "packages/ot-fdc3/Cargo.toml",
+    "packages/ot-fdc3/src/client.rs",
+    "packages/ot-fdc3/src/commands.rs",
+    "packages/ot-fdc3/src/lib.rs",
+    "packages/ot-fdc3/src/state.rs",
+    "packages/ot-fdc3/src/types.rs",
+    "packages/fdc3-plugin/fdc3-plugin.js",
+    "packages/fdc3-client/src/agent.ts",
+    "packages/fdc3-client/src/bridge-agent.ts",
+    "packages/fdc3-client/src/index.ts",
+    "packages/fdc3-client/src/types.ts",
+    "packages/fdc3-client/tsconfig.json"
   ]
 }
