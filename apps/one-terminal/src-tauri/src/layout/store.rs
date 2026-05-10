@@ -396,7 +396,7 @@ impl LayoutTree {
         }
     }
 
-    /// Add a new panel to the tree.
+    /// Add a new panel to the tree, generating a fresh webview label.
     ///
     /// Placement logic:
     /// - Tree empty → new leaf becomes root (bare Leaf, no Stack wrapper).
@@ -416,7 +416,43 @@ impl LayoutTree {
         engine_binding: Option<ot_core::engine::EngineBinding>,
     ) -> String {
         let label = format!("panel-{}", short_id());
+        self.insert_panel(label, app_id, url, title, target, dir, engine_binding)
+    }
 
+    /// Like [`add_panel`] but uses a caller-supplied `label` instead of
+    /// generating one. Used by the webview pool so the pre-created blank
+    /// webview's label and the tree's panel id stay in sync.
+    pub fn add_panel_with_label(
+        &self,
+        label: &str,
+        app_id: &str,
+        url: &str,
+        title: &str,
+        target: Option<&str>,
+        dir: Option<SplitDir>,
+        engine_binding: Option<ot_core::engine::EngineBinding>,
+    ) -> String {
+        self.insert_panel(
+            label.to_string(),
+            app_id,
+            url,
+            title,
+            target,
+            dir,
+            engine_binding,
+        )
+    }
+
+    fn insert_panel(
+        &self,
+        label: String,
+        app_id: &str,
+        url: &str,
+        title: &str,
+        target: Option<&str>,
+        dir: Option<SplitDir>,
+        engine_binding: Option<ot_core::engine::EngineBinding>,
+    ) -> String {
         {
             let mut g = self.inner.write().unwrap();
             g.meta.insert(

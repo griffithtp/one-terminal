@@ -2,9 +2,11 @@ mod config;
 mod engine;
 mod engines;
 mod layout;
+mod webview_pool;
 
 use config::TerminalConfig;
 use engine::WmHostIdentity;
+use webview_pool::WebviewPool;
 use layout::commands::{
     close_tab, update_layout, wm_begin_tab_drag, wm_close_leaf, wm_close_stack, wm_end_tab_drag,
     wm_rename_panel, wm_rename_tab, wm_set_active_tab, wm_set_zoom, wm_splitter_drag,
@@ -228,6 +230,7 @@ async fn wm_open(
     tree: State<'_, LayoutTree>,
     identity: State<'_, WmHostIdentity>,
     overlay: State<'_, OverlayState>,
+    pool: State<'_, WebviewPool>,
     app: AppHandle,
 ) -> Result<LayoutSnapshot, String> {
     // Engine the user picked doesn't match this WM's engine — pop out into a
@@ -240,18 +243,33 @@ async fn wm_open(
         return Ok(tree.snapshot().unwrap_or_else(LayoutSnapshot::empty));
     }
 
-    let panel_id = tree.add_panel(
-        &app_id,
-        &url,
-        &title,
-        target.as_deref(),
-        dir,
-        engine_binding.clone(),
-    );
+    // Try the pool first; fall back to cold creation when empty.
+    // Guard against the unlikely case where the pool webview was closed externally.
+    let pool_label = pool.take().filter(|lbl| app.get_webview(lbl).is_some());
+
+    let panel_id = match &pool_label {
+        Some(lbl) => tree.add_panel_with_label(
+            lbl,
+            &app_id,
+            &url,
+            &title,
+            target.as_deref(),
+            dir,
+            engine_binding.clone(),
+        ),
+        None => tree.add_panel(
+            &app_id,
+            &url,
+            &title,
+            target.as_deref(),
+            dir,
+            engine_binding.clone(),
+        ),
+    };
 
     let parsed_url: tauri::Url = url.parse().map_err(|e: url::ParseError| e.to_string())?;
 
-    // Dispatch WebView2 child creation to the UI/main thread.
+    // Dispatch the webview operation to the UI/main thread.
     //
     // On Windows, child-webview creation must happen on the UI thread — and
     // Tauri's internal `add_child` implementation marshals to the main thread
@@ -259,31 +277,46 @@ async fn wm_open(
     // running on the main thread (or holding it), that inner wait deadlocks
     // and `add_child` never returns. The command is `async` (so it runs on
     // the async runtime) and we explicitly dispatch via `run_on_main_thread`.
+    //
+    // Pool path: navigate the pre-created blank webview to the real URL.
+    // Cold path: create a new child webview as before.
     let (tx, rx) = std::sync::mpsc::channel::<Result<(), String>>();
     let app_for_main = app.clone();
     let panel_id_for_main = panel_id.clone();
     let url_for_main = url.clone();
+    let using_pool = pool_label.is_some();
 
     app.run_on_main_thread(move || {
         let result = (|| -> Result<(), String> {
-            let win = app_for_main
-                .get_window(WIN)
-                .ok_or_else(|| "wm window not found".to_string())?;
-            // Placeholder bounds — `tree.reflow` below positions the webview
-            // correctly once it's created.
-            win.add_child(
-                WebviewBuilder::new(&panel_id_for_main, WebviewUrl::External(parsed_url)),
-                LogicalPosition::new(0.0, 0.0),
-                LogicalSize::new(1.0, 1.0),
-            )
-            .map_err(|e| e.to_string())?;
+            if using_pool {
+                let wv = app_for_main
+                    .get_webview(&panel_id_for_main)
+                    .ok_or_else(|| format!("pool webview '{}' not found", panel_id_for_main))?;
+                wv.navigate(parsed_url).map_err(|e| e.to_string())?;
+            } else {
+                let win = app_for_main
+                    .get_window(WIN)
+                    .ok_or_else(|| "wm window not found".to_string())?;
+                // Placeholder bounds — `tree.reflow` below positions the webview
+                // correctly once it's created.
+                win.add_child(
+                    WebviewBuilder::new(&panel_id_for_main, WebviewUrl::External(parsed_url)),
+                    LogicalPosition::new(0.0, 0.0),
+                    LogicalSize::new(1.0, 1.0),
+                )
+                .map_err(|e| e.to_string())?;
+            }
             Ok(())
         })();
         match &result {
             Ok(_) => eprintln!(
-                "[wm_open] add_child -> Ok (panel={panel_id_for_main}, url={url_for_main})"
+                "[wm_open] {} (panel={panel_id_for_main}, url={url_for_main})",
+                if using_pool { "pool->navigate Ok" } else { "add_child Ok" }
             ),
-            Err(e) => eprintln!("[wm_open] add_child -> Err: {e}"),
+            Err(e) => eprintln!(
+                "[wm_open] {} Err: {e}",
+                if using_pool { "pool->navigate" } else { "add_child" }
+            ),
         }
         let _ = tx.send(result);
     })
@@ -294,16 +327,21 @@ async fn wm_open(
 
     rx.recv().map_err(|e| e.to_string())??;
 
-    // Mark the overlay as stale: the new panel webview is now above it in
-    // z-order.  wm_ctx_menu_open will recreate the overlay before showing
-    // any menu so it regains the topmost position.
+    // Mark the overlay as stale: the panel webview is above it in z-order
+    // (pool webviews are inserted after the overlay at startup; cold webviews
+    // are always appended last). wm_ctx_menu_open recreates the overlay as
+    // the topmost child before showing any menu.
     {
         let mut inner = overlay.lock().unwrap();
         inner.stale = true;
         inner.is_ready = false;
     }
 
-    // Reflow positions every webview (including the new one) from the tree.
+    // Replenish the pool in the background after a slot was consumed.
+    // No-op on the cold path (pool not used) or when already at capacity.
+    pool.replenish(&app, &overlay);
+
+    // Reflow positions every webview (including the new/navigated one).
     tree.reflow(&app);
     tree.emit_host(&app);
 
@@ -564,18 +602,25 @@ pub fn run() {
         stale: false,
         wakers: Vec::new(),
     }));
+    let pool_size = std::env::var("OT_WEBVIEW_POOL_SIZE")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(1);
+    let pool = WebviewPool::new(pool_size);
     println!(
         "[wm] engine: {}@{} (runtime={:?})",
         identity.binding.family.as_dir(),
         identity.binding.version,
         identity.runtime_path,
     );
+    println!("[wm] webview pool size: {pool_size}");
 
     tauri::Builder::default()
         .manage(tree.clone())
         .manage(identity.clone())
         .manage(overlay_state.clone())
         .manage(cfg.clone())
+        .manage(pool.clone())
         .setup(move |app| {
             // ── Load persisted layout state ───────────────────────────────
             // Hydrates the LayoutTree from layout.json if it exists. Must run
@@ -629,6 +674,33 @@ pub fn run() {
                 LogicalPosition::new(-20000.0, -20000.0),
                 LogicalSize::new(init_w, init_h),
             )?;
+
+            // ── Webview pool — pre-create blank hidden webviews ───────────
+            // Created after the overlay so they land above it in z-order,
+            // matching the position of panels added via the cold path. The
+            // overlay stale flag is set when each pool webview is first
+            // activated in wm_open (same flow as cold panel creation).
+            if pool.target_size > 0 {
+                for _ in 0..pool.target_size {
+                    let label = webview_pool::pool_label();
+                    match win.add_child(
+                        WebviewBuilder::new(
+                            &label,
+                            WebviewUrl::External(
+                                "about:blank".parse().expect("about:blank is a valid URL"),
+                            ),
+                        ),
+                        LogicalPosition::new(-20000.0, -20000.0),
+                        LogicalSize::new(init_w, init_h),
+                    ) {
+                        Ok(_) => {
+                            eprintln!("[pool] pre-warmed: {label}");
+                            pool.push(label);
+                        }
+                        Err(e) => eprintln!("[pool] pre-warm failed: {e}"),
+                    }
+                }
+            }
 
             // ── Restore persisted panel webviews ──────────────────────────
             // Re-create webview children for every leaf in the hydrated tree.
