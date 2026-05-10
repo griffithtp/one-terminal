@@ -26,6 +26,10 @@ struct LeafMeta {
     /// own engine (no override). Kept so layout persistence + reflow
     /// can round-trip the binding.
     engine_binding: Option<ot_core::engine::EngineBinding>,
+    /// User-set display name override. `None` means show the app-provided `title`.
+    display_name: Option<String>,
+    /// Webview zoom multiplier. Default `1.0`; valid range `0.5..=2.0`.
+    zoom_factor: f64,
 }
 
 #[derive(Default)]
@@ -291,6 +295,8 @@ impl LayoutTree {
                 url: url.into(),
                 title: title.into(),
                 engine_binding,
+                display_name: None,
+                zoom_factor: 1.0,
             },
         );
 

@@ -11,6 +11,7 @@ pub mod docking;
 pub mod drag;
 pub mod host;
 pub mod node;
+pub mod persist;
 pub mod reflow;
 pub mod store;
 
