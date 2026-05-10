@@ -27,6 +27,7 @@
     "apps/one-terminal/src-tauri/src/layout/host.rs",
     "apps/one-terminal/src-tauri/src/layout/mod.rs",
     "apps/one-terminal/src-tauri/src/layout/node.rs",
+    "apps/one-terminal/src-tauri/src/layout/persist.rs",
     "apps/one-terminal/src-tauri/src/layout/reflow.rs",
     "apps/one-terminal/src-tauri/src/layout/store.rs",
     "apps/one-terminal/src-tauri/src/lib.rs",
