@@ -61,7 +61,7 @@ pub struct LayoutTree {
     app: Arc<OnceLock<AppHandle>>,
     /// Handle for the pending debounced save task. Replaced on every mutation
     /// so rapid changes coalesce into a single disk write.
-    save_handle: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
+    save_handle: Arc<Mutex<Option<tauri::async_runtime::JoinHandle<()>>>>,
 }
 
 impl LayoutTree {
@@ -702,7 +702,7 @@ impl LayoutTree {
         if let Some(h) = handle.take() {
             h.abort();
         }
-        *handle = Some(tokio::spawn(async move {
+        *handle = Some(tauri::async_runtime::spawn(async move {
             if debounce_ms > 0 {
                 tokio::time::sleep(std::time::Duration::from_millis(debounce_ms)).await;
             }

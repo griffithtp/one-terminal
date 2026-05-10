@@ -7,7 +7,8 @@ use config::TerminalConfig;
 use engine::WmHostIdentity;
 use layout::commands::{
     close_tab, update_layout, wm_begin_tab_drag, wm_close_leaf, wm_close_stack, wm_end_tab_drag,
-    wm_rename_tab, wm_set_active_tab, wm_splitter_drag, wm_toggle_maximize_stack,
+    wm_rename_panel, wm_rename_tab, wm_set_active_tab, wm_set_zoom, wm_splitter_drag,
+    wm_toggle_maximize_stack,
 };
 use layout::drag::wm_drag_move;
 use layout::store::LayoutTree;
@@ -694,6 +695,8 @@ pub fn run() {
             close_tab,
             wm_engine_status,
             wm_engine_install,
+            wm_rename_panel,
+            wm_set_zoom,
             wm_park_panels,
             wm_unpark_panels,
             wm_overlay_ready,
