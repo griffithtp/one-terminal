@@ -12,7 +12,7 @@ use layout::commands::{
     wm_toggle_maximize_stack,
 };
 use layout::drag::wm_drag_move;
-use layout::store::LayoutTree;
+use layout::store::{LayoutTree, PanelSpec};
 use layout::{LayoutSnapshot, SplitDir};
 use ot_core::engine::{is_system_version, EngineBinding, EngineFamily};
 use std::sync::{Arc, Mutex};
@@ -247,24 +247,16 @@ async fn wm_open(
     // Guard against the unlikely case where the pool webview was closed externally.
     let pool_label = pool.take().filter(|lbl| app.get_webview(lbl).is_some());
 
+    let spec = PanelSpec {
+        app_id: app_id.clone(),
+        url: url.clone(),
+        title: title.clone(),
+        engine_binding: engine_binding.clone(),
+    };
+
     let panel_id = match &pool_label {
-        Some(lbl) => tree.add_panel_with_label(
-            lbl,
-            &app_id,
-            &url,
-            &title,
-            target.as_deref(),
-            dir,
-            engine_binding.clone(),
-        ),
-        None => tree.add_panel(
-            &app_id,
-            &url,
-            &title,
-            target.as_deref(),
-            dir,
-            engine_binding.clone(),
-        ),
+        Some(lbl) => tree.add_panel_with_label(lbl, spec, target.as_deref(), dir),
+        None => tree.add_panel(spec, target.as_deref(), dir),
     };
 
     let parsed_url: tauri::Url = url.parse().map_err(|e: url::ParseError| e.to_string())?;
