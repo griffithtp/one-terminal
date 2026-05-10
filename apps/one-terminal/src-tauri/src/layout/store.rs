@@ -269,6 +269,16 @@ impl LayoutTree {
             .iter()
             .map(|(k, v)| (k.clone(), v.app_id.clone()))
             .collect();
+        let display_names: HashMap<String, Option<String>> = g
+            .meta
+            .iter()
+            .map(|(k, v)| (k.clone(), v.display_name.clone()))
+            .collect();
+        let zoom_factors: HashMap<String, f64> = g
+            .meta
+            .iter()
+            .map(|(k, v)| (k.clone(), v.zoom_factor))
+            .collect();
         let mut max_path_buf = Vec::new();
         let max_path = g
             .maximized_stack_id
@@ -290,6 +300,8 @@ impl LayoutTree {
             h,
             &titles,
             &app_ids,
+            &display_names,
+            &zoom_factors,
         );
         let _ = app.emit("wm:host-layout", &payload);
     }
@@ -869,6 +881,8 @@ fn walk_for_snapshot(
                 app_id: m.map(|m| m.app_id.clone()).unwrap_or_default(),
                 url: m.map(|m| m.url.clone()).unwrap_or_default(),
                 engine_binding: m.and_then(|m| m.engine_binding.clone()),
+                display_name: m.and_then(|m| m.display_name.clone()),
+                zoom_factor: m.map(|m| m.zoom_factor).unwrap_or(1.0),
             });
         }
         LayoutNode::Splitter {

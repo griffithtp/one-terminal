@@ -11,6 +11,10 @@ export interface PanelBounds {
   title: string;
   appId: string;
   url: string;
+  /** User-set display name override; absent means show `title`. */
+  displayName?: string;
+  /** Webview zoom multiplier; `1.0` is 100 %. */
+  zoomFactor: number;
 }
 
 export interface DividerBounds {
@@ -39,6 +43,10 @@ export interface StackTab {
   label: string;
   title: string;
   appId: string;
+  /** User-set display name override; absent means show `title`. */
+  displayName?: string;
+  /** Webview zoom multiplier; `1.0` is 100 %. */
+  zoomFactor: number;
 }
 
 export interface StackHeader {
