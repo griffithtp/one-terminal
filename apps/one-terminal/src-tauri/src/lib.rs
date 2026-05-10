@@ -556,9 +556,14 @@ pub fn run() {
     tauri::Builder::default()
         .manage(tree.clone())
         .manage(identity.clone())
-        .manage(overlay_state)
+        .manage(overlay_state.clone())
         .manage(cfg.clone())
         .setup(move |app| {
+            // ── Load persisted layout state ───────────────────────────────
+            // Hydrates the LayoutTree from layout.json if it exists. Must run
+            // before any webview is created so the restored tree is in place.
+            tree.init(app.handle())?;
+
             // ── Create the bare container window (no default webview) ──────
             let win = tauri::WindowBuilder::new(app.handle(), WIN)
                 .title(&cfg.title)
@@ -606,6 +611,37 @@ pub fn run() {
                 LogicalPosition::new(-20000.0, -20000.0),
                 LogicalSize::new(init_w, init_h),
             )?;
+
+            // ── Restore persisted panel webviews ──────────────────────────
+            // Re-create webview children for every leaf in the hydrated tree.
+            // The overlay must be marked stale if any panels are added so
+            // wm_ctx_menu_open knows to push it to the back of the z-order.
+            let panels_to_restore = tree.panels_for_restore();
+            if !panels_to_restore.is_empty() {
+                for (label, url) in &panels_to_restore {
+                    if let Ok(parsed_url) = url.parse::<tauri::Url>() {
+                        if let Err(e) = win.add_child(
+                            WebviewBuilder::new(label, WebviewUrl::External(parsed_url)),
+                            LogicalPosition::new(0.0, 0.0),
+                            LogicalSize::new(1.0, 1.0),
+                        ) {
+                            eprintln!("[wm] restore panel '{label}': {e}");
+                        }
+                    } else {
+                        eprintln!("[wm] restore panel '{label}': invalid url '{url}'");
+                    }
+                }
+                {
+                    let mut inner = overlay_state.lock().unwrap();
+                    inner.stale = true;
+                    inner.is_ready = false;
+                }
+                tree.reflow(app.handle());
+                tree.emit_host(app.handle());
+                if let Some(snap) = tree.snapshot() {
+                    let _ = app.handle().emit("wm:layout", &snap);
+                }
+            }
 
             // ── Resize listener — reposition all webviews on window resize ─
             let app_h = app.handle().clone();

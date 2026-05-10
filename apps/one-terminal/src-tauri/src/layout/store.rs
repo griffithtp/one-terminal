@@ -4,14 +4,15 @@
 //! accessed from commands via `State<'_, LayoutTree>`.
 
 use std::collections::HashMap;
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, OnceLock, RwLock};
 
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 use uuid::Uuid;
 
 use super::docking::{add_leaf_as_sibling, append_to_stack_at, is_stack_at, move_leaf, DropZone};
 use super::host::compute_host_layout;
 use super::node::{Direction, LayoutNode};
+use super::persist::{self, PersistedLayout, PersistedLeafMeta};
 use super::reflow::{park_offscreen, reflow_layout, SPLITTER_THICKNESS, TAB_STRIP_HEIGHT};
 use super::{LayoutSnapshot, PanelBounds, SplitDir, HEADER_HEIGHT};
 
@@ -52,29 +53,91 @@ struct Inner {
     height: f64,
 }
 
-#[derive(Clone, Default)]
-pub struct LayoutTree(Arc<RwLock<Inner>>);
+#[derive(Clone)]
+pub struct LayoutTree {
+    inner: Arc<RwLock<Inner>>,
+    /// Set once during `init` so all subsequent `schedule_save` calls can
+    /// resolve `app_data_dir` without threading it through every call site.
+    app: Arc<OnceLock<AppHandle>>,
+    /// Handle for the pending debounced save task. Replaced on every mutation
+    /// so rapid changes coalesce into a single disk write.
+    save_handle: Arc<Mutex<Option<tokio::task::JoinHandle<()>>>>,
+}
 
 impl LayoutTree {
     pub fn new(width: f64, height: f64) -> Self {
-        Self(Arc::new(RwLock::new(Inner {
-            root: None,
-            meta: HashMap::new(),
-            active_panel: None,
-            maximized_stack_id: None,
-            width,
-            height,
-        })))
+        Self {
+            inner: Arc::new(RwLock::new(Inner {
+                root: None,
+                meta: HashMap::new(),
+                active_panel: None,
+                maximized_stack_id: None,
+                width,
+                height,
+            })),
+            app: Arc::new(OnceLock::new()),
+            save_handle: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    /// Store the `AppHandle` and load any persisted layout from disk.
+    ///
+    /// Must be called once from the Tauri `setup` closure before any panels
+    /// are opened.  Safe to call on any clone of `LayoutTree`; the underlying
+    /// `Arc`s ensure the state is shared.
+    pub fn init(&self, app: &AppHandle) -> Result<(), String> {
+        let _ = self.app.set(app.clone());
+
+        let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+        std::fs::create_dir_all(&data_dir).map_err(|e| e.to_string())?;
+
+        if let Some(persisted) = persist::load(&data_dir) {
+            let mut g = self.inner.write().unwrap();
+            g.root = persisted.tree;
+            g.meta = persisted
+                .meta
+                .into_iter()
+                .map(|(label, pm)| {
+                    (
+                        label,
+                        LeafMeta {
+                            app_id: pm.app_id,
+                            url: pm.url,
+                            title: pm.title,
+                            engine_binding: pm.engine_binding,
+                            display_name: pm.display_name,
+                            zoom_factor: pm.zoom_factor,
+                        },
+                    )
+                })
+                .collect();
+            g.active_panel = persisted.active_panel;
+            g.maximized_stack_id = persisted.maximized_stack_id;
+        }
+
+        Ok(())
+    }
+
+    /// Return every (label, url) pair for leaves currently in the tree so
+    /// the startup path can recreate webviews for a restored layout.
+    pub fn panels_for_restore(&self) -> Vec<(String, String)> {
+        let g = self.inner.read().unwrap();
+        let Some(root) = g.root.as_ref() else {
+            return Vec::new();
+        };
+        let mut out = Vec::new();
+        collect_panel_urls(root, &g.meta, &mut out);
+        out
     }
 
     pub fn set_size(&self, width: f64, height: f64) {
-        let mut g = self.0.write().unwrap();
+        let mut g = self.inner.write().unwrap();
         g.width = width;
         g.height = height;
     }
 
     pub fn size(&self) -> (f64, f64) {
-        let g = self.0.read().unwrap();
+        let g = self.inner.read().unwrap();
         (g.width, g.height)
     }
 
@@ -83,7 +146,7 @@ impl LayoutTree {
     where
         F: FnOnce(&LayoutNode) -> R,
     {
-        let g = self.0.read().unwrap();
+        let g = self.inner.read().unwrap();
         g.root.as_ref().map(f)
     }
 
@@ -91,11 +154,14 @@ impl LayoutTree {
     /// in the new tree may not match prior state — callers are responsible
     /// for repopulating metadata if needed.
     pub fn set_root(&self, root: Option<LayoutNode>) {
-        let mut g = self.0.write().unwrap();
-        g.root = root;
-        g.meta.clear();
-        g.active_panel = None;
-        g.maximized_stack_id = None;
+        {
+            let mut g = self.inner.write().unwrap();
+            g.root = root;
+            g.meta.clear();
+            g.active_panel = None;
+            g.maximized_stack_id = None;
+        }
+        self.schedule_save(500);
     }
 
     /// Toggle the maximize state for the Stack at `path`. If this stack is
@@ -105,53 +171,63 @@ impl LayoutTree {
     /// Stack so callers can dispatch without pre-checks. Returns `true` iff
     /// state changed.
     pub fn toggle_maximize_stack(&self, path: &[usize]) -> bool {
-        let mut g = self.0.write().unwrap();
-        let Some(root) = g.root.as_ref() else {
-            return false;
+        let changed = {
+            let mut g = self.inner.write().unwrap();
+            let Some(root) = g.root.as_ref() else {
+                return false;
+            };
+            let Some(node) = node_at(root, path) else {
+                return false;
+            };
+            let LayoutNode::Stack {
+                id,
+                active,
+                children,
+                ..
+            } = node
+            else {
+                return false;
+            };
+            if g.maximized_stack_id.as_deref() == Some(id.as_str()) {
+                g.maximized_stack_id = None;
+                true
+            } else {
+                // Pin active_panel to the maximized stack's active tab so the default
+                // `wm_open` path (target = active_panel when unspecified) tab-inserts
+                // into the maximized group rather than whatever the user touched last.
+                let active_idx = (*active).min(children.len().saturating_sub(1));
+                let active_label = children.get(active_idx).and_then(|c| match c {
+                    LayoutNode::Leaf { label, .. } => Some(label.clone()),
+                    _ => None,
+                });
+                let id = id.clone();
+                g.maximized_stack_id = Some(id);
+                if let Some(label) = active_label {
+                    g.active_panel = Some(label);
+                }
+                true
+            }
         };
-        let Some(node) = node_at(root, path) else {
-            return false;
-        };
-        let LayoutNode::Stack {
-            id,
-            active,
-            children,
-            ..
-        } = node
-        else {
-            return false;
-        };
-        if g.maximized_stack_id.as_deref() == Some(id.as_str()) {
-            g.maximized_stack_id = None;
-            return true;
+        if changed {
+            self.schedule_save(500);
         }
-        // Pin active_panel to the maximized stack's active tab so the default
-        // `wm_open` path (target = active_panel when unspecified) tab-inserts
-        // into the maximized group rather than whatever the user touched last.
-        let active_idx = (*active).min(children.len().saturating_sub(1));
-        let active_label = children.get(active_idx).and_then(|c| match c {
-            LayoutNode::Leaf { label, .. } => Some(label.clone()),
-            _ => None,
-        });
-        let id = id.clone();
-        g.maximized_stack_id = Some(id);
-        if let Some(label) = active_label {
-            g.active_panel = Some(label);
-        }
-        true
+        changed
     }
 
     /// Currently-active panel label, if any.
     #[allow(dead_code)]
     pub fn active_panel(&self) -> Option<String> {
-        self.0.read().unwrap().active_panel.clone()
+        self.inner.read().unwrap().active_panel.clone()
     }
 
     /// Mark `label` as the active panel. Caller is responsible for ensuring
     /// `label` exists in the tree.
     #[allow(dead_code)]
     pub fn set_active_panel(&self, label: &str) {
-        self.0.write().unwrap().active_panel = Some(label.to_string());
+        {
+            self.inner.write().unwrap().active_panel = Some(label.to_string());
+        }
+        self.schedule_save(500);
     }
 
     /// Reflow every webview from the current tree and window dimensions.
@@ -159,7 +235,7 @@ impl LayoutTree {
     /// When a stack is maximized, every leaf outside it is parked offscreen
     /// and the maximized stack is reflowed at the full content rect.
     pub fn reflow(&self, app: &AppHandle) {
-        let g = self.0.read().unwrap();
+        let g = self.inner.read().unwrap();
         let Some(root) = g.root.as_ref() else { return };
         let h = (g.height - HEADER_HEIGHT).max(0.0);
 
@@ -181,7 +257,7 @@ impl LayoutTree {
     /// chrome webview can render its overlays on top of the panel "holes".
     /// Matches reflow's HEADER_HEIGHT offset so overlays align with webviews.
     pub fn emit_host(&self, app: &AppHandle) {
-        let g = self.0.read().unwrap();
+        let g = self.inner.read().unwrap();
         let h = (g.height - HEADER_HEIGHT).max(0.0);
         let titles: HashMap<String, String> = g
             .meta
@@ -221,19 +297,63 @@ impl LayoutTree {
     /// Update the display title for the panel identified by `label`.
     /// Returns `true` if the panel exists (and was updated); `false` otherwise.
     pub fn rename_panel(&self, label: &str, title: &str) -> bool {
-        let mut g = self.0.write().unwrap();
-        let Some(meta) = g.meta.get_mut(label) else {
-            return false;
+        let found = {
+            let mut g = self.inner.write().unwrap();
+            let Some(meta) = g.meta.get_mut(label) else {
+                return false;
+            };
+            meta.title = title.to_string();
+            true
         };
-        meta.title = title.to_string();
-        true
+        if found {
+            self.schedule_save(500);
+        }
+        found
+    }
+
+    /// Set the user-facing display name override for `label`.
+    /// `None` clears the override, reverting to the app-provided title.
+    pub fn set_display_name(&self, label: &str, name: Option<String>) -> bool {
+        let found = {
+            let mut g = self.inner.write().unwrap();
+            let Some(meta) = g.meta.get_mut(label) else {
+                return false;
+            };
+            meta.display_name = name;
+            true
+        };
+        if found {
+            // Rename/zoom are infrequent — write immediately, no debounce.
+            self.schedule_save(0);
+        }
+        found
+    }
+
+    /// Set the zoom factor for `label`. Clamps to `0.5..=2.0`.
+    /// Returns the clamped value, or `None` if the panel doesn't exist.
+    pub fn set_zoom_factor(&self, label: &str, zoom_factor: f64) -> Option<f64> {
+        let clamped = zoom_factor.clamp(0.5, 2.0);
+        let found = {
+            let mut g = self.inner.write().unwrap();
+            let Some(meta) = g.meta.get_mut(label) else {
+                return None;
+            };
+            meta.zoom_factor = clamped;
+            true
+        };
+        if found {
+            self.schedule_save(0);
+            Some(clamped)
+        } else {
+            None
+        }
     }
 
     /// Synthesize a `LayoutSnapshot` for the legacy `wm:layout` event. Only
     /// leaves *not* inside a Stack are surfaced as panels — Stack members get
     /// their headers from the tab strip (`wm:host-layout`) instead.
     pub fn snapshot(&self) -> Option<LayoutSnapshot> {
-        let g = self.0.read().unwrap();
+        let g = self.inner.read().unwrap();
         let root = g.root.as_ref()?;
         let h = (g.height - HEADER_HEIGHT).max(0.0);
         let mut panels = Vec::new();
@@ -260,7 +380,7 @@ impl LayoutTree {
     /// z-order, so the ghost + drop indicators can't paint through them).
     /// The webview processes stay alive; a subsequent `reflow` restores them.
     pub fn park_all(&self, app: &AppHandle) {
-        let g = self.0.read().unwrap();
+        let g = self.inner.read().unwrap();
         if let Some(root) = g.root.as_ref() {
             park_offscreen(root, app);
         }
@@ -287,89 +407,90 @@ impl LayoutTree {
     ) -> String {
         let label = format!("panel-{}", short_id());
 
-        let mut g = self.0.write().unwrap();
-        g.meta.insert(
-            label.clone(),
-            LeafMeta {
-                app_id: app_id.into(),
-                url: url.into(),
-                title: title.into(),
-                engine_binding,
-                display_name: None,
-                zoom_factor: 1.0,
-            },
-        );
+        {
+            let mut g = self.inner.write().unwrap();
+            g.meta.insert(
+                label.clone(),
+                LeafMeta {
+                    app_id: app_id.into(),
+                    url: url.into(),
+                    title: title.into(),
+                    engine_binding,
+                    display_name: None,
+                    zoom_factor: 1.0,
+                },
+            );
 
-        let leaf = LayoutNode::Leaf {
-            label: label.clone(),
-            weight: 1.0,
-        };
+            let leaf = LayoutNode::Leaf {
+                label: label.clone(),
+                weight: 1.0,
+            };
 
-        // Empty tree — install bare leaf.
-        if g.root.is_none() {
-            g.root = Some(leaf);
-            g.active_panel = Some(label.clone());
-            return label;
-        }
+            // Empty tree — install bare leaf.
+            if g.root.is_none() {
+                g.root = Some(leaf);
+                g.active_panel = Some(label.clone());
+            } else {
+                // Resolve the target label: explicit arg > active_panel > first leaf.
+                let target_label = target
+                    .map(|s| s.to_string())
+                    .or_else(|| g.active_panel.clone())
+                    .or_else(|| first_leaf_label(g.root.as_ref().unwrap()));
 
-        // Resolve the target label: explicit arg > active_panel > first leaf.
-        let target_label = target
-            .map(|s| s.to_string())
-            .or_else(|| g.active_panel.clone())
-            .or_else(|| first_leaf_label(g.root.as_ref().unwrap()));
-
-        let Some(target_label) = target_label else {
-            // Unreachable given root is Some, but guard anyway.
-            g.root = Some(leaf);
-            g.active_panel = Some(label.clone());
-            return label;
-        };
-
-        // Find target path.
-        let root = g.root.as_mut().unwrap();
-        let mut target_path = Vec::new();
-        if !super::docking::find_leaf_path(root, &target_label, &mut target_path) {
-            // Target not in tree — fall back to first leaf.
-            target_path.clear();
-            if let Some(first) = first_leaf_label(root) {
-                super::docking::find_leaf_path(root, &first, &mut target_path);
-            }
-        }
-
-        match dir {
-            Some(d) => {
-                // Explicit split direction.
-                let zone = match d {
-                    SplitDir::Horizontal => DropZone::Right,
-                    SplitDir::Vertical => DropZone::Bottom,
-                };
-                add_leaf_as_sibling(&mut g.root, &target_path, zone, leaf);
-            }
-            None => {
-                // Tab-insert. If target's parent is a Stack, append there;
-                // otherwise wrap target + new leaf into a Stack (Center drop).
-                let parent_is_stack = if target_path.is_empty() {
-                    // Target is root itself; Stack check at empty path.
-                    is_stack_at(g.root.as_ref().unwrap(), &[])
-                } else {
-                    let parent_path = &target_path[..target_path.len() - 1];
-                    is_stack_at(g.root.as_ref().unwrap(), parent_path)
+                let Some(target_label) = target_label else {
+                    // Unreachable given root is Some, but guard anyway.
+                    g.root = Some(leaf);
+                    g.active_panel = Some(label.clone());
+                    // Drop g before schedule_save.
+                    drop(g);
+                    self.schedule_save(500);
+                    return label;
                 };
 
-                if parent_is_stack {
-                    let parent_path = if target_path.is_empty() {
-                        Vec::new()
-                    } else {
-                        target_path[..target_path.len() - 1].to_vec()
-                    };
-                    append_to_stack_at(g.root.as_mut().unwrap(), &parent_path, leaf);
-                } else {
-                    add_leaf_as_sibling(&mut g.root, &target_path, DropZone::Center, leaf);
+                // Find target path.
+                let root = g.root.as_mut().unwrap();
+                let mut target_path = Vec::new();
+                if !super::docking::find_leaf_path(root, &target_label, &mut target_path) {
+                    // Target not in tree — fall back to first leaf.
+                    target_path.clear();
+                    if let Some(first) = first_leaf_label(root) {
+                        super::docking::find_leaf_path(root, &first, &mut target_path);
+                    }
                 }
-            }
-        }
 
-        g.active_panel = Some(label.clone());
+                match dir {
+                    Some(d) => {
+                        let zone = match d {
+                            SplitDir::Horizontal => DropZone::Right,
+                            SplitDir::Vertical => DropZone::Bottom,
+                        };
+                        add_leaf_as_sibling(&mut g.root, &target_path, zone, leaf);
+                    }
+                    None => {
+                        let parent_is_stack = if target_path.is_empty() {
+                            is_stack_at(g.root.as_ref().unwrap(), &[])
+                        } else {
+                            let parent_path = &target_path[..target_path.len() - 1];
+                            is_stack_at(g.root.as_ref().unwrap(), parent_path)
+                        };
+
+                        if parent_is_stack {
+                            let parent_path = if target_path.is_empty() {
+                                Vec::new()
+                            } else {
+                                target_path[..target_path.len() - 1].to_vec()
+                            };
+                            append_to_stack_at(g.root.as_mut().unwrap(), &parent_path, leaf);
+                        } else {
+                            add_leaf_as_sibling(&mut g.root, &target_path, DropZone::Center, leaf);
+                        }
+                    }
+                }
+
+                g.active_panel = Some(label.clone());
+            }
+        } // write lock released here
+        self.schedule_save(500);
         label
     }
 
@@ -377,24 +498,27 @@ impl LayoutTree {
     /// pick a replacement active panel if we removed the current one.
     /// Returns `true` if the leaf was found and removed.
     pub fn remove_panel(&self, label: &str) -> bool {
-        let mut g = self.0.write().unwrap();
-        let removed = super::docking::remove_leaf(&mut g.root, label);
-        if !removed {
-            return false;
+        let removed = {
+            let mut g = self.inner.write().unwrap();
+            let removed = super::docking::remove_leaf(&mut g.root, label);
+            if !removed {
+                return false;
+            }
+            g.meta.remove(label);
+            if g.active_panel.as_deref() == Some(label) {
+                let fallback = g.maximized_stack_id.as_deref().and_then(|id| {
+                    g.root
+                        .as_ref()
+                        .and_then(|r| first_leaf_in_stack_with_id(r, id))
+                });
+                g.active_panel = fallback.or_else(|| g.root.as_ref().and_then(first_leaf_label));
+            }
+            true
+        };
+        if removed {
+            self.schedule_save(500);
         }
-        g.meta.remove(label);
-        if g.active_panel.as_deref() == Some(label) {
-            // While maximized, keep the active panel inside the maximized
-            // stack so subsequent `wm_open` calls (which default target to
-            // active_panel) tab-insert into the maximized group.
-            let fallback = g.maximized_stack_id.as_deref().and_then(|id| {
-                g.root
-                    .as_ref()
-                    .and_then(|r| first_leaf_in_stack_with_id(r, id))
-            });
-            g.active_panel = fallback.or_else(|| g.root.as_ref().and_then(first_leaf_label));
-        }
-        true
+        removed
     }
 
     /// Move the Leaf with `source_label` to `target_path` under `zone` semantics.
@@ -409,10 +533,16 @@ impl LayoutTree {
         zone: DropZone,
         insert_index: Option<usize>,
     ) -> bool {
-        let mut g = self.0.write().unwrap();
-        let changed = move_leaf(&mut g.root, source_label, target_path, zone, insert_index);
+        let changed = {
+            let mut g = self.inner.write().unwrap();
+            let changed = move_leaf(&mut g.root, source_label, target_path, zone, insert_index);
+            if changed {
+                g.active_panel = Some(source_label.to_string());
+            }
+            changed
+        };
         if changed {
-            g.active_panel = Some(source_label.to_string());
+            self.schedule_save(500);
         }
         changed
     }
@@ -423,27 +553,38 @@ impl LayoutTree {
         if a == b {
             return false;
         }
-        let mut g = self.0.write().unwrap();
-        let Some(root) = g.root.as_mut() else {
-            return false;
+        let changed = {
+            let mut g = self.inner.write().unwrap();
+            let Some(root) = g.root.as_mut() else {
+                return false;
+            };
+            swap_leaves_inner(root, a, b)
         };
-        swap_leaves_inner(root, a, b)
+        if changed {
+            self.schedule_save(500);
+        }
+        changed
     }
 
     /// Set the active tab on the Stack at `path`. Also marks the chosen leaf
     /// as the active panel so subsequent `wm_open` calls target its group.
     pub fn set_active_tab(&self, path: &[usize], index: usize) -> bool {
-        let mut g = self.0.write().unwrap();
-        let changed = super::docking::set_active_tab(&mut g.root, path, index);
-        if changed {
-            // Look up the newly-active child's label.
-            if let Some(root) = g.root.as_ref() {
-                let mut active_path = path.to_vec();
-                active_path.push(index);
-                if let Some(label) = leaf_label_at(root, &active_path) {
-                    g.active_panel = Some(label);
+        let changed = {
+            let mut g = self.inner.write().unwrap();
+            let changed = super::docking::set_active_tab(&mut g.root, path, index);
+            if changed {
+                if let Some(root) = g.root.as_ref() {
+                    let mut active_path = path.to_vec();
+                    active_path.push(index);
+                    if let Some(label) = leaf_label_at(root, &active_path) {
+                        g.active_panel = Some(label);
+                    }
                 }
             }
+            changed
+        };
+        if changed {
+            self.schedule_save(500);
         }
         changed
     }
@@ -460,7 +601,7 @@ impl LayoutTree {
     /// a Stack. Read-only — used by `wm_close_stack` to find the set of
     /// webviews to destroy for a "Close group" action.
     pub fn labels_in_stack(&self, path: &[usize]) -> Vec<String> {
-        let g = self.0.read().unwrap();
+        let g = self.inner.read().unwrap();
         let Some(root) = g.root.as_ref() else {
             return Vec::new();
         };
@@ -492,12 +633,83 @@ impl LayoutTree {
     /// Returns `true` iff the mutation was applied (path valid, splitter has
     /// an adjacent pair at `child_index`).
     pub fn resize_splitter(&self, path: &[usize], child_index: usize, px: f64, py: f64) -> bool {
-        let mut g = self.0.write().unwrap();
-        let (w, h) = (g.width, (g.height - HEADER_HEIGHT).max(0.0));
-        let Some(root) = g.root.as_mut() else {
-            return false;
+        let changed = {
+            let mut g = self.inner.write().unwrap();
+            let (w, h) = (g.width, (g.height - HEADER_HEIGHT).max(0.0));
+            let Some(root) = g.root.as_mut() else {
+                return false;
+            };
+            apply_splitter_drag(root, path, child_index, 0.0, HEADER_HEIGHT, w, h, px, py)
         };
-        apply_splitter_drag(root, path, child_index, 0.0, HEADER_HEIGHT, w, h, px, py)
+        if changed {
+            self.schedule_save(500);
+        }
+        changed
+    }
+}
+
+// ── Private helpers ───────────────────────────────────────────────────────────
+
+/// Snapshot the current `Inner` state into a `PersistedLayout` for disk write.
+fn snapshot_for_persist(inner: &Inner) -> PersistedLayout {
+    let meta = inner
+        .meta
+        .iter()
+        .map(|(label, m)| {
+            (
+                label.clone(),
+                PersistedLeafMeta {
+                    app_id: m.app_id.clone(),
+                    url: m.url.clone(),
+                    title: m.title.clone(),
+                    engine_binding: m.engine_binding.clone(),
+                    display_name: m.display_name.clone(),
+                    zoom_factor: m.zoom_factor,
+                },
+            )
+        })
+        .collect();
+    PersistedLayout {
+        tree: inner.root.clone(),
+        meta,
+        active_panel: inner.active_panel.clone(),
+        maximized_stack_id: inner.maximized_stack_id.clone(),
+    }
+}
+
+impl LayoutTree {
+    /// Capture a `PersistedLayout` snapshot and spawn a task to write it to
+    /// disk after `debounce_ms` milliseconds.  Any previously-pending write
+    /// task is aborted so rapid mutations coalesce into one disk write.
+    /// Pass `debounce_ms = 0` for an immediate write (rename / zoom ops).
+    fn schedule_save(&self, debounce_ms: u64) {
+        let Some(app) = self.app.get() else { return };
+
+        let data_dir = match app.path().app_data_dir() {
+            Ok(d) => d,
+            Err(e) => {
+                eprintln!("[layout] failed to resolve app_data_dir: {e}");
+                return;
+            }
+        };
+
+        let snapshot = {
+            let g = self.inner.read().unwrap();
+            snapshot_for_persist(&g)
+        };
+
+        let mut handle = self.save_handle.lock().unwrap();
+        if let Some(h) = handle.take() {
+            h.abort();
+        }
+        *handle = Some(tokio::spawn(async move {
+            if debounce_ms > 0 {
+                tokio::time::sleep(std::time::Duration::from_millis(debounce_ms)).await;
+            }
+            if let Err(e) = persist::save(&snapshot, &data_dir) {
+                eprintln!("[layout] persist::save failed: {e}");
+            }
+        }));
     }
 }
 
@@ -513,6 +725,25 @@ fn collect_leaf_labels(node: &LayoutNode, out: &mut Vec<String>) {
         LayoutNode::Splitter { children, .. } | LayoutNode::Stack { children, .. } => {
             for c in children {
                 collect_leaf_labels(c, out);
+            }
+        }
+    }
+}
+
+fn collect_panel_urls(
+    node: &LayoutNode,
+    meta: &HashMap<String, LeafMeta>,
+    out: &mut Vec<(String, String)>,
+) {
+    match node {
+        LayoutNode::Leaf { label, .. } => {
+            if let Some(m) = meta.get(label) {
+                out.push((label.clone(), m.url.clone()));
+            }
+        }
+        LayoutNode::Splitter { children, .. } | LayoutNode::Stack { children, .. } => {
+            for c in children {
+                collect_panel_urls(c, meta, out);
             }
         }
     }
@@ -676,10 +907,6 @@ fn walk_for_snapshot(
             }
         }
         LayoutNode::Stack { children, .. } => {
-            // Stack members have their headers from the tab strip — don't emit
-            // panel bounds for them. Recurse into the content area anyway so
-            // nested Splitters inside a Stack still get their non-stack leaves
-            // published.
             let content_y = y + TAB_STRIP_HEIGHT;
             let content_h = (height - TAB_STRIP_HEIGHT).max(0.0);
             for child in children {
@@ -690,9 +917,6 @@ fn walk_for_snapshot(
 }
 
 fn swap_leaves_inner(node: &mut LayoutNode, a: &str, b: &str) -> bool {
-    // Two-pass via raw pointers would be unsafe; instead, snapshot labels and
-    // rewrite both occurrences by label substitution. Panels are keyed only
-    // by label, so a full-tree label swap is equivalent to a positional swap.
     let found_a = contains_label(node, a);
     let found_b = contains_label(node, b);
     if !found_a || !found_b {
@@ -865,9 +1089,6 @@ fn apply_at_splitter(
         return false;
     }
 
-    // Boundary between child_index and child_index+1 sits at
-    //   axis_start + content * (left_sum / total) + child_index * SPLITTER_THICKNESS
-    // Solve for left_sum:
     let rel = (cursor - axis_start - child_index as f64 * SPLITTER_THICKNESS) / content * total;
     let target_left_sum = rel.clamp(0.0, total);
 
