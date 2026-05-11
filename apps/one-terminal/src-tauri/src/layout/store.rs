@@ -33,6 +33,15 @@ struct LeafMeta {
     zoom_factor: f64,
 }
 
+/// Content metadata for a new panel, passed as a unit to [`LayoutTree::add_panel`]
+/// and [`LayoutTree::add_panel_with_label`].
+pub struct PanelSpec {
+    pub app_id: String,
+    pub url: String,
+    pub title: String,
+    pub engine_binding: Option<ot_core::engine::EngineBinding>,
+}
+
 #[derive(Default)]
 struct Inner {
     root: Option<LayoutNode>,
@@ -396,7 +405,7 @@ impl LayoutTree {
         }
     }
 
-    /// Add a new panel to the tree.
+    /// Add a new panel to the tree, generating a fresh webview label.
     ///
     /// Placement logic:
     /// - Tree empty → new leaf becomes root (bare Leaf, no Stack wrapper).
@@ -408,24 +417,43 @@ impl LayoutTree {
     /// The new leaf becomes the active panel. Returns the new webview label.
     pub fn add_panel(
         &self,
-        app_id: &str,
-        url: &str,
-        title: &str,
+        spec: PanelSpec,
         target: Option<&str>,
         dir: Option<SplitDir>,
-        engine_binding: Option<ot_core::engine::EngineBinding>,
     ) -> String {
         let label = format!("panel-{}", short_id());
+        self.insert_panel(label, spec, target, dir)
+    }
 
+    /// Like [`add_panel`] but uses a caller-supplied `label` instead of
+    /// generating one. Used by the webview pool so the pre-created blank
+    /// webview's label and the tree's panel id stay in sync.
+    pub fn add_panel_with_label(
+        &self,
+        label: &str,
+        spec: PanelSpec,
+        target: Option<&str>,
+        dir: Option<SplitDir>,
+    ) -> String {
+        self.insert_panel(label.to_string(), spec, target, dir)
+    }
+
+    fn insert_panel(
+        &self,
+        label: String,
+        spec: PanelSpec,
+        target: Option<&str>,
+        dir: Option<SplitDir>,
+    ) -> String {
         {
             let mut g = self.inner.write().unwrap();
             g.meta.insert(
                 label.clone(),
                 LeafMeta {
-                    app_id: app_id.into(),
-                    url: url.into(),
-                    title: title.into(),
-                    engine_binding,
+                    app_id: spec.app_id,
+                    url: spec.url,
+                    title: spec.title,
+                    engine_binding: spec.engine_binding,
                     display_name: None,
                     zoom_factor: 1.0,
                 },

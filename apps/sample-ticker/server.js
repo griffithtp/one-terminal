@@ -38,8 +38,12 @@ http.createServer((req, res) => {
       res.end('404 Not Found');
       return;
     }
-    const mime = MIME[path.extname(filePath)] ?? 'application/octet-stream';
-    res.writeHead(200, { 'Content-Type': mime });
+    const ext  = path.extname(filePath);
+    const mime = MIME[ext] ?? 'application/octet-stream';
+    const cache = ext === '.html'
+      ? 'no-cache, no-store, must-revalidate'
+      : 'public, max-age=31536000, immutable';
+    res.writeHead(200, { 'Content-Type': mime, 'Cache-Control': cache });
     res.end(data);
   });
 }).listen(PORT, () => {
