@@ -12,6 +12,7 @@ use layout::commands::{
     wm_toggle_maximize_stack,
 };
 use layout::drag::wm_drag_move;
+use layout::host::HostLayout;
 use layout::store::{LayoutTree, PanelSpec};
 use layout::{LayoutSnapshot, SplitDir};
 use ot_core::engine::{is_system_version, EngineBinding, EngineFamily};
@@ -203,6 +204,14 @@ fn locate_host_binary() -> Result<std::path::PathBuf, String> {
 #[tauri::command]
 fn wm_snapshot(tree: State<'_, LayoutTree>) -> Option<LayoutSnapshot> {
     tree.snapshot()
+}
+
+/// Return the current host-shell projection (tab strips + splitter handles).
+/// The chrome calls this on mount to hydrate `useHostLayout` in case the
+/// initial `wm:host-layout` event fired before the frontend listener was ready.
+#[tauri::command]
+fn wm_host_snapshot(tree: State<'_, LayoutTree>) -> HostLayout {
+    tree.host_snapshot()
 }
 
 /// Open a new panel.
@@ -409,41 +418,37 @@ async fn wm_engine_install(
 
 /// Called by the overlay webview's React component on mount to signal that
 /// event listeners are registered and the menu payload can be sent.
+///
+/// NOTE: this does NOT reset `stale`. The stale flag tracks whether a new
+/// content panel was added *after* the overlay was last inserted as a child
+/// webview. An overlay that calls `wm_overlay_ready` may not be the topmost
+/// child webview — e.g. when the initial overlay (position 2) loads after
+/// panels have already been restored on top of it. The stale flag is cleared
+/// only when `wm_ctx_menu_open` / `wm_palette_open` / `wm_overflow_menu_open`
+/// explicitly decide to recreate the overlay.
 #[tauri::command]
 fn wm_overlay_ready(overlay: State<'_, OverlayState>) {
     let mut inner = overlay.lock().unwrap();
     inner.is_ready = true;
-    inner.stale = false;
     for tx in inner.wakers.drain(..) {
         let _ = tx.send(());
     }
 }
 
-/// Show the context menu overlay at window position (`x`, `y`) for the Stack
-/// at `stack_path` containing `n_tabs` tabs.  If the overlay is stale (a panel
-/// was opened since it was last created), it is closed and recreated on the
-/// main thread so it regains the topmost z-order, then this function awaits
-/// the overlay's ready signal before emitting `wm:ctx-menu`.
-#[allow(clippy::too_many_arguments)]
-#[tauri::command]
-async fn wm_ctx_menu_open(
-    x: f64,
-    y: f64,
-    stack_path: Vec<usize>,
-    n_tabs: usize,
-    tab_label: Option<String>,
-    app_id: Option<String>,
-    display_name: Option<String>,
-    zoom_factor: Option<f64>,
-    overlay: State<'_, OverlayState>,
-    app: AppHandle,
+/// Ensure the overlay webview is the topmost child, then position it
+/// full-screen. Shared by all overlay-show commands.
+///
+/// If `stale=true` the overlay is closed and recreated as the last child
+/// webview (so it sits above all content panels), then we wait for the overlay
+/// to call `wm_overlay_ready` before returning.
+async fn overlay_raise(
+    overlay_arc: Arc<Mutex<OverlayInner>>,
+    app: &AppHandle,
 ) -> Result<(), String> {
-    let overlay_arc = Arc::clone(&*overlay);
-
-    // Atomically take ownership of the recreate.  If we see `stale=true`,
-    // clear it inside the same lock so a second concurrent right-click doesn't
-    // also try to close+recreate the overlay — it'll fall through and just
-    // wait on the ready signal we're about to produce.
+    // Atomically take ownership of the recreate. If we see `stale=true`,
+    // clear it inside the same lock so a second concurrent call doesn't also
+    // try to close+recreate the overlay — it falls through and waits on the
+    // ready signal we're about to produce.
     let must_recreate = {
         let mut inner = overlay_arc.lock().unwrap();
         if inner.stale {
@@ -481,7 +486,6 @@ async fn wm_ctx_menu_open(
             let _ = create_tx.send(result);
         })
         .map_err(|e| e.to_string())?;
-
         create_rx.recv().map_err(|e| e.to_string())??;
     }
 
@@ -504,7 +508,7 @@ async fn wm_ctx_menu_open(
     }
 
     // Move the overlay to cover the full window so its backdrop captures
-    // outside-clicks and the menu renders at the correct cursor position.
+    // outside-clicks and menus render at the correct cursor position.
     let win = app.get_window(WIN).ok_or("wm window not found")?;
     let sf = win.scale_factor().unwrap_or(1.0);
     let sz = win.inner_size().unwrap_or(tauri::PhysicalSize {
@@ -512,16 +516,34 @@ async fn wm_ctx_menu_open(
         height: 900,
     });
     let (w, h) = (sz.width as f64 / sf, sz.height as f64 / sf);
-    if let Some(wv) = app.get_webview(OVERLAY) {
-        wv.set_bounds(tauri::Rect {
+    app.get_webview(OVERLAY)
+        .ok_or("overlay webview not found after ready")?
+        .set_bounds(tauri::Rect {
             position: tauri::Position::Logical(LogicalPosition::new(0.0, 0.0)),
             size: tauri::Size::Logical(LogicalSize::new(w, h)),
         })
         .map_err(|e| e.to_string())?;
-    } else {
-        return Err("overlay webview not found after ready".to_string());
-    }
 
+    Ok(())
+}
+
+/// Show the context menu overlay at window position (`x`, `y`) for the Stack
+/// at `stack_path` containing `n_tabs` tabs.
+#[allow(clippy::too_many_arguments)]
+#[tauri::command]
+async fn wm_ctx_menu_open(
+    x: f64,
+    y: f64,
+    stack_path: Vec<usize>,
+    n_tabs: usize,
+    tab_label: Option<String>,
+    app_id: Option<String>,
+    display_name: Option<String>,
+    zoom_factor: Option<f64>,
+    overlay: State<'_, OverlayState>,
+    app: AppHandle,
+) -> Result<(), String> {
+    overlay_raise(Arc::clone(&*overlay), &app).await?;
     app.emit(
         "wm:ctx-menu",
         serde_json::json!({
@@ -535,9 +557,7 @@ async fn wm_ctx_menu_open(
             "zoomFactor": zoom_factor,
         }),
     )
-    .map_err(|e| e.to_string())?;
-
-    Ok(())
+    .map_err(|e| e.to_string())
 }
 
 /// Signal the chrome webview to enter inline rename mode for `label`.
@@ -559,97 +579,31 @@ fn wm_ctx_menu_close(app: AppHandle) {
     }
 }
 
-/// Open the command palette in the overlay webview.  `commands` is the
-/// serialised palette payload built by the frontend registry.  Uses the same
-/// stale-check / recreate / wait-for-ready pattern as `wm_ctx_menu_open` so
-/// the overlay is always the topmost child webview when shown.
+/// Open the command palette in the overlay webview.
 #[tauri::command]
 async fn wm_palette_open(
     commands: serde_json::Value,
     overlay: State<'_, OverlayState>,
     app: AppHandle,
 ) -> Result<(), String> {
-    let overlay_arc = Arc::clone(&*overlay);
-
-    let must_recreate = {
-        let mut inner = overlay_arc.lock().unwrap();
-        if inner.stale {
-            inner.stale = false;
-            inner.is_ready = false;
-            true
-        } else {
-            false
-        }
-    };
-    if must_recreate {
-        let (create_tx, create_rx) = std::sync::mpsc::channel::<Result<(), String>>();
-        let app_for_main = app.clone();
-        app.run_on_main_thread(move || {
-            let result = (|| -> Result<(), String> {
-                if let Some(old) = app_for_main.get_webview(OVERLAY) {
-                    old.close().map_err(|e| e.to_string())?;
-                }
-                let win = app_for_main.get_window(WIN).ok_or("wm window not found")?;
-                let sf = win.scale_factor().unwrap_or(1.0);
-                let sz = win.inner_size().unwrap_or(tauri::PhysicalSize {
-                    width: 1600,
-                    height: 900,
-                });
-                let (w, h) = (sz.width as f64 / sf, sz.height as f64 / sf);
-                win.add_child(
-                    WebviewBuilder::new(OVERLAY, WebviewUrl::App("index.html#overlay".into()))
-                        .transparent(true),
-                    LogicalPosition::new(-20000.0, -20000.0),
-                    LogicalSize::new(w, h),
-                )
-                .map_err(|e| e.to_string())?;
-                Ok(())
-            })();
-            let _ = create_tx.send(result);
-        })
-        .map_err(|e| e.to_string())?;
-
-        create_rx.recv().map_err(|e| e.to_string())??;
-    }
-
-    let rx = {
-        let mut inner = overlay_arc.lock().unwrap();
-        if inner.is_ready {
-            None
-        } else {
-            let (tx, rx) = oneshot::channel();
-            inner.wakers.push(tx);
-            Some(rx)
-        }
-    };
-    if let Some(rx) = rx {
-        tokio::time::timeout(std::time::Duration::from_secs(5), rx)
-            .await
-            .map_err(|_| "timeout waiting for overlay".to_string())?
-            .map_err(|_| "overlay waker dropped".to_string())?;
-    }
-
-    let win = app.get_window(WIN).ok_or("wm window not found")?;
-    let sf = win.scale_factor().unwrap_or(1.0);
-    let sz = win.inner_size().unwrap_or(tauri::PhysicalSize {
-        width: 1600,
-        height: 900,
-    });
-    let (w, h) = (sz.width as f64 / sf, sz.height as f64 / sf);
-    if let Some(wv) = app.get_webview(OVERLAY) {
-        wv.set_bounds(tauri::Rect {
-            position: tauri::Position::Logical(LogicalPosition::new(0.0, 0.0)),
-            size: tauri::Size::Logical(LogicalSize::new(w, h)),
-        })
-        .map_err(|e| e.to_string())?;
-    } else {
-        return Err("overlay webview not found after ready".to_string());
-    }
-
+    overlay_raise(Arc::clone(&*overlay), &app).await?;
     app.emit("wm:palette-open", commands)
-        .map_err(|e| e.to_string())?;
+        .map_err(|e| e.to_string())
+}
 
-    Ok(())
+/// Show the tab overflow dropdown in the overlay webview. `payload` is the
+/// opaque JSON built by the chrome (hidden tab list + button rect + stack path)
+/// — Rust passes it through unchanged so only the frontend needs to know the
+/// shape. Uses the same overlay_raise mechanism as the other menu commands.
+#[tauri::command]
+async fn wm_overflow_menu_open(
+    payload: serde_json::Value,
+    overlay: State<'_, OverlayState>,
+    app: AppHandle,
+) -> Result<(), String> {
+    overlay_raise(Arc::clone(&*overlay), &app).await?;
+    app.emit("wm:overflow-menu", payload)
+        .map_err(|e| e.to_string())
 }
 
 // ── Picker overlay parking ────────────────────────────────────────────────────
@@ -873,6 +827,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             wm_config,
             wm_snapshot,
+            wm_host_snapshot,
             wm_open,
             wm_close,
             wm_drag_move,
@@ -896,6 +851,7 @@ pub fn run() {
             wm_ctx_menu_open,
             wm_ctx_menu_close,
             wm_palette_open,
+            wm_overflow_menu_open,
             wm_request_rename,
         ])
         .run(tauri::generate_context!())
