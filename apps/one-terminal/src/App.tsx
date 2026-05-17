@@ -14,7 +14,7 @@
  * z-ordering naturally routes events to the correct webview.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useLayout } from "./hooks/useLayout";
@@ -27,6 +27,8 @@ import { GhostLayer } from "./components/GhostLayer";
 import { DropZoneLayer } from "./components/DropZoneLayer";
 import { PanelHeaderLayer } from "./components/PanelHeaderLayer";
 import { OverlayApp } from "./components/OverlayApp";
+import { registerWidgetCommands, setActivePanelLabel } from "./commands/widgetCommands";
+import { initAppCommands } from "./commands/appCommands";
 import type { EngineBinding, StackHeader } from "./types";
 import "./wm.css";
 
@@ -43,6 +45,30 @@ function ChromeApp() {
   const { layout, openPanel, closePanel } = useLayout();
   const { host: hostLayout, removeTab } = useHostLayout();
   const tabDrag = useTabDrag();
+
+  // ── Command registry bootstrap (runs once per mount) ──────────────────────
+  const commandsRegistered = useRef(false);
+  useEffect(() => {
+    if (commandsRegistered.current) return;
+    commandsRegistered.current = true;
+    // palette.open action is a stub here; replaced in Issue 06-B when
+    // CommandPalette is mounted and setPaletteOpen is available.
+    registerWidgetCommands(() => console.log("TODO: open palette (wired in 06-B)"));
+    initAppCommands((appId, url, title) =>
+      openPanel(appId, url, title, null).catch(console.error),
+    ).catch(console.error);
+  }, [openPanel]);
+
+  // Keep active panel label in sync so generic widget commands know their target.
+  useEffect(() => {
+    if (!layout || layout.panels.length === 0) {
+      setActivePanelLabel(null);
+      return;
+    }
+    // When a new panel appears set it as active; useLayout resolves the last opened.
+    const last = layout.panels[layout.panels.length - 1];
+    setActivePanelLabel(last.id);
+  }, [layout]);
 
   // Show a status banner while the Electron binary is being auto-installed.
   const [electronStatus, setElectronStatus] = useState<"idle" | "installing" | "error">("idle");
@@ -98,9 +124,15 @@ function ChromeApp() {
           path: result.stackPath,
           tabIndex: result.tabIndex,
         }).catch(console.error);
+        // Track the clicked tab as the active panel for generic widget commands.
+        const stack = hostLayout?.stacks.find(
+          (s) => s.path.join() === result.stackPath.join(),
+        );
+        const tab = stack?.tabs[result.tabIndex];
+        if (tab) setActivePanelLabel(tab.label);
       }
     },
-    [tabDrag]
+    [tabDrag, hostLayout]
   );
 
   const handleTabClose = useCallback(
