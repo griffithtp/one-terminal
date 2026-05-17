@@ -441,7 +441,10 @@ fn wm_overlay_ready(overlay: State<'_, OverlayState>) {
 /// If `stale=true` the overlay is closed and recreated as the last child
 /// webview (so it sits above all content panels), then we wait for the overlay
 /// to call `wm_overlay_ready` before returning.
-async fn overlay_raise(overlay_arc: Arc<Mutex<OverlayInner>>, app: &AppHandle) -> Result<(), String> {
+async fn overlay_raise(
+    overlay_arc: Arc<Mutex<OverlayInner>>,
+    app: &AppHandle,
+) -> Result<(), String> {
     // Atomically take ownership of the recreate. If we see `stale=true`,
     // clear it inside the same lock so a second concurrent call doesn't also
     // try to close+recreate the overlay — it falls through and waits on the
