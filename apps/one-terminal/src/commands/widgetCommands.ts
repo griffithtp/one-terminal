@@ -27,7 +27,7 @@ async function zoomActive(delta: number): Promise<void> {
 
 export function registerWidgetCommands(
   onOpenPalette: () => void,
-  onOpenSettings: () => void,
+  onOpenSettings: () => void
 ): void {
   registry.register({
     id: "palette.open",

@@ -142,13 +142,9 @@ export function CommandPalette({ isOpen, onClose, onHighlight }: Props) {
                 onMouseEnter={() => setSelectedIdx(i)}
                 onClick={() => execute(cmd)}
               >
-                <span className="palette-item__group">
-                  {GROUP_LABELS[cmd.group] ?? cmd.group}
-                </span>
+                <span className="palette-item__group">{GROUP_LABELS[cmd.group] ?? cmd.group}</span>
                 <span className="palette-item__label">{cmd.label}</span>
-                {cmd.shortcut && (
-                  <kbd className="palette-item__shortcut">{cmd.shortcut}</kbd>
-                )}
+                {cmd.shortcut && <kbd className="palette-item__shortcut">{cmd.shortcut}</kbd>}
               </li>
             ))}
           </ul>

@@ -13,8 +13,8 @@ import "./KeybindingsSettings.css";
 
 const GROUP_LABELS: Record<string, string> = {
   navigation: "Navigation",
-  widgets:    "Widgets",
-  settings:   "Settings",
+  widgets: "Widgets",
+  settings: "Settings",
 };
 
 const MODIFIER_KEYS = new Set(["Meta", "Control", "Shift", "Alt"]);
@@ -27,9 +27,9 @@ function formatKeybinding(kb: string): string {
     .split("+")
     .map((part) => {
       if (part === "CmdOrCtrl") return isMac ? "⌘" : "Ctrl";
-      if (part === "Ctrl")      return isMac ? "⌃" : "Ctrl";
-      if (part === "Shift")     return isMac ? "⇧" : "Shift";
-      if (part === "Alt")       return isMac ? "⌥" : "Alt";
+      if (part === "Ctrl") return isMac ? "⌃" : "Ctrl";
+      if (part === "Shift") return isMac ? "⇧" : "Shift";
+      if (part === "Alt") return isMac ? "⌥" : "Alt";
       return part;
     })
     .join(isMac ? "" : "+");
@@ -65,11 +65,7 @@ function CaptureCell({ pendingCombo, conflict, onKeyDown, onAssign, onCancel }: 
         >
           {pendingCombo ? formatKeybinding(pendingCombo) : "Press a key combo…"}
         </div>
-        <button
-          className="kb-btn kb-btn--primary"
-          onClick={onAssign}
-          disabled={!pendingCombo}
-        >
+        <button className="kb-btn kb-btn--primary" onClick={onAssign} disabled={!pendingCombo}>
           Assign
         </button>
         <button className="kb-btn" onClick={onCancel}>
@@ -114,9 +110,7 @@ export function KeybindingsSettings({ onClose }: Props) {
   const [conflict, setConflict] = useState<string | null>(null);
 
   const refresh = useCallback(() => {
-    setCommands(
-      registry.getAll().filter((c) => REMAPPABLE_GROUPS.has(c.group)),
-    );
+    setCommands(registry.getAll().filter((c) => REMAPPABLE_GROUPS.has(c.group)));
   }, []);
 
   useEffect(() => {
@@ -148,7 +142,7 @@ export function KeybindingsSettings({ onClose }: Props) {
       setConflict(existing && existing.id !== editingId ? existing.label : null);
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [editingId, pendingCombo],
+    [editingId, pendingCombo]
   );
 
   // ── Assign ──────────────────────────────────────────────────────────────
@@ -219,11 +213,7 @@ export function KeybindingsSettings({ onClose }: Props) {
           <button className="kb-header__reset-all" onClick={resetAll}>
             Reset all
           </button>
-          <button
-            className="kb-header__close"
-            onClick={onClose}
-            aria-label="Close"
-          >
+          <button className="kb-header__close" onClick={onClose} aria-label="Close">
             ✕
           </button>
         </div>
@@ -245,14 +235,9 @@ export function KeybindingsSettings({ onClose }: Props) {
                 const isModified = cmd.keybinding !== defaultKb;
 
                 return (
-                  <tr
-                    key={cmd.id}
-                    className={isEditing ? "kb-row--editing" : ""}
-                  >
+                  <tr key={cmd.id} className={isEditing ? "kb-row--editing" : ""}>
                     <td className="kb-col-label">{cmd.label}</td>
-                    <td className="kb-col-group">
-                      {GROUP_LABELS[cmd.group] ?? cmd.group}
-                    </td>
+                    <td className="kb-col-group">{GROUP_LABELS[cmd.group] ?? cmd.group}</td>
                     <td className="kb-col-binding">
                       {isEditing ? (
                         <CaptureCell

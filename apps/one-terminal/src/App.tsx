@@ -88,11 +88,11 @@ function ChromeApp() {
     commandsRegistered.current = true;
     registerWidgetCommands(
       () => openPaletteRef.current(),
-      () => openSettingsRef.current(),
+      () => openSettingsRef.current()
     );
     applyKeybindingOverrides();
     initAppCommands((appId, url, title) =>
-      openPanel(appId, url, title, null).catch(console.error),
+      openPanel(appId, url, title, null).catch(console.error)
     ).catch(console.error);
   }, [openPanel]);
 
@@ -162,9 +162,7 @@ function ChromeApp() {
           tabIndex: result.tabIndex,
         }).catch(console.error);
         // Track the clicked tab as the active panel for generic widget commands.
-        const stack = hostLayout?.stacks.find(
-          (s) => s.path.join() === result.stackPath.join(),
-        );
+        const stack = hostLayout?.stacks.find((s) => s.path.join() === result.stackPath.join());
         const tab = stack?.tabs[result.tabIndex];
         if (tab) setActivePanelLabel(tab.label);
       }
@@ -245,9 +243,7 @@ function ChromeApp() {
         onClose={closePalette}
         onHighlight={setHighlightedWidget}
       />
-      {settingsOpen && (
-        <KeybindingsSettings onClose={() => setSettingsOpen(false)} />
-      )}
+      {settingsOpen && <KeybindingsSettings onClose={() => setSettingsOpen(false)} />}
 
       {/* Empty-state hint when no panels are open */}
       {(!layout || layout.panels.length === 0) &&

@@ -68,26 +68,18 @@ class CommandRegistry {
   }
 
   search(query: string): Command[] {
-    const available = Array.from(this.cmds.values()).filter(
-      (c) => c.isAvailable?.() !== false,
-    );
+    const available = Array.from(this.cmds.values()).filter((c) => c.isAvailable?.() !== false);
     const q = query.trim().toLowerCase();
     if (!q) {
       // No query — return up to 10 commands sorted by group priority.
       return available
-        .sort(
-          (a, b) =>
-            GROUP_ORDER.indexOf(a.group) - GROUP_ORDER.indexOf(b.group),
-        )
+        .sort((a, b) => GROUP_ORDER.indexOf(a.group) - GROUP_ORDER.indexOf(b.group))
         .slice(0, 10);
     }
     return available
       .map((cmd) => ({
         cmd,
-        score: bigramScore(
-          q,
-          `${cmd.label} ${cmd.keywords.join(" ")}`.toLowerCase(),
-        ),
+        score: bigramScore(q, `${cmd.label} ${cmd.keywords.join(" ")}`.toLowerCase()),
       }))
       .filter((x) => x.score > 0)
       .sort((a, b) => b.score - a.score)

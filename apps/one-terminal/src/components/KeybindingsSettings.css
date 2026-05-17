@@ -49,7 +49,9 @@
   color: #94a3b8;
   font-size: 11px;
   cursor: pointer;
-  transition: background 100ms, color 100ms;
+  transition:
+    background 100ms,
+    color 100ms;
 }
 .kb-header__reset-all:hover {
   background: #1e293b;
@@ -68,7 +70,9 @@
   color: #64748b;
   font-size: 14px;
   cursor: pointer;
-  transition: background 100ms, color 100ms;
+  transition:
+    background 100ms,
+    color 100ms;
 }
 .kb-header__close:hover {
   background: #7f1d1d;
@@ -125,10 +129,20 @@
   color: #cbd5e1;
 }
 
-.kb-col-label { width: auto; }
-.kb-col-group { width: 110px; color: #475569; font-size: 11px; }
-.kb-col-binding { width: 160px; }
-.kb-col-actions { width: 120px; }
+.kb-col-label {
+  width: auto;
+}
+.kb-col-group {
+  width: 110px;
+  color: #475569;
+  font-size: 11px;
+}
+.kb-col-binding {
+  width: 160px;
+}
+.kb-col-actions {
+  width: 120px;
+}
 
 /* ── Binding display ──────────────────────────────────────────────────────── */
 .kb-binding {
@@ -169,7 +183,10 @@
   font-size: 11px;
   cursor: pointer;
   white-space: nowrap;
-  transition: background 100ms, color 100ms, border-color 100ms;
+  transition:
+    background 100ms,
+    color 100ms,
+    border-color 100ms;
 }
 .kb-btn:hover {
   background: #1e293b;
