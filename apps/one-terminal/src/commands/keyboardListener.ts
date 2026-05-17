@@ -3,7 +3,18 @@ import { registry } from "./registry";
 
 // ── Key combo normalisation ───────────────────────────────────────────────────
 
-function normalise(e: KeyboardEvent): string {
+interface KeyEvent {
+  key: string;
+  metaKey: boolean;
+  ctrlKey: boolean;
+  shiftKey: boolean;
+  altKey: boolean;
+}
+
+/** Converts a keyboard event into the normalised keybinding string used by the
+ *  registry (e.g. "CmdOrCtrl+K", "Ctrl+Tab"). Works with both native
+ *  KeyboardEvent and React.KeyboardEvent. */
+export function normaliseCombo(e: KeyEvent): string {
   const mods: string[] = [];
   // metaKey = Cmd on macOS, ctrlKey = Ctrl on Windows/Linux — both map to CmdOrCtrl.
   if (e.metaKey || e.ctrlKey) mods.push("CmdOrCtrl");
@@ -25,7 +36,7 @@ function normalise(e: KeyboardEvent): string {
 
 export function initKeyboardListener(): void {
   document.addEventListener("keydown", (e) => {
-    const combo = normalise(e);
+    const combo = normaliseCombo(e);
     const cmd = registry.findByKeybinding(combo);
     if (!cmd || cmd.isAvailable?.() === false) return;
     e.preventDefault();

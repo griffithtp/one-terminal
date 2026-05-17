@@ -25,7 +25,10 @@ async function zoomActive(delta: number): Promise<void> {
 
 // ── Registration ──────────────────────────────────────────────────────────────
 
-export function registerWidgetCommands(onOpenPalette: () => void): void {
+export function registerWidgetCommands(
+  onOpenPalette: () => void,
+  onOpenSettings: () => void,
+): void {
   registry.register({
     id: "palette.open",
     label: "Open command palette",
@@ -170,7 +173,6 @@ export function registerWidgetCommands(onOpenPalette: () => void): void {
     label: "Edit keyboard shortcuts",
     keywords: ["settings", "keybindings", "shortcuts", "keyboard", "hotkeys", "remap"],
     group: "settings",
-    // TODO: navigate to keybindings settings page (Issue 06-D)
-    action: () => console.log("TODO: settings.keybindings"),
+    action: onOpenSettings,
   });
 }

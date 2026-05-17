@@ -27,6 +27,7 @@ import { GhostLayer } from "./components/GhostLayer";
 import { DropZoneLayer } from "./components/DropZoneLayer";
 import { PanelHeaderLayer } from "./components/PanelHeaderLayer";
 import { CommandPalette, PanelHighlightLayer } from "./components/CommandPalette";
+import { KeybindingsSettings } from "./components/KeybindingsSettings";
 import { OverlayApp } from "./components/OverlayApp";
 import { registerWidgetCommands, setActivePanelLabel } from "./commands/widgetCommands";
 import { initAppCommands } from "./commands/appCommands";
@@ -51,36 +52,44 @@ function ChromeApp() {
   // ── Command palette state ─────────────────────────────────────────────────
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [highlightedWidget, setHighlightedWidget] = useState<string | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
-  // Stable ref so the registry's palette.open action always calls the current
-  // setter — avoids re-registering commands when state identity changes.
+  // Stable refs so registry actions always call the live setters without
+  // requiring commands to be re-registered on state changes.
   const openPaletteRef = useRef<() => void>(() => {});
   openPaletteRef.current = () => setPaletteOpen(true);
+
+  const openSettingsRef = useRef<() => void>(() => {});
+  openSettingsRef.current = () => setSettingsOpen(true);
 
   function closePalette() {
     setPaletteOpen(false);
     setHighlightedWidget(null);
   }
 
-  // Park panels while the palette is open so the overlay z-orders correctly
-  // over Tauri's webview windows (same pattern as the engine-picker dialog).
-  const paletteParkedRef = useRef(false);
+  // Park panels while any overlay dialog is open — palette, settings, or both
+  // (they're mutually exclusive by design, but the ref handles either).
+  const dialogParkedRef = useRef(false);
+  const dialogOpen = paletteOpen || settingsOpen;
   useEffect(() => {
-    if (paletteOpen && !paletteParkedRef.current) {
-      paletteParkedRef.current = true;
+    if (dialogOpen && !dialogParkedRef.current) {
+      dialogParkedRef.current = true;
       invoke("wm_park_panels").catch(console.error);
-    } else if (!paletteOpen && paletteParkedRef.current) {
-      paletteParkedRef.current = false;
+    } else if (!dialogOpen && dialogParkedRef.current) {
+      dialogParkedRef.current = false;
       invoke("wm_unpark_panels").catch(console.error);
     }
-  }, [paletteOpen]);
+  }, [dialogOpen]);
 
   // ── Command registry bootstrap (runs once per mount) ──────────────────────
   const commandsRegistered = useRef(false);
   useEffect(() => {
     if (commandsRegistered.current) return;
     commandsRegistered.current = true;
-    registerWidgetCommands(() => openPaletteRef.current());
+    registerWidgetCommands(
+      () => openPaletteRef.current(),
+      () => openSettingsRef.current(),
+    );
     applyKeybindingOverrides();
     initAppCommands((appId, url, title) =>
       openPanel(appId, url, title, null).catch(console.error),
@@ -236,6 +245,9 @@ function ChromeApp() {
         onClose={closePalette}
         onHighlight={setHighlightedWidget}
       />
+      {settingsOpen && (
+        <KeybindingsSettings onClose={() => setSettingsOpen(false)} />
+      )}
 
       {/* Empty-state hint when no panels are open */}
       {(!layout || layout.panels.length === 0) &&
