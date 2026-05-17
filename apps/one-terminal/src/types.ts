@@ -95,6 +95,24 @@ export interface HostLayout {
   splitters: SplitterHandle[];
 }
 
+// ── Overflow menu (tab strip dropdown, rendered in overlay) ───────────────────
+
+export interface OverflowMenuTab {
+  label: string;
+  title: string;
+  isActive: boolean;
+  tabIndex: number;
+}
+
+export interface OverflowMenuPayload {
+  items: OverflowMenuTab[];
+  stackPath: number[];
+  /** Left edge of the overflow button — menu aligns its right edge here. */
+  btnRight: number;
+  /** Bottom edge of the overflow button — menu appears below this. */
+  btnBottom: number;
+}
+
 // ── App Directory types (matches apps/app-directory/src/types.ts) ─────────────
 
 export type OsKey = "windows" | "macos" | "linux";

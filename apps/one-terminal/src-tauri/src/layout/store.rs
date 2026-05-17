@@ -10,7 +10,7 @@ use tauri::{AppHandle, Emitter, Manager};
 use uuid::Uuid;
 
 use super::docking::{add_leaf_as_sibling, append_to_stack_at, is_stack_at, move_leaf, DropZone};
-use super::host::compute_host_layout;
+use super::host::{compute_host_layout, HostLayout};
 use super::node::{Direction, LayoutNode};
 use super::persist::{self, PersistedLayout, PersistedLeafMeta};
 use super::reflow::{park_offscreen, reflow_layout, SPLITTER_THICKNESS, TAB_STRIP_HEIGHT};
@@ -262,10 +262,8 @@ impl LayoutTree {
         reflow_layout(root, app, 0.0, HEADER_HEIGHT, g.width, h);
     }
 
-    /// Emit the host-shell projection (tab strips + splitter handles) so the
-    /// chrome webview can render its overlays on top of the panel "holes".
-    /// Matches reflow's HEADER_HEIGHT offset so overlays align with webviews.
-    pub fn emit_host(&self, app: &AppHandle) {
+    /// Compute the current host-shell projection (tab strips + splitter handles).
+    pub fn host_snapshot(&self) -> HostLayout {
         let g = self.inner.read().unwrap();
         let h = (g.height - HEADER_HEIGHT).max(0.0);
         let titles: HashMap<String, String> = g
@@ -300,7 +298,7 @@ impl LayoutTree {
                     None
                 }
             });
-        let payload = compute_host_layout(
+        compute_host_layout(
             g.root.as_ref(),
             max_path,
             0.0,
@@ -311,7 +309,14 @@ impl LayoutTree {
             &app_ids,
             &display_names,
             &zoom_factors,
-        );
+        )
+    }
+
+    /// Emit the host-shell projection (tab strips + splitter handles) so the
+    /// chrome webview can render its overlays on top of the panel "holes".
+    /// Matches reflow's HEADER_HEIGHT offset so overlays align with webviews.
+    pub fn emit_host(&self, app: &AppHandle) {
+        let payload = self.host_snapshot();
         let _ = app.emit("wm:host-layout", &payload);
     }
 

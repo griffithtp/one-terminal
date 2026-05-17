@@ -25,15 +25,8 @@ export function useHostLayout(): UseHostLayoutResult {
   const zoomRestored = useRef<Set<string>>(new Set());
 
   useEffect(() => {
-    const unlisten = listen<HostLayout>("wm:host-layout", (e) => {
-      setHost(e.payload);
-
-      // On the first layout snapshot we restore any persisted non-default zoom
-      // values. Rust already has the zoom in its store and applies it when the
-      // webview is created, but wm_set_zoom also calls webview.set_zoom() — we
-      // call it here so WKWebView/WebView2 picks it up after the webview has
-      // fully initialised (which may happen after the first layout event).
-      for (const stack of e.payload.stacks) {
+    const restoreZoom = (layout: HostLayout) => {
+      for (const stack of layout.stacks) {
         for (const tab of stack.tabs) {
           if (tab.zoomFactor !== 1.0 && !zoomRestored.current.has(tab.label)) {
             zoomRestored.current.add(tab.label);
@@ -43,6 +36,21 @@ export function useHostLayout(): UseHostLayoutResult {
           }
         }
       }
+    };
+
+    // Fetch the current host layout on mount — the Rust-side `wm:host-layout`
+    // event fires during setup, before this listener is registered, so we'd
+    // otherwise miss the initial state on launch/reload.
+    invoke<HostLayout>("wm_host_snapshot")
+      .then((layout) => {
+        setHost(layout);
+        restoreZoom(layout);
+      })
+      .catch(() => {});
+
+    const unlisten = listen<HostLayout>("wm:host-layout", (e) => {
+      setHost(e.payload);
+      restoreZoom(e.payload);
     });
     return () => {
       unlisten.then((fn) => fn());

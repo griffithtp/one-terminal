@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { StackHeader } from "../types";
@@ -70,10 +69,7 @@ interface TabStripProps {
 function TabStrip({ stack, onTabPointerDown, onTabClose }: TabStripProps) {
   const stripRef = useRef<HTMLDivElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
   const [stripWidth, setStripWidth] = useState(0);
-  const [menuOpen, setMenuOpen] = useState(false);
-  const [menuBtnRect, setMenuBtnRect] = useState<DOMRect | null>(null);
   // Inline rename: track which tab (by webview label) is being edited and the
   // draft text. Scoped to this strip so double-clicking in one Stack doesn't
   // open an editor in another.
@@ -90,19 +86,6 @@ function TabStrip({ stack, onTabPointerDown, onTabClose }: TabStripProps) {
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-
-  // Click-outside to dismiss the overflow menu.
-  useEffect(() => {
-    if (!menuOpen) return;
-    const onDown = (e: PointerEvent) => {
-      const t = e.target as Node | null;
-      if (!t) return;
-      if (menuRef.current?.contains(t) || btnRef.current?.contains(t)) return;
-      setMenuOpen(false);
-    };
-    document.addEventListener("pointerdown", onDown);
-    return () => document.removeEventListener("pointerdown", onDown);
-  }, [menuOpen]);
 
   // Listen for wm:request-rename from the overlay (via wm_request_rename command).
   // When a tab in this strip matches the requested label, enter inline edit mode.
@@ -135,14 +118,6 @@ function TabStrip({ stack, onTabPointerDown, onTabClose }: TabStripProps) {
     visibleCount = stack.active + 1;
   }
   const hiddenStart = visibleCount;
-
-  const selectTab = useCallback(
-    (tabIndex: number) => {
-      invoke("wm_set_active_tab", { path: stack.path, tabIndex }).catch(console.error);
-      setMenuOpen(false);
-    },
-    [stack.path]
-  );
 
   // Commit an inline rename. Empty draft → reset display name to app title (null).
   // Unchanged → no-op. Otherwise set the user override via wm_rename_panel.
@@ -274,11 +249,23 @@ function TabStrip({ stack, onTabPointerDown, onTabClose }: TabStripProps) {
             type="button"
             className="wm-tab-overflow-btn"
             aria-label={`${n - hiddenStart} more tabs`}
-            aria-expanded={menuOpen}
             onPointerDown={(e) => e.stopPropagation()}
             onClick={() => {
-              setMenuBtnRect(btnRef.current?.getBoundingClientRect() ?? null);
-              setMenuOpen((o) => !o);
+              const rect = btnRef.current?.getBoundingClientRect();
+              if (!rect) return;
+              invoke("wm_overflow_menu_open", {
+                payload: {
+                  items: stack.tabs.slice(hiddenStart).map((tab, i) => ({
+                    label: tab.label,
+                    title: tab.displayName ?? tab.title,
+                    isActive: hiddenStart + i === stack.active,
+                    tabIndex: hiddenStart + i,
+                  })),
+                  stackPath: stack.path,
+                  btnRight: rect.right,
+                  btnBottom: rect.bottom,
+                },
+              }).catch(console.error);
             }}
           >
             ⋯<span className="wm-tab-overflow-btn__badge">{n - hiddenStart}</span>
@@ -311,39 +298,6 @@ function TabStrip({ stack, onTabPointerDown, onTabClose }: TabStripProps) {
           ×
         </button>
       </div>
-
-      {menuOpen &&
-        hiddenStart < n &&
-        menuBtnRect &&
-        createPortal(
-          <div
-            ref={menuRef}
-            className="wm-tab-overflow-menu"
-            role="menu"
-            style={{
-              position: "fixed",
-              top: menuBtnRect.bottom,
-              right: window.innerWidth - menuBtnRect.right,
-            }}
-            onPointerDown={(e) => e.stopPropagation()}
-          >
-            {stack.tabs.slice(hiddenStart).map((tab, i) => {
-              const realIndex = hiddenStart + i;
-              return (
-                <button
-                  key={tab.label}
-                  type="button"
-                  role="menuitem"
-                  className={`wm-tab-overflow-menu__item${realIndex === stack.active ? " wm-tab-overflow-menu__item--active" : ""}`}
-                  onClick={() => selectTab(realIndex)}
-                >
-                  {tab.displayName ?? tab.title}
-                </button>
-              );
-            })}
-          </div>,
-          document.body
-        )}
     </div>
   );
 }

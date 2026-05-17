@@ -5,7 +5,7 @@ import { ctxMenuItemsFor, type CtxMenuContext } from "./contextMenuItems";
 import { PanelHighlightLayer } from "./CommandPalette";
 import { bigramScore } from "../commands/registry";
 import type { SerializableCommand } from "../commands/registry";
-import type { LayoutSnapshot, HostLayout } from "../types";
+import type { LayoutSnapshot, HostLayout, OverflowMenuPayload } from "../types";
 
 // ── Context-menu types ─────────────────────────────────────────────────────────
 
@@ -88,6 +88,9 @@ export function OverlayApp() {
   const [menu, setMenu] = useState<CtxMenuPayload | null>(null);
   const [zoomOpen, setZoomOpen] = useState(false);
 
+  // ── Overflow menu state ──────────────────────────────────────────────────
+  const [overflowMenu, setOverflowMenu] = useState<OverflowMenuPayload | null>(null);
+
   // ── Palette state ────────────────────────────────────────────────────────
   const [paletteCommands, setPaletteCommands] = useState<SerializableCommand[] | null>(null);
   const [paletteQuery, setPaletteQuery] = useState("");
@@ -108,26 +111,32 @@ export function OverlayApp() {
     let cancelled = false;
 
     (async () => {
-      const [unCtxMenu, unPalette, unLayout, unHostLayout] = await Promise.all([
+      const [unCtxMenu, unPalette, unLayout, unHostLayout, unOverflow] = await Promise.all([
         listen<CtxMenuPayload>("wm:ctx-menu", (e) => {
           setMenu(e.payload);
           setZoomOpen(false);
+          setOverflowMenu(null);
         }),
         listen<SerializableCommand[]>("wm:palette-open", (e) => {
           setPaletteCommands(e.payload);
           setPaletteQuery("");
           setPaletteSelectedIdx(0);
+          setOverflowMenu(null);
           requestAnimationFrame(() => paletteInputRef.current?.focus());
         }),
         listen<LayoutSnapshot>("wm:layout", (e) => setLayout(e.payload)),
         listen<HostLayout>("wm:host-layout", (e) => setHostLayout(e.payload)),
+        listen<OverflowMenuPayload>("wm:overflow-menu", (e) => {
+          setOverflowMenu(e.payload);
+          setMenu(null);
+        }),
       ]);
 
       if (cancelled) {
-        [unCtxMenu, unPalette, unLayout, unHostLayout].forEach((fn) => fn());
+        [unCtxMenu, unPalette, unLayout, unHostLayout, unOverflow].forEach((fn) => fn());
         return;
       }
-      unlisteners = [unCtxMenu, unPalette, unLayout, unHostLayout];
+      unlisteners = [unCtxMenu, unPalette, unLayout, unHostLayout, unOverflow];
       invoke("wm_overlay_ready").catch(console.error);
     })();
 
@@ -184,6 +193,13 @@ export function OverlayApp() {
         break;
     }
     e.stopPropagation();
+  }
+
+  // ── Overflow menu actions ────────────────────────────────────────────────
+
+  function dismissOverflow() {
+    setOverflowMenu(null);
+    invoke("wm_ctx_menu_close").catch(console.error);
   }
 
   // ── Context menu actions ─────────────────────────────────────────────────
@@ -267,6 +283,41 @@ export function OverlayApp() {
                 ))}
               </ul>
             )}
+          </div>
+        </>
+      )}
+
+      {/* ── Tab overflow dropdown ── */}
+      {overflowMenu && (
+        <>
+          <div style={{ position: "fixed", inset: 0 }} onPointerDown={dismissOverflow} />
+          <div
+            className="wm-tab-overflow-menu"
+            role="menu"
+            style={{
+              position: "fixed",
+              top: overflowMenu.btnBottom,
+              right: window.innerWidth - overflowMenu.btnRight,
+            }}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            {overflowMenu.items.map((tab) => (
+              <button
+                key={tab.label}
+                type="button"
+                role="menuitem"
+                className={`wm-tab-overflow-menu__item${tab.isActive ? " wm-tab-overflow-menu__item--active" : ""}`}
+                onClick={() => {
+                  invoke("wm_set_active_tab", {
+                    path: overflowMenu.stackPath,
+                    tabIndex: tab.tabIndex,
+                  }).catch(console.error);
+                  dismissOverflow();
+                }}
+              >
+                {tab.title}
+              </button>
+            ))}
           </div>
         </>
       )}
