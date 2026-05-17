@@ -1,5 +1,16 @@
 export type CommandGroup = "widgets" | "navigation" | "apps" | "settings" | "widget-instances";
 
+/** Serialisable subset of Command — safe to pass across the IPC boundary. */
+export interface SerializableCommand {
+  id: string;
+  label: string;
+  keywords: string[];
+  shortcut?: string;
+  keybinding?: string;
+  group: CommandGroup;
+  widgetLabel?: string;
+}
+
 export interface Command {
   id: string;
   label: string;
@@ -19,13 +30,13 @@ export interface Command {
 
 // ── Bigram fuzzy search ───────────────────────────────────────────────────────
 
-function bigrams(s: string): Set<string> {
+export function bigrams(s: string): Set<string> {
   const result = new Set<string>();
   for (let i = 0; i < s.length - 1; i++) result.add(s.slice(i, i + 2));
   return result;
 }
 
-function bigramScore(query: string, haystack: string): number {
+export function bigramScore(query: string, haystack: string): number {
   const qBg = bigrams(query);
   const hBg = bigrams(haystack);
   let hits = 0;
@@ -94,6 +105,20 @@ class CommandRegistry {
 
   getAll(): Command[] {
     return Array.from(this.cmds.values());
+  }
+
+  serializeForPalette(): SerializableCommand[] {
+    return Array.from(this.cmds.values())
+      .filter((c) => c.isAvailable?.() !== false)
+      .map(({ id, label, keywords, shortcut, keybinding, group, widgetLabel }) => ({
+        id,
+        label,
+        keywords,
+        shortcut,
+        keybinding,
+        group,
+        widgetLabel,
+      }));
   }
 }
 

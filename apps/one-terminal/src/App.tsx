@@ -26,12 +26,12 @@ import { SplitterHandleLayer } from "./components/SplitterHandleLayer";
 import { GhostLayer } from "./components/GhostLayer";
 import { DropZoneLayer } from "./components/DropZoneLayer";
 import { PanelHeaderLayer } from "./components/PanelHeaderLayer";
-import { CommandPalette, PanelHighlightLayer } from "./components/CommandPalette";
 import { KeybindingsSettings } from "./components/KeybindingsSettings";
 import { OverlayApp } from "./components/OverlayApp";
 import { registerWidgetCommands, setActivePanelLabel } from "./commands/widgetCommands";
 import { initAppCommands } from "./commands/appCommands";
 import { applyKeybindingOverrides } from "./commands/keybindingStore";
+import { registry } from "./commands/registry";
 import type { EngineBinding, StackHeader } from "./types";
 import "./wm.css";
 
@@ -49,52 +49,50 @@ function ChromeApp() {
   const { host: hostLayout, removeTab } = useHostLayout();
   const tabDrag = useTabDrag();
 
-  // ── Command palette state ─────────────────────────────────────────────────
-  const [paletteOpen, setPaletteOpen] = useState(false);
-  const [highlightedWidget, setHighlightedWidget] = useState<string | null>(null);
+  // ── Settings state ────────────────────────────────────────────────────────
   const [settingsOpen, setSettingsOpen] = useState(false);
 
-  // Stable refs so registry actions always call the live setters without
-  // requiring commands to be re-registered on state changes.
-  const openPaletteRef = useRef<() => void>(() => {});
-  openPaletteRef.current = () => setPaletteOpen(true);
-
+  // Stable ref so the registry action always calls the live setter without
+  // requiring re-registration on state changes.
   const openSettingsRef = useRef<() => void>(() => {});
   openSettingsRef.current = () => setSettingsOpen(true);
 
-  function closePalette() {
-    setPaletteOpen(false);
-    setHighlightedWidget(null);
-  }
-
-  // Park panels while any overlay dialog is open — palette, settings, or both
-  // (they're mutually exclusive by design, but the ref handles either).
-  const dialogParkedRef = useRef(false);
-  const dialogOpen = paletteOpen || settingsOpen;
+  // Park panels while settings are open — the settings panel renders in the
+  // chrome webview (below panel webviews in z-order) so panels must move out
+  // of the way.  The command palette uses the overlay webview and does NOT
+  // need panel parking.
+  const settingsParkedRef = useRef(false);
   useEffect(() => {
-    if (dialogOpen && !dialogParkedRef.current) {
-      dialogParkedRef.current = true;
+    if (settingsOpen && !settingsParkedRef.current) {
+      settingsParkedRef.current = true;
       invoke("wm_park_panels").catch(console.error);
-    } else if (!dialogOpen && dialogParkedRef.current) {
-      dialogParkedRef.current = false;
+    } else if (!settingsOpen && settingsParkedRef.current) {
+      settingsParkedRef.current = false;
       invoke("wm_unpark_panels").catch(console.error);
     }
-  }, [dialogOpen]);
+  }, [settingsOpen]);
 
   // ── Command registry bootstrap (runs once per mount) ──────────────────────
   const commandsRegistered = useRef(false);
   useEffect(() => {
     if (commandsRegistered.current) return;
     commandsRegistered.current = true;
-    registerWidgetCommands(
-      () => openPaletteRef.current(),
-      () => openSettingsRef.current()
-    );
+    registerWidgetCommands(() => openSettingsRef.current());
     applyKeybindingOverrides();
     initAppCommands((appId, url, title) =>
       openPanel(appId, url, title, null).catch(console.error)
     ).catch(console.error);
   }, [openPanel]);
+
+  // Execute palette commands dispatched from the overlay webview.
+  useEffect(() => {
+    const unlisten = listen<string>("wm:palette-execute", (e) => {
+      registry.execute(e.payload).catch(console.error);
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, []);
 
   // Keep active panel label in sync so generic widget commands know their target.
   useEffect(() => {
@@ -232,17 +230,6 @@ function ChromeApp() {
       <DropZoneLayer target={tabDrag.state?.target ?? null} />
       <GhostLayer drag={tabDrag.state} />
 
-      {/* Command palette + widget highlight ring */}
-      <PanelHighlightLayer
-        layout={layout}
-        hostLayout={hostLayout}
-        widgetLabel={highlightedWidget}
-      />
-      <CommandPalette
-        isOpen={paletteOpen}
-        onClose={closePalette}
-        onHighlight={setHighlightedWidget}
-      />
       {settingsOpen && <KeybindingsSettings onClose={() => setSettingsOpen(false)} />}
 
       {/* Empty-state hint when no panels are open */}

@@ -1,6 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
 import { registry } from "./registry";
-import type { LayoutSnapshot } from "../types";
 
 // ── Active panel tracking ─────────────────────────────────────────────────────
 //
@@ -16,7 +15,7 @@ export function setActivePanelLabel(label: string | null): void {
 async function zoomActive(delta: number): Promise<void> {
   const label = activePanelLabel;
   if (!label) return;
-  const snap = await invoke<LayoutSnapshot | null>("wm_snapshot");
+  const snap = await invoke<{ panels: { id: string; zoomFactor: number }[] } | null>("wm_snapshot");
   const panel = snap?.panels.find((p) => p.id === label);
   if (!panel) return;
   const zoomFactor = Math.min(2.0, Math.max(0.5, panel.zoomFactor + delta));
@@ -25,10 +24,7 @@ async function zoomActive(delta: number): Promise<void> {
 
 // ── Registration ──────────────────────────────────────────────────────────────
 
-export function registerWidgetCommands(
-  onOpenPalette: () => void,
-  onOpenSettings: () => void
-): void {
+export function registerWidgetCommands(onOpenSettings: () => void): void {
   registry.register({
     id: "palette.open",
     label: "Open command palette",
@@ -36,7 +32,10 @@ export function registerWidgetCommands(
     shortcut: "⌘K",
     keybinding: "CmdOrCtrl+K",
     group: "navigation",
-    action: onOpenPalette,
+    action: () =>
+      void invoke("wm_palette_open", {
+        commands: registry.serializeForPalette(),
+      }).catch(console.error),
   });
 
   registry.register({
