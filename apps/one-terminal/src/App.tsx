@@ -14,7 +14,7 @@
  * z-ordering naturally routes events to the correct webview.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { useLayout } from "./hooks/useLayout";
@@ -26,7 +26,12 @@ import { SplitterHandleLayer } from "./components/SplitterHandleLayer";
 import { GhostLayer } from "./components/GhostLayer";
 import { DropZoneLayer } from "./components/DropZoneLayer";
 import { PanelHeaderLayer } from "./components/PanelHeaderLayer";
+import { KeybindingsSettings } from "./components/KeybindingsSettings";
 import { OverlayApp } from "./components/OverlayApp";
+import { registerWidgetCommands, setActivePanelLabel } from "./commands/widgetCommands";
+import { initAppCommands } from "./commands/appCommands";
+import { applyKeybindingOverrides } from "./commands/keybindingStore";
+import { registry } from "./commands/registry";
 import type { EngineBinding, StackHeader } from "./types";
 import "./wm.css";
 
@@ -43,6 +48,62 @@ function ChromeApp() {
   const { layout, openPanel, closePanel } = useLayout();
   const { host: hostLayout, removeTab } = useHostLayout();
   const tabDrag = useTabDrag();
+
+  // ── Settings state ────────────────────────────────────────────────────────
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  // Stable ref so the registry action always calls the live setter without
+  // requiring re-registration on state changes.
+  const openSettingsRef = useRef<() => void>(() => {});
+  openSettingsRef.current = () => setSettingsOpen(true);
+
+  // Park panels while settings are open — the settings panel renders in the
+  // chrome webview (below panel webviews in z-order) so panels must move out
+  // of the way.  The command palette uses the overlay webview and does NOT
+  // need panel parking.
+  const settingsParkedRef = useRef(false);
+  useEffect(() => {
+    if (settingsOpen && !settingsParkedRef.current) {
+      settingsParkedRef.current = true;
+      invoke("wm_park_panels").catch(console.error);
+    } else if (!settingsOpen && settingsParkedRef.current) {
+      settingsParkedRef.current = false;
+      invoke("wm_unpark_panels").catch(console.error);
+    }
+  }, [settingsOpen]);
+
+  // ── Command registry bootstrap (runs once per mount) ──────────────────────
+  const commandsRegistered = useRef(false);
+  useEffect(() => {
+    if (commandsRegistered.current) return;
+    commandsRegistered.current = true;
+    registerWidgetCommands(() => openSettingsRef.current());
+    applyKeybindingOverrides();
+    initAppCommands((appId, url, title) =>
+      openPanel(appId, url, title, null).catch(console.error)
+    ).catch(console.error);
+  }, [openPanel]);
+
+  // Execute palette commands dispatched from the overlay webview.
+  useEffect(() => {
+    const unlisten = listen<string>("wm:palette-execute", (e) => {
+      registry.execute(e.payload).catch(console.error);
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, []);
+
+  // Keep active panel label in sync so generic widget commands know their target.
+  useEffect(() => {
+    if (!layout || layout.panels.length === 0) {
+      setActivePanelLabel(null);
+      return;
+    }
+    // When a new panel appears set it as active; useLayout resolves the last opened.
+    const last = layout.panels[layout.panels.length - 1];
+    setActivePanelLabel(last.id);
+  }, [layout]);
 
   // Show a status banner while the Electron binary is being auto-installed.
   const [electronStatus, setElectronStatus] = useState<"idle" | "installing" | "error">("idle");
@@ -98,9 +159,13 @@ function ChromeApp() {
           path: result.stackPath,
           tabIndex: result.tabIndex,
         }).catch(console.error);
+        // Track the clicked tab as the active panel for generic widget commands.
+        const stack = hostLayout?.stacks.find((s) => s.path.join() === result.stackPath.join());
+        const tab = stack?.tabs[result.tabIndex];
+        if (tab) setActivePanelLabel(tab.label);
       }
     },
-    [tabDrag]
+    [tabDrag, hostLayout]
   );
 
   const handleTabClose = useCallback(
@@ -164,6 +229,8 @@ function ChromeApp() {
       {/* Tab-drag overlays — drop indicator + cursor-following ghost */}
       <DropZoneLayer target={tabDrag.state?.target ?? null} />
       <GhostLayer drag={tabDrag.state} />
+
+      {settingsOpen && <KeybindingsSettings onClose={() => setSettingsOpen(false)} />}
 
       {/* Empty-state hint when no panels are open */}
       {(!layout || layout.panels.length === 0) &&

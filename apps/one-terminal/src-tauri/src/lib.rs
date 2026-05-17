@@ -559,6 +559,99 @@ fn wm_ctx_menu_close(app: AppHandle) {
     }
 }
 
+/// Open the command palette in the overlay webview.  `commands` is the
+/// serialised palette payload built by the frontend registry.  Uses the same
+/// stale-check / recreate / wait-for-ready pattern as `wm_ctx_menu_open` so
+/// the overlay is always the topmost child webview when shown.
+#[tauri::command]
+async fn wm_palette_open(
+    commands: serde_json::Value,
+    overlay: State<'_, OverlayState>,
+    app: AppHandle,
+) -> Result<(), String> {
+    let overlay_arc = Arc::clone(&*overlay);
+
+    let must_recreate = {
+        let mut inner = overlay_arc.lock().unwrap();
+        if inner.stale {
+            inner.stale = false;
+            inner.is_ready = false;
+            true
+        } else {
+            false
+        }
+    };
+    if must_recreate {
+        let (create_tx, create_rx) = std::sync::mpsc::channel::<Result<(), String>>();
+        let app_for_main = app.clone();
+        app.run_on_main_thread(move || {
+            let result = (|| -> Result<(), String> {
+                if let Some(old) = app_for_main.get_webview(OVERLAY) {
+                    old.close().map_err(|e| e.to_string())?;
+                }
+                let win = app_for_main.get_window(WIN).ok_or("wm window not found")?;
+                let sf = win.scale_factor().unwrap_or(1.0);
+                let sz = win.inner_size().unwrap_or(tauri::PhysicalSize {
+                    width: 1600,
+                    height: 900,
+                });
+                let (w, h) = (sz.width as f64 / sf, sz.height as f64 / sf);
+                win.add_child(
+                    WebviewBuilder::new(OVERLAY, WebviewUrl::App("index.html#overlay".into()))
+                        .transparent(true),
+                    LogicalPosition::new(-20000.0, -20000.0),
+                    LogicalSize::new(w, h),
+                )
+                .map_err(|e| e.to_string())?;
+                Ok(())
+            })();
+            let _ = create_tx.send(result);
+        })
+        .map_err(|e| e.to_string())?;
+
+        create_rx.recv().map_err(|e| e.to_string())??;
+    }
+
+    let rx = {
+        let mut inner = overlay_arc.lock().unwrap();
+        if inner.is_ready {
+            None
+        } else {
+            let (tx, rx) = oneshot::channel();
+            inner.wakers.push(tx);
+            Some(rx)
+        }
+    };
+    if let Some(rx) = rx {
+        tokio::time::timeout(std::time::Duration::from_secs(5), rx)
+            .await
+            .map_err(|_| "timeout waiting for overlay".to_string())?
+            .map_err(|_| "overlay waker dropped".to_string())?;
+    }
+
+    let win = app.get_window(WIN).ok_or("wm window not found")?;
+    let sf = win.scale_factor().unwrap_or(1.0);
+    let sz = win.inner_size().unwrap_or(tauri::PhysicalSize {
+        width: 1600,
+        height: 900,
+    });
+    let (w, h) = (sz.width as f64 / sf, sz.height as f64 / sf);
+    if let Some(wv) = app.get_webview(OVERLAY) {
+        wv.set_bounds(tauri::Rect {
+            position: tauri::Position::Logical(LogicalPosition::new(0.0, 0.0)),
+            size: tauri::Size::Logical(LogicalSize::new(w, h)),
+        })
+        .map_err(|e| e.to_string())?;
+    } else {
+        return Err("overlay webview not found after ready".to_string());
+    }
+
+    app.emit("wm:palette-open", commands)
+        .map_err(|e| e.to_string())?;
+
+    Ok(())
+}
+
 // ── Picker overlay parking ────────────────────────────────────────────────────
 //
 // Panel webviews sit above the chrome webview in z-order, so the chrome can't
@@ -616,6 +709,17 @@ pub fn run() {
     println!("[wm] webview pool size: {pool_size}");
 
     tauri::Builder::default()
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_shortcut("CmdOrCtrl+K")
+                .expect("CmdOrCtrl+K is a valid shortcut")
+                .with_handler(|app, _shortcut, event| {
+                    if event.state == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                        let _ = app.emit("global-shortcut", "CmdOrCtrl+K");
+                    }
+                })
+                .build(),
+        )
         .manage(tree.clone())
         .manage(identity.clone())
         .manage(overlay_state.clone())
@@ -791,6 +895,7 @@ pub fn run() {
             wm_overlay_ready,
             wm_ctx_menu_open,
             wm_ctx_menu_close,
+            wm_palette_open,
             wm_request_rename,
         ])
         .run(tauri::generate_context!())

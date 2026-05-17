@@ -1,0 +1,148 @@
+/* ── Backdrop ─────────────────────────────────────────────────────────────── */
+.palette-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(2, 6, 23, 0.55);
+  z-index: 400;
+  pointer-events: auto;
+}
+
+/* ── Panel ────────────────────────────────────────────────────────────────── */
+.palette-panel {
+  position: absolute;
+  top: 20%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 480px;
+  max-height: 380px;
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── Search input ─────────────────────────────────────────────────────────── */
+.palette-input {
+  flex: 0 0 auto;
+  width: 100%;
+  padding: 11px 14px;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid #1e293b;
+  color: #e2e8f0;
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+}
+.palette-input::placeholder {
+  color: #475569;
+}
+
+/* ── Results list ─────────────────────────────────────────────────────────── */
+.palette-list {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  list-style: none;
+  padding: 4px;
+  margin: 0;
+}
+.palette-list::-webkit-scrollbar {
+  width: 4px;
+}
+.palette-list::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 2px;
+}
+
+/* ── Result row ───────────────────────────────────────────────────────────── */
+.palette-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 80ms;
+}
+.palette-item:hover {
+  background: #1e293b;
+}
+.palette-item--selected {
+  background: #1e3a5f;
+}
+
+.palette-item__group {
+  flex: 0 0 auto;
+  font-size: 10px;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  width: 80px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.palette-item__label {
+  flex: 1 1 auto;
+  font-size: 12px;
+  color: #cbd5e1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.palette-item--selected .palette-item__label {
+  color: #f1f5f9;
+}
+
+.palette-item__shortcut {
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-family: inherit;
+  color: #64748b;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 3px;
+  padding: 1px 5px;
+  white-space: nowrap;
+}
+.palette-item--selected .palette-item__shortcut {
+  background: #0f172a;
+  color: #94a3b8;
+}
+
+/* ── Empty state ──────────────────────────────────────────────────────────── */
+.palette-empty {
+  padding: 20px 14px;
+  font-size: 12px;
+  color: #475569;
+  text-align: center;
+}
+
+/* ── Widget highlight ring ────────────────────────────────────────────────── */
+.wm-panel-highlight {
+  position: absolute;
+  pointer-events: none;
+  border: 2px solid #3b82f6;
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.25);
+  z-index: 390;
+  box-sizing: border-box;
+  animation: palette-highlight-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes palette-highlight-pulse {
+  0%,
+  100% {
+    border-color: #3b82f6;
+    box-shadow: 0 0 0 1px rgba(59, 130, 246, 0.25);
+  }
+  50% {
+    border-color: #60a5fa;
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+  }
+}
