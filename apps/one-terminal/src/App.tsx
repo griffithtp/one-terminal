@@ -26,6 +26,7 @@ import { SplitterHandleLayer } from "./components/SplitterHandleLayer";
 import { GhostLayer } from "./components/GhostLayer";
 import { DropZoneLayer } from "./components/DropZoneLayer";
 import { PanelHeaderLayer } from "./components/PanelHeaderLayer";
+import { CommandPalette, PanelHighlightLayer } from "./components/CommandPalette";
 import { OverlayApp } from "./components/OverlayApp";
 import { registerWidgetCommands, setActivePanelLabel } from "./commands/widgetCommands";
 import { initAppCommands } from "./commands/appCommands";
@@ -46,14 +47,39 @@ function ChromeApp() {
   const { host: hostLayout, removeTab } = useHostLayout();
   const tabDrag = useTabDrag();
 
+  // ── Command palette state ─────────────────────────────────────────────────
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [highlightedWidget, setHighlightedWidget] = useState<string | null>(null);
+
+  // Stable ref so the registry's palette.open action always calls the current
+  // setter — avoids re-registering commands when state identity changes.
+  const openPaletteRef = useRef<() => void>(() => {});
+  openPaletteRef.current = () => setPaletteOpen(true);
+
+  function closePalette() {
+    setPaletteOpen(false);
+    setHighlightedWidget(null);
+  }
+
+  // Park panels while the palette is open so the overlay z-orders correctly
+  // over Tauri's webview windows (same pattern as the engine-picker dialog).
+  const paletteParkedRef = useRef(false);
+  useEffect(() => {
+    if (paletteOpen && !paletteParkedRef.current) {
+      paletteParkedRef.current = true;
+      invoke("wm_park_panels").catch(console.error);
+    } else if (!paletteOpen && paletteParkedRef.current) {
+      paletteParkedRef.current = false;
+      invoke("wm_unpark_panels").catch(console.error);
+    }
+  }, [paletteOpen]);
+
   // ── Command registry bootstrap (runs once per mount) ──────────────────────
   const commandsRegistered = useRef(false);
   useEffect(() => {
     if (commandsRegistered.current) return;
     commandsRegistered.current = true;
-    // palette.open action is a stub here; replaced in Issue 06-B when
-    // CommandPalette is mounted and setPaletteOpen is available.
-    registerWidgetCommands(() => console.log("TODO: open palette (wired in 06-B)"));
+    registerWidgetCommands(() => openPaletteRef.current());
     initAppCommands((appId, url, title) =>
       openPanel(appId, url, title, null).catch(console.error),
     ).catch(console.error);
@@ -196,6 +222,18 @@ function ChromeApp() {
       {/* Tab-drag overlays — drop indicator + cursor-following ghost */}
       <DropZoneLayer target={tabDrag.state?.target ?? null} />
       <GhostLayer drag={tabDrag.state} />
+
+      {/* Command palette + widget highlight ring */}
+      <PanelHighlightLayer
+        layout={layout}
+        hostLayout={hostLayout}
+        widgetLabel={highlightedWidget}
+      />
+      <CommandPalette
+        isOpen={paletteOpen}
+        onClose={closePalette}
+        onHighlight={setHighlightedWidget}
+      />
 
       {/* Empty-state hint when no panels are open */}
       {(!layout || layout.panels.length === 0) &&
