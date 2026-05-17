@@ -30,6 +30,7 @@ import { CommandPalette, PanelHighlightLayer } from "./components/CommandPalette
 import { OverlayApp } from "./components/OverlayApp";
 import { registerWidgetCommands, setActivePanelLabel } from "./commands/widgetCommands";
 import { initAppCommands } from "./commands/appCommands";
+import { applyKeybindingOverrides } from "./commands/keybindingStore";
 import type { EngineBinding, StackHeader } from "./types";
 import "./wm.css";
 
@@ -80,6 +81,7 @@ function ChromeApp() {
     if (commandsRegistered.current) return;
     commandsRegistered.current = true;
     registerWidgetCommands(() => openPaletteRef.current());
+    applyKeybindingOverrides();
     initAppCommands((appId, url, title) =>
       openPanel(appId, url, title, null).catch(console.error),
     ).catch(console.error);

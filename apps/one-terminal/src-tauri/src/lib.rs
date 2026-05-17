@@ -616,6 +616,17 @@ pub fn run() {
     println!("[wm] webview pool size: {pool_size}");
 
     tauri::Builder::default()
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_shortcut("CmdOrCtrl+K")
+                .expect("CmdOrCtrl+K is a valid shortcut")
+                .with_handler(|app, _shortcut, event| {
+                    if event.state == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                        let _ = app.emit("global-shortcut", "CmdOrCtrl+K");
+                    }
+                })
+                .build(),
+        )
         .manage(tree.clone())
         .manage(identity.clone())
         .manage(overlay_state.clone())
