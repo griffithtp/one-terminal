@@ -4,6 +4,7 @@
 
 use tauri::{AppHandle, Emitter, Manager, State};
 
+use super::dashboard::DashboardsSnapshot;
 use super::docking::DropZone;
 use super::node::LayoutNode;
 use super::store::LayoutTree;
@@ -262,4 +263,106 @@ pub fn wm_end_tab_drag(
     store.reflow(&app);
     store.emit_host(&app);
     Ok(())
+}
+
+// ── Dashboard commands ────────────────────────────────────────────────────────
+
+/// Return the current dashboard list state. Useful for an initial sync after
+/// the chrome mounts; thereafter the frontend should listen to `wm:dashboards`.
+#[tauri::command]
+pub fn wm_list_dashboards(store: State<'_, LayoutTree>) -> DashboardsSnapshot {
+    store.dashboards_snapshot()
+}
+
+/// Create a new empty dashboard with the given name. The new dashboard is
+/// appended to the end of the list and is not automatically made active.
+/// Returns `false` if a dashboard with that name already exists.
+#[tauri::command]
+pub fn wm_create_dashboard(
+    name: String,
+    store: State<'_, LayoutTree>,
+    app: AppHandle,
+) -> Result<bool, String> {
+    let trimmed = name.trim().to_string();
+    if trimmed.is_empty() {
+        return Err("dashboard name must not be empty".into());
+    }
+    let created = store.with_dashboard_store_mut(|ds| ds.create(trimmed));
+    if created {
+        store.persist_dashboards();
+        store.emit_dashboards(&app);
+    }
+    Ok(created)
+}
+
+/// Snapshot the live layout into the active dashboard and write to disk.
+/// Clears the dirty flag. Call this when `auto_save` is off and the user
+/// explicitly requests a save.
+#[tauri::command]
+pub fn wm_save_dashboard(store: State<'_, LayoutTree>, app: AppHandle) {
+    store.save_dashboard();
+    store.emit_dashboards(&app);
+}
+
+/// Rename a dashboard. Returns `false` if `old_name` doesn't exist or
+/// `new_name` is already taken.
+#[tauri::command]
+pub fn wm_rename_dashboard(
+    old_name: String,
+    new_name: String,
+    store: State<'_, LayoutTree>,
+    app: AppHandle,
+) -> Result<bool, String> {
+    let new_trimmed = new_name.trim().to_string();
+    if new_trimmed.is_empty() {
+        return Err("dashboard name must not be empty".into());
+    }
+    let renamed = store.with_dashboard_store_mut(|ds| ds.rename(&old_name, new_trimmed));
+    if renamed {
+        store.persist_dashboards();
+        store.emit_dashboards(&app);
+    }
+    Ok(renamed)
+}
+
+/// Delete a dashboard. The last remaining dashboard cannot be deleted.
+/// Returns `false` if `name` doesn't exist or is the only dashboard.
+#[tauri::command]
+pub fn wm_delete_dashboard(
+    name: String,
+    store: State<'_, LayoutTree>,
+    app: AppHandle,
+) -> Result<bool, String> {
+    let deleted = store.with_dashboard_store_mut(|ds| ds.delete(&name));
+    if deleted {
+        store.persist_dashboards();
+        store.emit_dashboards(&app);
+    }
+    Ok(deleted)
+}
+
+/// Reorder the dashboard list to match `order`. Names not present in the
+/// current store are ignored; names present but missing from `order` are
+/// dropped.
+#[tauri::command]
+pub fn wm_reorder_dashboards(
+    order: Vec<String>,
+    store: State<'_, LayoutTree>,
+    app: AppHandle,
+) {
+    store.with_dashboard_store_mut(|ds| ds.reorder(&order));
+    store.persist_dashboards();
+    store.emit_dashboards(&app);
+}
+
+/// Enable or disable auto-save. When switching from off→on, the live layout
+/// is immediately snapshotted and persisted.
+#[tauri::command]
+pub fn wm_set_auto_save(
+    enabled: bool,
+    store: State<'_, LayoutTree>,
+    app: AppHandle,
+) {
+    store.set_auto_save(enabled);
+    store.emit_dashboards(&app);
 }

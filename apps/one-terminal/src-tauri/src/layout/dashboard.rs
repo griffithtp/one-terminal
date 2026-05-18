@@ -54,7 +54,7 @@ impl PersistedDashboard {
         }
     }
 
-    fn empty(name: String) -> Self {
+    pub(super) fn empty(name: String) -> Self {
         Self {
             name,
             tree: None,
@@ -62,6 +62,54 @@ impl PersistedDashboard {
             active_panel: None,
             maximized_stack_id: None,
         }
+    }
+}
+
+// ── Event payload ─────────────────────────────────────────────────────────────
+
+/// Payload for the `wm:dashboards` event — describes the full dashboard list
+/// state so the chrome can render a switcher without further round-trips.
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DashboardsSnapshot {
+    pub active: String,
+    pub auto_save: bool,
+    /// `true` when `auto_save` is off and the live layout differs from the
+    /// persisted active dashboard.
+    pub dirty: bool,
+    pub dashboards: Vec<String>,
+}
+
+// ── Error type ────────────────────────────────────────────────────────────────
+
+/// Typed error returned by dashboard-mutating commands so the frontend can
+/// distinguish actionable states (e.g. "show a save/discard dialog") from
+/// unexpected failures.
+#[derive(Debug, Serialize)]
+#[serde(tag = "code", rename_all = "camelCase")]
+pub enum DashboardError {
+    /// `auto_save` is off and the live layout has unsaved changes.
+    /// The frontend should prompt the user to save or discard before switching.
+    NeedsConfirm,
+    /// The requested dashboard name does not exist.
+    NotFound,
+    /// A runtime error that should not normally occur.
+    Other { message: String },
+}
+
+impl std::fmt::Display for DashboardError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NeedsConfirm => write!(f, "unsaved changes — confirm required"),
+            Self::NotFound => write!(f, "dashboard not found"),
+            Self::Other { message } => write!(f, "{message}"),
+        }
+    }
+}
+
+impl From<String> for DashboardError {
+    fn from(message: String) -> Self {
+        Self::Other { message }
     }
 }
 
@@ -77,6 +125,9 @@ pub struct DashboardStore {
     /// When `true`, every layout mutation is immediately written back to the
     /// active dashboard. When `false` the user must save explicitly.
     pub auto_save: bool,
+    /// Set when `auto_save` is off and the live layout has diverged from the
+    /// persisted active dashboard snapshot. Cleared on save, discard, or switch.
+    pub dirty: bool,
     pub dashboards: IndexMap<String, PersistedDashboard>,
 }
 
@@ -102,6 +153,7 @@ impl DashboardStore {
         Self {
             active,
             auto_save: persist.auto_save,
+            dirty: false,
             dashboards,
         }
     }
@@ -115,6 +167,7 @@ impl DashboardStore {
         Self {
             active: name,
             auto_save: true,
+            dirty: false,
             dashboards,
         }
     }
@@ -122,9 +175,18 @@ impl DashboardStore {
     // ── Read methods ──────────────────────────────────────────────────────────
 
     /// Dashboard names in their current display order.
-    #[allow(dead_code)]
     pub fn list(&self) -> Vec<String> {
         self.dashboards.keys().cloned().collect()
+    }
+
+    /// Snapshot of the full dashboard state for the `wm:dashboards` event.
+    pub fn as_snapshot(&self) -> DashboardsSnapshot {
+        DashboardsSnapshot {
+            active: self.active.clone(),
+            auto_save: self.auto_save,
+            dirty: self.dirty,
+            dashboards: self.list(),
+        }
     }
 
     /// Return the layout fields for the active dashboard, if it exists.
@@ -158,7 +220,6 @@ impl DashboardStore {
 
     /// Create a new empty dashboard with `name`. Returns `false` if the name
     /// is already taken.
-    #[allow(dead_code)]
     pub fn create(&mut self, name: String) -> bool {
         if self.dashboards.contains_key(&name) {
             return false;
@@ -170,7 +231,6 @@ impl DashboardStore {
 
     /// Rename a dashboard in place, preserving its position in the list.
     /// Returns `false` if `old` doesn't exist or `new` is already taken.
-    #[allow(dead_code)]
     pub fn rename(&mut self, old: &str, new: String) -> bool {
         if !self.dashboards.contains_key(old) || self.dashboards.contains_key(&new) {
             return false;
@@ -195,7 +255,6 @@ impl DashboardStore {
 
     /// Delete a dashboard. The last dashboard cannot be deleted.
     /// Returns `false` if `name` doesn't exist or is the only dashboard.
-    #[allow(dead_code)]
     pub fn delete(&mut self, name: &str) -> bool {
         if self.dashboards.len() <= 1 || !self.dashboards.contains_key(name) {
             return false;
@@ -211,7 +270,6 @@ impl DashboardStore {
 
     /// Reorder dashboards to match `order`. Names absent from the store are
     /// ignored; names in the store absent from `order` are dropped.
-    #[allow(dead_code)]
     pub fn reorder(&mut self, order: &[String]) {
         let mut next: IndexMap<String, PersistedDashboard> =
             IndexMap::with_capacity(order.len());
