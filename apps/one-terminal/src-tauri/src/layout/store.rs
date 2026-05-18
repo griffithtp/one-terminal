@@ -6,13 +6,15 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
 
-use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewBuilder, WebviewUrl, Window};
+use tauri::{
+    AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewBuilder, WebviewUrl, Window,
+};
 use uuid::Uuid;
 
+use super::dashboard::{DashboardError, DashboardStore, DashboardsSnapshot};
 use super::docking::{add_leaf_as_sibling, append_to_stack_at, is_stack_at, move_leaf, DropZone};
 use super::host::{compute_host_layout, HostLayout};
 use super::node::{Direction, LayoutNode};
-use super::dashboard::{DashboardError, DashboardStore, DashboardsSnapshot};
 use super::persist::{self, PersistedLayout, PersistedLeafMeta};
 use super::reflow::{park_offscreen, reflow_layout, SPLITTER_THICKNESS, TAB_STRIP_HEIGHT};
 use super::{LayoutSnapshot, PanelBounds, SplitDir, HEADER_HEIGHT};

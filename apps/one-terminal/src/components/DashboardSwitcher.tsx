@@ -9,13 +9,7 @@
  * open so they're not occluded by content panels sitting above in z-order.
  */
 
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type KeyboardEvent,
-} from "react";
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { registry } from "../commands/registry";
 import type { UseDashboardsResult, DashboardInfo } from "../hooks/useDashboards";
@@ -42,8 +36,8 @@ function ConfirmDialog({ activeName, onSave, onDiscard, onCancel }: ConfirmDialo
       <div className="wm-ds-dialog">
         <div className="wm-ds-dialog__title">Unsaved Changes</div>
         <p className="wm-ds-dialog__body">
-          <strong>&ldquo;{activeName}&rdquo;</strong> has unsaved layout changes. Save
-          before switching or discard them?
+          <strong>&ldquo;{activeName}&rdquo;</strong> has unsaved layout changes. Save before
+          switching or discard them?
         </p>
         <div className="wm-ds-dialog__actions">
           <button type="button" className="wm-ds-dialog__btn" onClick={onCancel}>
@@ -140,8 +134,7 @@ function RenameDialog({ currentName, onConfirm, onCancel }: RenameDialogProps) {
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLInputElement>) => {
-      if (e.key === "Enter" && name.trim() && name.trim() !== currentName)
-        onConfirm(name.trim());
+      if (e.key === "Enter" && name.trim() && name.trim() !== currentName) onConfirm(name.trim());
       if (e.key === "Escape") onCancel();
     },
     [name, currentName, onConfirm, onCancel]
@@ -236,13 +229,10 @@ export function DashboardSwitcher({ ds }: Props) {
     dragSourceRef.current = name;
   }, []);
 
-  const handleDragOver = useCallback(
-    (e: React.DragEvent, name: string) => {
-      e.preventDefault();
-      if (dragSourceRef.current !== name) setDragOverName(name);
-    },
-    []
-  );
+  const handleDragOver = useCallback((e: React.DragEvent, name: string) => {
+    e.preventDefault();
+    if (dragSourceRef.current !== name) setDragOverName(name);
+  }, []);
 
   const handleDrop = useCallback(
     (e: React.DragEvent, targetName: string) => {
@@ -271,13 +261,10 @@ export function DashboardSwitcher({ ds }: Props) {
   }, []);
 
   // ── Context menu ──────────────────────────────────────────────────────────
-  const handleContextMenu = useCallback(
-    (e: React.MouseEvent, name: string) => {
-      e.preventDefault();
-      setCtxMenu({ name, x: e.clientX, y: e.clientY });
-    },
-    []
-  );
+  const handleContextMenu = useCallback((e: React.MouseEvent, name: string) => {
+    e.preventDefault();
+    setCtxMenu({ name, x: e.clientX, y: e.clientY });
+  }, []);
 
   // ── Create ────────────────────────────────────────────────────────────────
   const handleCreate = useCallback(
@@ -386,12 +373,7 @@ export function DashboardSwitcher({ ds }: Props) {
       )}
 
       {/* New dashboard dialog */}
-      {creating && (
-        <CreateDialog
-          onConfirm={handleCreate}
-          onCancel={() => setCreating(false)}
-        />
-      )}
+      {creating && <CreateDialog onConfirm={handleCreate} onCancel={() => setCreating(false)} />}
 
       {/* Rename dialog */}
       {renaming !== null && (
@@ -404,10 +386,7 @@ export function DashboardSwitcher({ ds }: Props) {
 
       {/* Right-click context menu */}
       {ctxMenu && (
-        <div
-          className="wm-ds-ctx"
-          style={{ top: ctxMenu.y, left: ctxMenu.x }}
-        >
+        <div className="wm-ds-ctx" style={{ top: ctxMenu.y, left: ctxMenu.x }}>
           <button
             type="button"
             className="wm-ds-ctx__item"

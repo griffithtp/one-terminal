@@ -271,8 +271,7 @@ impl DashboardStore {
     /// Reorder dashboards to match `order`. Names absent from the store are
     /// ignored; names in the store absent from `order` are dropped.
     pub fn reorder(&mut self, order: &[String]) {
-        let mut next: IndexMap<String, PersistedDashboard> =
-            IndexMap::with_capacity(order.len());
+        let mut next: IndexMap<String, PersistedDashboard> = IndexMap::with_capacity(order.len());
         for name in order {
             if let Some(d) = self.dashboards.shift_remove(name) {
                 next.insert(name.clone(), d);

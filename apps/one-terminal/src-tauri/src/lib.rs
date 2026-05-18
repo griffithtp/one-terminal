@@ -7,10 +7,10 @@ mod webview_pool;
 use config::TerminalConfig;
 use engine::WmHostIdentity;
 use layout::commands::{
-    close_tab, update_layout, wm_begin_tab_drag, wm_close_leaf, wm_close_stack, wm_create_dashboard,
-    wm_delete_dashboard, wm_end_tab_drag, wm_list_dashboards, wm_rename_dashboard, wm_rename_panel,
-    wm_rename_tab, wm_reorder_dashboards, wm_save_dashboard, wm_set_active_tab, wm_set_auto_save,
-    wm_set_zoom, wm_splitter_drag, wm_toggle_maximize_stack,
+    close_tab, update_layout, wm_begin_tab_drag, wm_close_leaf, wm_close_stack,
+    wm_create_dashboard, wm_delete_dashboard, wm_end_tab_drag, wm_list_dashboards,
+    wm_rename_dashboard, wm_rename_panel, wm_rename_tab, wm_reorder_dashboards, wm_save_dashboard,
+    wm_set_active_tab, wm_set_auto_save, wm_set_zoom, wm_splitter_drag, wm_toggle_maximize_stack,
 };
 use layout::dashboard::DashboardError;
 use layout::drag::wm_drag_move;

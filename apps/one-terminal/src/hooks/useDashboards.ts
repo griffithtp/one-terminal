@@ -19,11 +19,7 @@ type DashboardError =
   | { code: "other"; message: string };
 
 function isNeedsConfirm(e: unknown): boolean {
-  return (
-    typeof e === "object" &&
-    e !== null &&
-    (e as DashboardError).code === "needsConfirm"
-  );
+  return typeof e === "object" && e !== null && (e as DashboardError).code === "needsConfirm";
 }
 
 // ── Public types ──────────────────────────────────────────────────────────────
@@ -63,9 +59,7 @@ export function useDashboards(): UseDashboardsResult {
 
   // ── Initial fetch + live subscription ────────────────────────────────────
   useEffect(() => {
-    invoke<DashboardsPayload>("wm_list_dashboards")
-      .then(setPayload)
-      .catch(console.error);
+    invoke<DashboardsPayload>("wm_list_dashboards").then(setPayload).catch(console.error);
 
     const unlisten = listen<DashboardsPayload>("wm:dashboards", (e) => {
       setPayload(e.payload);
@@ -79,9 +73,7 @@ export function useDashboards(): UseDashboardsResult {
   useEffect(() => {
     if (!payload) return;
     const suffix = payload.dirty && !payload.autoSave ? " *" : "";
-    getCurrentWindow()
-      .setTitle(`OneTerminal — ${payload.active}${suffix}`)
-      .catch(console.error);
+    getCurrentWindow().setTitle(`OneTerminal — ${payload.active}${suffix}`).catch(console.error);
   }, [payload]);
 
   // ── Actions ───────────────────────────────────────────────────────────────
@@ -176,8 +168,7 @@ export function useDashboards(): UseDashboardsResult {
       keywords: ["discard", "revert", "dashboard", "changes"],
       group: "navigation",
       isAvailable: () =>
-        payloadRef.current?.dirty === true &&
-        payloadRef.current?.autoSave === false,
+        payloadRef.current?.dirty === true && payloadRef.current?.autoSave === false,
       action: () => discardRef.current().catch(console.error),
     });
     registry.register({
@@ -185,10 +176,7 @@ export function useDashboards(): UseDashboardsResult {
       label: "Toggle dashboard auto-save",
       keywords: ["auto", "save", "dashboard", "toggle", "autosave"],
       group: "settings",
-      action: () =>
-        setAutoSaveRef.current(!payloadRef.current?.autoSave).catch(
-          console.error
-        ),
+      action: () => setAutoSaveRef.current(!payloadRef.current?.autoSave).catch(console.error),
     });
     return () => {
       registry.unregister("dashboard:save");

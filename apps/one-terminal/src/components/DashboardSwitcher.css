@@ -37,7 +37,10 @@
   font-size: 12px;
   font-weight: 500;
   white-space: nowrap;
-  transition: background 120ms, color 120ms, border-color 120ms;
+  transition:
+    background 120ms,
+    color 120ms,
+    border-color 120ms;
   user-select: none;
 }
 .wm-ds__pill:hover {
@@ -77,7 +80,9 @@
   cursor: pointer;
   font-size: 14px;
   line-height: 1;
-  transition: color 120ms, border-color 120ms;
+  transition:
+    color 120ms,
+    border-color 120ms;
   flex-shrink: 0;
 }
 .wm-ds__add:hover {

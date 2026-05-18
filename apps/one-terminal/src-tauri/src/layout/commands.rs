@@ -345,11 +345,7 @@ pub fn wm_delete_dashboard(
 /// current store are ignored; names present but missing from `order` are
 /// dropped.
 #[tauri::command]
-pub fn wm_reorder_dashboards(
-    order: Vec<String>,
-    store: State<'_, LayoutTree>,
-    app: AppHandle,
-) {
+pub fn wm_reorder_dashboards(order: Vec<String>, store: State<'_, LayoutTree>, app: AppHandle) {
     store.with_dashboard_store_mut(|ds| ds.reorder(&order));
     store.persist_dashboards();
     store.emit_dashboards(&app);
@@ -358,11 +354,7 @@ pub fn wm_reorder_dashboards(
 /// Enable or disable auto-save. When switching from off→on, the live layout
 /// is immediately snapshotted and persisted.
 #[tauri::command]
-pub fn wm_set_auto_save(
-    enabled: bool,
-    store: State<'_, LayoutTree>,
-    app: AppHandle,
-) {
+pub fn wm_set_auto_save(enabled: bool, store: State<'_, LayoutTree>, app: AppHandle) {
     store.set_auto_save(enabled);
     store.emit_dashboards(&app);
 }
