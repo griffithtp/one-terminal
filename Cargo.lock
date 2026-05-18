@@ -2488,6 +2488,7 @@ version = "0.1.0"
 dependencies = [
  "futures-util",
  "hex",
+ "indexmap 2.13.0",
  "ot-core",
  "reqwest 0.12.28",
  "serde",

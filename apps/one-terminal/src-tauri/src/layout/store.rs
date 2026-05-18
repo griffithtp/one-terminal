@@ -12,6 +12,7 @@ use uuid::Uuid;
 use super::docking::{add_leaf_as_sibling, append_to_stack_at, is_stack_at, move_leaf, DropZone};
 use super::host::{compute_host_layout, HostLayout};
 use super::node::{Direction, LayoutNode};
+use super::dashboard::DashboardStore;
 use super::persist::{self, PersistedLayout, PersistedLeafMeta};
 use super::reflow::{park_offscreen, reflow_layout, SPLITTER_THICKNESS, TAB_STRIP_HEIGHT};
 use super::{LayoutSnapshot, PanelBounds, SplitDir, HEADER_HEIGHT};
@@ -65,6 +66,9 @@ struct Inner {
 #[derive(Clone)]
 pub struct LayoutTree {
     inner: Arc<RwLock<Inner>>,
+    /// Named layout snapshots. Populated from disk in `init`; the active
+    /// dashboard is the source of truth for what gets restored on startup.
+    dashboard_store: Arc<RwLock<DashboardStore>>,
     /// Set once during `init` so all subsequent `schedule_save` calls can
     /// resolve `app_data_dir` without threading it through every call site.
     app: Arc<OnceLock<AppHandle>>,
@@ -84,6 +88,7 @@ impl LayoutTree {
                 width,
                 height,
             })),
+            dashboard_store: Arc::new(RwLock::new(DashboardStore::with_default())),
             app: Arc::new(OnceLock::new()),
             save_handle: Arc::new(Mutex::new(None)),
         }
@@ -100,28 +105,35 @@ impl LayoutTree {
         let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
         std::fs::create_dir_all(&data_dir).map_err(|e| e.to_string())?;
 
-        if let Some(persisted) = persist::load(&data_dir) {
-            let mut g = self.inner.write().unwrap();
-            g.root = persisted.tree;
-            g.meta = persisted
-                .meta
-                .into_iter()
-                .map(|(label, pm)| {
-                    (
-                        label,
-                        LeafMeta {
-                            app_id: pm.app_id,
-                            url: pm.url,
-                            title: pm.title,
-                            engine_binding: pm.engine_binding,
-                            display_name: pm.display_name,
-                            zoom_factor: pm.zoom_factor,
-                        },
-                    )
-                })
-                .collect();
-            g.active_panel = persisted.active_panel;
-            g.maximized_stack_id = persisted.maximized_stack_id;
+        if let Some(terminal_persist) = persist::load_terminal(&data_dir) {
+            let ds = DashboardStore::from_persist(terminal_persist);
+
+            // Load the active dashboard's layout into Inner.
+            if let Some(layout) = ds.load_active() {
+                let mut g = self.inner.write().unwrap();
+                g.root = layout.tree;
+                g.meta = layout
+                    .meta
+                    .into_iter()
+                    .map(|(label, pm)| {
+                        (
+                            label,
+                            LeafMeta {
+                                app_id: pm.app_id,
+                                url: pm.url,
+                                title: pm.title,
+                                engine_binding: pm.engine_binding,
+                                display_name: pm.display_name,
+                                zoom_factor: pm.zoom_factor,
+                            },
+                        )
+                    })
+                    .collect();
+                g.active_panel = layout.active_panel;
+                g.maximized_stack_id = layout.maximized_stack_id;
+            }
+
+            *self.dashboard_store.write().unwrap() = ds;
         }
 
         Ok(())
@@ -736,9 +748,16 @@ impl LayoutTree {
             }
         };
 
-        let snapshot = {
-            let g = self.inner.read().unwrap();
-            snapshot_for_persist(&g)
+        // Snapshot the current layout and fold it into the active dashboard,
+        // then serialise the whole store for the async write task.
+        let terminal_persist = {
+            let layout = {
+                let g = self.inner.read().unwrap();
+                snapshot_for_persist(&g)
+            };
+            let mut ds = self.dashboard_store.write().unwrap();
+            ds.snapshot_current(layout);
+            ds.to_terminal_persist()
         };
 
         let mut handle = self.save_handle.lock().unwrap();
@@ -749,8 +768,8 @@ impl LayoutTree {
             if debounce_ms > 0 {
                 tokio::time::sleep(std::time::Duration::from_millis(debounce_ms)).await;
             }
-            if let Err(e) = persist::save(&snapshot, &data_dir) {
-                eprintln!("[layout] persist::save failed: {e}");
+            if let Err(e) = persist::save_terminal(&terminal_persist, &data_dir) {
+                eprintln!("[layout] persist::save_terminal failed: {e}");
             }
         }));
     }

@@ -30,7 +30,8 @@ tauri              = { version = "2", features = ["unstable"] }
 tauri-plugin-opener = "2"
 
 # Concurrency
-dashmap = { version = "6", features = ["serde"] }
+dashmap  = { version = "6", features = ["serde"] }
+indexmap = { version = "2", features = ["serde"] }
 
 # WebSocket client
 tokio-tungstenite = "0.24"

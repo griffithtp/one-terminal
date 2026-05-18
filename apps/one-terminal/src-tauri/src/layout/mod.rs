@@ -7,6 +7,7 @@
 //! and frontend contracts depend on.
 
 pub mod commands;
+pub mod dashboard;
 pub mod docking;
 pub mod drag;
 pub mod host;
