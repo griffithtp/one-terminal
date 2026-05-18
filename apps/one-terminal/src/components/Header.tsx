@@ -19,6 +19,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { AppRecord, EngineBinding, OsKey, TerminalConfig } from "../types";
+import { DashboardSwitcher } from "./DashboardSwitcher";
+import type { UseDashboardsResult } from "../hooks/useDashboards";
 
 function detectCurrentOs(): OsKey {
   const ua = navigator.userAgent;
@@ -39,6 +41,8 @@ interface Props {
     title: string,
     engineBinding: EngineBinding | null
   ) => void;
+  /** Dashboard state + actions from the parent's useDashboards() call. */
+  dashboards: UseDashboardsResult;
 }
 
 // ── Tauri-side EngineStatus payload ──────────────────────────────────────────
@@ -200,7 +204,7 @@ interface DownloadPrompt {
   sizeBytes: number;
 }
 
-export function Header({ onOpenTab }: Props) {
+export function Header({ onOpenTab, dashboards }: Props) {
   const [cfg, setCfg] = useState<TerminalConfig | null>(null);
   const [apps, setApps] = useState<AppRecord[]>([]);
   const [pickerApp, setPickerApp] = useState<AppRecord | null>(null);
@@ -384,6 +388,8 @@ export function Header({ onOpenTab }: Props) {
       <span className="wm-header__brand" data-tauri-drag-region>
         {cfg?.title ?? "OneTerminal"}
       </span>
+
+      <DashboardSwitcher ds={dashboards} />
 
       <div className="wm-header__apps">
         {apps.map((app) => {

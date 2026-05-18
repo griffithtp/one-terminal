@@ -32,6 +32,7 @@ import { registerWidgetCommands, setActivePanelLabel } from "./commands/widgetCo
 import { initAppCommands } from "./commands/appCommands";
 import { applyKeybindingOverrides } from "./commands/keybindingStore";
 import { registry } from "./commands/registry";
+import { useDashboards } from "./hooks/useDashboards";
 import type { EngineBinding, StackHeader } from "./types";
 import "./wm.css";
 
@@ -48,6 +49,7 @@ function ChromeApp() {
   const { layout, openPanel, closePanel } = useLayout();
   const { host: hostLayout, removeTab } = useHostLayout();
   const tabDrag = useTabDrag();
+  const dashboards = useDashboards();
 
   // ── Settings state ────────────────────────────────────────────────────────
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -207,7 +209,7 @@ function ChromeApp() {
       onPointerUp={handleTabPointerUp}
       onPointerCancel={handleTabPointerUp}
     >
-      <Header onOpenTab={handleOpenTab} />
+      <Header onOpenTab={handleOpenTab} dashboards={dashboards} />
 
       {/* Per-panel headers — drag region + title + close button, painted in
           the top slice of every non-Stack leaf's rect. Stack members get
