@@ -103,11 +103,9 @@ impl LayoutTree {
 
     /// Store the `AppHandle` without loading any persisted state.
     ///
-    /// Used by `spawn_terminal` for newly-created Terminal windows so that
-    /// `schedule_save` has an `AppHandle` to resolve `app_data_dir`, without
-    /// accidentally loading the hardcoded `terminals/main` path that `init`
-    /// uses. The caller is responsible for loading and applying any persisted
-    /// layout separately.
+    /// Retained for call sites that need to wire up the AppHandle before
+    /// calling `init` separately. Most callers should prefer `init` directly.
+    #[allow(dead_code)]
     pub fn register_app_handle(&self, app: &AppHandle) {
         let _ = self.app.set(app.clone());
     }
@@ -123,7 +121,14 @@ impl LayoutTree {
         let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
         std::fs::create_dir_all(&data_dir).map_err(|e| e.to_string())?;
 
-        if let Some(terminal_persist) = persist::load_terminal(&data_dir) {
+        // Use terminal_id-aware load so each Terminal reads its own file.
+        // For "terminal-main" this also handles migration from the legacy layout.json.
+        let terminal_persist_opt = if self.terminal_id.as_ref() == "terminal-main" {
+            persist::load_terminal(&data_dir)
+        } else {
+            persist::load_terminal_for(&self.terminal_id, &data_dir)
+        };
+        if let Some(terminal_persist) = terminal_persist_opt {
             let ds = DashboardStore::from_persist(terminal_persist);
 
             // Load the active dashboard's layout into Inner.
@@ -739,7 +744,10 @@ impl LayoutTree {
         let Some(app) = self.app.get() else { return };
         let terminal_persist = self.dashboard_store.read().unwrap().to_terminal_persist();
         if let Ok(data_dir) = app.path().app_data_dir() {
-            if let Err(e) = persist::save_terminal(&terminal_persist, &data_dir) {
+            let tid = self.terminal_id.to_string();
+            if let Err(e) =
+                persist::save_terminal_dashboards(&tid, &terminal_persist, &data_dir)
+            {
                 eprintln!("[layout] persist_dashboards: {e}");
             }
         }
@@ -783,7 +791,10 @@ impl LayoutTree {
         };
         let Some(app) = self.app.get() else { return };
         if let Ok(data_dir) = app.path().app_data_dir() {
-            if let Err(e) = persist::save_terminal(&terminal_persist, &data_dir) {
+            let tid = self.terminal_id.to_string();
+            if let Err(e) =
+                persist::save_terminal_dashboards(&tid, &terminal_persist, &data_dir)
+            {
                 eprintln!("[layout] save_dashboard: {e}");
             }
         }
@@ -1053,6 +1064,7 @@ impl LayoutTree {
             ds.to_terminal_persist()
         };
 
+        let terminal_id = self.terminal_id.to_string();
         let mut handle = self.save_handle.lock().unwrap();
         if let Some(h) = handle.take() {
             h.abort();
@@ -1061,8 +1073,10 @@ impl LayoutTree {
             if debounce_ms > 0 {
                 tokio::time::sleep(std::time::Duration::from_millis(debounce_ms)).await;
             }
-            if let Err(e) = persist::save_terminal(&terminal_persist, &data_dir) {
-                eprintln!("[layout] persist::save_terminal failed: {e}");
+            if let Err(e) =
+                persist::save_terminal_dashboards(&terminal_id, &terminal_persist, &data_dir)
+            {
+                eprintln!("[layout] persist::save_terminal_dashboards failed: {e}");
             }
         }));
     }

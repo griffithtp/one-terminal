@@ -218,6 +218,18 @@ impl DashboardStore {
         }
     }
 
+    /// Create a new dashboard pre-populated with `layout` under `name`.
+    /// Returns `false` if `name` is already taken.
+    pub fn create_from(&mut self, name: String, layout: PersistedDashboard) -> bool {
+        if self.dashboards.contains_key(&name) {
+            return false;
+        }
+        let mut d = layout;
+        d.name = name.clone();
+        self.dashboards.insert(name, d);
+        true
+    }
+
     /// Create a new empty dashboard with `name`. Returns `false` if the name
     /// is already taken.
     pub fn create(&mut self, name: String) -> bool {
@@ -283,11 +295,17 @@ impl DashboardStore {
     // ── Serialisation ─────────────────────────────────────────────────────────
 
     /// Convert to `TerminalPersist` for writing to disk.
+    ///
+    /// Only populates dashboard-owned fields (`active_dashboard`, `auto_save`,
+    /// `dashboards`). Callers that do a full write use
+    /// `persist::save_terminal_dashboards` which read-modify-writes the file so
+    /// that `name`, `fdc3_channel`, and `window` are preserved.
     pub fn to_terminal_persist(&self) -> super::persist::TerminalPersist {
         super::persist::TerminalPersist {
             active_dashboard: self.active.clone(),
             auto_save: self.auto_save,
             dashboards: self.dashboards.values().cloned().collect(),
+            ..Default::default()
         }
     }
 }

@@ -7,12 +7,13 @@
 use std::sync::{Arc, RwLock};
 
 use indexmap::IndexMap;
+use serde::Serialize;
+use tauri::{AppHandle, Emitter};
 
 use super::state::TerminalState;
 
 // ── Internal storage ──────────────────────────────────────────────────────────
 
-#[allow(dead_code)]
 struct ManagerInner {
     /// Open terminals in creation order.
     terminals: IndexMap<String, Arc<TerminalState>>,
@@ -21,15 +22,25 @@ struct ManagerInner {
     next_id: u32,
 }
 
+// ── TerminalListItem ──────────────────────────────────────────────────────────
+
+/// Rich Terminal descriptor — returned by `wm_list_terminals`.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TerminalListItem {
+    pub id: String,
+    pub name: String,
+    pub active_dashboard: String,
+    pub dashboard_count: usize,
+    pub fdc3_channel: Option<String>,
+}
+
 // ── TerminalManager ───────────────────────────────────────────────────────────
 
-// Methods used only in later PRs; silence dead-code warnings on the scaffold.
-#[allow(dead_code)]
 pub struct TerminalManager {
     inner: Arc<RwLock<ManagerInner>>,
 }
 
-#[allow(dead_code)]
 impl TerminalManager {
     pub fn new() -> Self {
         Self {
@@ -72,6 +83,11 @@ impl TerminalManager {
             .collect()
     }
 
+    /// Number of registered terminals.
+    pub fn count(&self) -> usize {
+        self.inner.read().unwrap().terminals.len()
+    }
+
     /// Generate the next unique terminal window label (`"terminal-2"`,
     /// `"terminal-3"`, …). Increments the internal counter atomically.
     pub fn next_label(&self) -> String {
@@ -79,6 +95,28 @@ impl TerminalManager {
         let id = g.next_id;
         g.next_id += 1;
         format!("terminal-{id}")
+    }
+
+    /// Build a `TerminalListItem` for every registered terminal and emit
+    /// `wm:terminals` on `app`. Called after any change to the terminal list.
+    pub fn emit_terminals(&self, app: &AppHandle) {
+        let items: Vec<TerminalListItem> = self
+            .list()
+            .into_iter()
+            .map(|t| {
+                let name = t.name.read().unwrap().clone();
+                let ds = t.layout_tree.dashboards_snapshot();
+                let fdc3 = t.fdc3_channel.read().unwrap().clone();
+                TerminalListItem {
+                    id: t.id.clone(),
+                    name,
+                    active_dashboard: ds.active,
+                    dashboard_count: ds.dashboards.len(),
+                    fdc3_channel: fdc3,
+                }
+            })
+            .collect();
+        let _ = app.emit("wm:terminals", &items);
     }
 }
 

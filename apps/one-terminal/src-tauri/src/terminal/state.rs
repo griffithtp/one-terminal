@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex, RwLock};
 
 use tokio::sync::oneshot;
 
+use crate::layout::persist::PersistedWindowConfig;
 use crate::layout::store::LayoutTree;
 use crate::webview_pool::WebviewPool;
 
@@ -41,14 +42,12 @@ pub type OverlayState = Arc<Mutex<OverlayInner>>;
 /// Stored as `Arc<TerminalState>` inside [`TerminalManager`]. Layout commands
 /// retrieve it by window label so each Terminal operates on its own isolated
 /// tree, pool, and overlay.
-// Fields are read by commands in PR 6 — suppress dead-code warnings for now.
-#[allow(dead_code)]
 pub struct TerminalState {
     /// Window label — globally unique; also the prefix for all child webview
     /// labels (`<id>-chrome`, `<id>-overlay`, `<id>-panel-*`, `<id>-pool-*`).
     pub id: String,
     /// User-visible name shown in the title bar and Terminal switcher.
-    pub name: String,
+    pub name: RwLock<String>,
     /// Tiling layout tree for this Terminal's active Dashboard.
     pub layout_tree: LayoutTree,
     /// Overlay webview readiness / staleness tracker.
@@ -57,6 +56,12 @@ pub struct TerminalState {
     pub pool: WebviewPool,
     /// Currently selected FDC3 context channel (`None` = no channel / global).
     pub fdc3_channel: Arc<RwLock<Option<String>>>,
+    /// Last-known OS window position and size (logical pixels). Updated by the
+    /// window move/resize listener; persisted with 500 ms debounce.
+    /// Commands that need the current geometry (e.g. `wm_reset_terminal_position`)
+    /// read this directly instead of hitting disk.
+    #[allow(dead_code)]
+    pub window_config: Arc<RwLock<PersistedWindowConfig>>,
 }
 
 // ── TerminalInfo ──────────────────────────────────────────────────────────────

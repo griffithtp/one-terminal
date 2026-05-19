@@ -15,6 +15,5 @@ pub mod spawn;
 pub mod state;
 
 pub use manager::TerminalManager;
-// Re-export types used by lib.rs and (in future PRs) by commands.
 #[allow(unused_imports)]
 pub use state::{OverlayInner, OverlayState, TerminalInfo, TerminalState};
