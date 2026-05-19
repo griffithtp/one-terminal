@@ -2,12 +2,33 @@
 //! whole trees into `update_layout`; Rust installs them as the source of
 //! truth and stitches every webview via `reflow_layout`.
 
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State, Window};
+
+use crate::terminal::TerminalManager;
 
 use super::dashboard::DashboardsSnapshot;
 use super::docking::DropZone;
 use super::node::LayoutNode;
-use super::store::LayoutTree;
+
+// ── Helper ────────────────────────────────────────────────────────────────────
+
+/// Resolve the calling window's terminal, returning a descriptive error if the
+/// label is not registered. Used by all commands that mutate layout state.
+macro_rules! get_terminal {
+    ($manager:expr, $window:expr) => {
+        match $manager.get($window.label()) {
+            Some(t) => t,
+            None => {
+                return Err(format!(
+                    "terminal '{}' not found",
+                    $window.label()
+                ))
+            }
+        }
+    };
+}
+
+// ── Layout commands ───────────────────────────────────────────────────────────
 
 /// Replace the layout tree wholesale and reflow every webview.
 ///
@@ -17,12 +38,14 @@ use super::store::LayoutTree;
 #[tauri::command]
 pub fn update_layout(
     json_tree: LayoutNode,
-    store: State<'_, LayoutTree>,
+    window: Window,
+    manager: State<'_, TerminalManager>,
     app: AppHandle,
 ) -> Result<(), String> {
-    store.set_root(Some(json_tree));
-    store.reflow(&app);
-    store.emit_host(&app);
+    let terminal = get_terminal!(manager, window);
+    terminal.layout_tree.set_root(Some(json_tree));
+    terminal.layout_tree.reflow(&app);
+    terminal.layout_tree.emit_host(&app);
     Ok(())
 }
 
@@ -35,12 +58,17 @@ pub fn wm_splitter_drag(
     child_index: usize,
     position_x: f64,
     position_y: f64,
-    store: State<'_, LayoutTree>,
+    window: Window,
+    manager: State<'_, TerminalManager>,
     app: AppHandle,
 ) -> Result<(), String> {
-    if store.resize_splitter(&path, child_index, position_x, position_y) {
-        store.reflow(&app);
-        store.emit_host(&app);
+    let terminal = get_terminal!(manager, window);
+    if terminal
+        .layout_tree
+        .resize_splitter(&path, child_index, position_x, position_y)
+    {
+        terminal.layout_tree.reflow(&app);
+        terminal.layout_tree.emit_host(&app);
     }
     Ok(())
 }
@@ -50,8 +78,13 @@ pub fn wm_splitter_drag(
 /// webviews keep their process/session intact; `wm_end_tab_drag` restores
 /// them via `reflow`.
 #[tauri::command]
-pub fn wm_begin_tab_drag(store: State<'_, LayoutTree>, app: AppHandle) -> Result<(), String> {
-    store.park_all(&app);
+pub fn wm_begin_tab_drag(
+    window: Window,
+    manager: State<'_, TerminalManager>,
+    app: AppHandle,
+) -> Result<(), String> {
+    let terminal = get_terminal!(manager, window);
+    terminal.layout_tree.park_all(&app);
     Ok(())
 }
 
@@ -71,12 +104,14 @@ pub fn wm_begin_tab_drag(store: State<'_, LayoutTree>, app: AppHandle) -> Result
 pub fn wm_set_active_tab(
     path: Vec<usize>,
     tab_index: usize,
-    store: State<'_, LayoutTree>,
+    window: Window,
+    manager: State<'_, TerminalManager>,
     app: AppHandle,
 ) -> Result<(), String> {
-    if store.set_active_tab(&path, tab_index) {
-        store.reflow(&app);
-        store.emit_host(&app);
+    let terminal = get_terminal!(manager, window);
+    if terminal.layout_tree.set_active_tab(&path, tab_index) {
+        terminal.layout_tree.reflow(&app);
+        terminal.layout_tree.emit_host(&app);
     }
     Ok(())
 }
@@ -87,15 +122,17 @@ pub fn wm_set_active_tab(
 #[tauri::command]
 pub fn wm_close_leaf(
     label: String,
-    store: State<'_, LayoutTree>,
+    window: Window,
+    manager: State<'_, TerminalManager>,
     app: AppHandle,
 ) -> Result<(), String> {
-    if store.remove_leaf(&label) {
+    let terminal = get_terminal!(manager, window);
+    if terminal.layout_tree.remove_leaf(&label) {
         if let Some(wv) = app.get_webview(&label) {
             let _ = wv.close();
         }
-        store.reflow(&app);
-        store.emit_host(&app);
+        terminal.layout_tree.reflow(&app);
+        terminal.layout_tree.emit_host(&app);
     }
     Ok(())
 }
@@ -113,17 +150,19 @@ pub fn wm_close_leaf(
 #[tauri::command]
 pub fn close_tab(
     label: String,
-    store: State<'_, LayoutTree>,
+    window: Window,
+    manager: State<'_, TerminalManager>,
     app: AppHandle,
 ) -> Result<(), String> {
-    if !store.remove_leaf(&label) {
+    let terminal = get_terminal!(manager, window);
+    if !terminal.layout_tree.remove_leaf(&label) {
         return Err(format!("no leaf with label '{label}' in layout tree"));
     }
     if let Some(wv) = app.get_webview(&label) {
         wv.close().map_err(|e| e.to_string())?;
     }
-    store.reflow(&app);
-    store.emit_host(&app);
+    terminal.layout_tree.reflow(&app);
+    terminal.layout_tree.emit_host(&app);
     Ok(())
 }
 
@@ -141,21 +180,23 @@ pub fn close_tab(
 #[tauri::command]
 pub fn wm_close_stack(
     path: Vec<usize>,
-    store: State<'_, LayoutTree>,
+    window: Window,
+    manager: State<'_, TerminalManager>,
     app: AppHandle,
 ) -> Result<(), String> {
-    let labels = store.labels_in_stack(&path);
+    let terminal = get_terminal!(manager, window);
+    let labels = terminal.layout_tree.labels_in_stack(&path);
     if labels.is_empty() {
         return Ok(());
     }
     for label in &labels {
-        store.remove_panel(label);
+        terminal.layout_tree.remove_panel(label);
         if let Some(wv) = app.get_webview(label) {
             let _ = wv.close();
         }
     }
-    store.reflow(&app);
-    store.emit_host(&app);
+    terminal.layout_tree.reflow(&app);
+    terminal.layout_tree.emit_host(&app);
     Ok(())
 }
 
@@ -168,12 +209,14 @@ pub fn wm_close_stack(
 #[tauri::command]
 pub fn wm_toggle_maximize_stack(
     path: Vec<usize>,
-    store: State<'_, LayoutTree>,
+    window: Window,
+    manager: State<'_, TerminalManager>,
     app: AppHandle,
 ) -> Result<(), String> {
-    if store.toggle_maximize_stack(&path) {
-        store.reflow(&app);
-        store.emit_host(&app);
+    let terminal = get_terminal!(manager, window);
+    if terminal.layout_tree.toggle_maximize_stack(&path) {
+        terminal.layout_tree.reflow(&app);
+        terminal.layout_tree.emit_host(&app);
     }
     Ok(())
 }
@@ -185,18 +228,20 @@ pub fn wm_toggle_maximize_stack(
 pub fn wm_rename_tab(
     label: String,
     title: String,
-    store: State<'_, LayoutTree>,
+    window: Window,
+    manager: State<'_, TerminalManager>,
     app: AppHandle,
 ) -> Result<(), String> {
     let trimmed = title.trim();
     if trimmed.is_empty() {
         return Err("title must not be empty".into());
     }
-    if !store.rename_panel(&label, trimmed) {
+    let terminal = get_terminal!(manager, window);
+    if !terminal.layout_tree.rename_panel(&label, trimmed) {
         return Err(format!("no panel with label '{label}'"));
     }
-    store.emit_host(&app);
-    if let Some(snap) = store.snapshot() {
+    terminal.layout_tree.emit_host(&app);
+    if let Some(snap) = terminal.layout_tree.snapshot() {
         let _ = app.emit("wm:layout", &snap);
     }
     Ok(())
@@ -211,14 +256,16 @@ pub fn wm_rename_tab(
 pub async fn wm_rename_panel(
     label: String,
     display_name: Option<String>,
-    store: State<'_, LayoutTree>,
+    window: Window,
+    manager: State<'_, TerminalManager>,
     app: AppHandle,
 ) -> Result<(), String> {
-    if !store.set_display_name(&label, display_name) {
+    let terminal = get_terminal!(manager, window);
+    if !terminal.layout_tree.set_display_name(&label, display_name) {
         return Err(format!("no panel with label '{label}'"));
     }
-    store.emit_host(&app);
-    if let Some(snap) = store.snapshot() {
+    terminal.layout_tree.emit_host(&app);
+    if let Some(snap) = terminal.layout_tree.snapshot() {
         let _ = app.emit("wm:layout", &snap);
     }
     Ok(())
@@ -232,17 +279,19 @@ pub async fn wm_rename_panel(
 pub async fn wm_set_zoom(
     label: String,
     zoom_factor: f64,
-    store: State<'_, LayoutTree>,
+    window: Window,
+    manager: State<'_, TerminalManager>,
     app: AppHandle,
 ) -> Result<(), String> {
-    let Some(clamped) = store.set_zoom_factor(&label, zoom_factor) else {
+    let terminal = get_terminal!(manager, window);
+    let Some(clamped) = terminal.layout_tree.set_zoom_factor(&label, zoom_factor) else {
         return Err(format!("no panel with label '{label}'"));
     };
     if let Some(wv) = app.get_webview(&label) {
         wv.set_zoom(clamped).map_err(|e| e.to_string())?;
     }
-    store.emit_host(&app);
-    if let Some(snap) = store.snapshot() {
+    terminal.layout_tree.emit_host(&app);
+    if let Some(snap) = terminal.layout_tree.snapshot() {
         let _ = app.emit("wm:layout", &snap);
     }
     Ok(())
@@ -254,14 +303,16 @@ pub fn wm_end_tab_drag(
     target_path: Option<Vec<usize>>,
     zone: Option<DropZone>,
     insert_index: Option<usize>,
-    store: State<'_, LayoutTree>,
+    window: Window,
+    manager: State<'_, TerminalManager>,
     app: AppHandle,
 ) -> Result<(), String> {
+    let terminal = get_terminal!(manager, window);
     if let (Some(path), Some(z)) = (target_path, zone) {
-        store.move_leaf(&source_label, &path, z, insert_index);
+        terminal.layout_tree.move_leaf(&source_label, &path, z, insert_index);
     }
-    store.reflow(&app);
-    store.emit_host(&app);
+    terminal.layout_tree.reflow(&app);
+    terminal.layout_tree.emit_host(&app);
     Ok(())
 }
 
@@ -270,8 +321,22 @@ pub fn wm_end_tab_drag(
 /// Return the current dashboard list state. Useful for an initial sync after
 /// the chrome mounts; thereafter the frontend should listen to `wm:dashboards`.
 #[tauri::command]
-pub fn wm_list_dashboards(store: State<'_, LayoutTree>) -> DashboardsSnapshot {
-    store.dashboards_snapshot()
+pub fn wm_list_dashboards(
+    window: Window,
+    manager: State<'_, TerminalManager>,
+) -> DashboardsSnapshot {
+    match manager.get(window.label()) {
+        Some(terminal) => terminal.layout_tree.dashboards_snapshot(),
+        None => {
+            eprintln!("[wm_list_dashboards] terminal '{}' not found", window.label());
+            DashboardsSnapshot {
+                active: String::new(),
+                auto_save: true,
+                dirty: false,
+                dashboards: vec![],
+            }
+        }
+    }
 }
 
 /// Create a new empty dashboard with the given name. The new dashboard is
@@ -280,17 +345,21 @@ pub fn wm_list_dashboards(store: State<'_, LayoutTree>) -> DashboardsSnapshot {
 #[tauri::command]
 pub fn wm_create_dashboard(
     name: String,
-    store: State<'_, LayoutTree>,
+    window: Window,
+    manager: State<'_, TerminalManager>,
     app: AppHandle,
 ) -> Result<bool, String> {
     let trimmed = name.trim().to_string();
     if trimmed.is_empty() {
         return Err("dashboard name must not be empty".into());
     }
-    let created = store.with_dashboard_store_mut(|ds| ds.create(trimmed));
+    let terminal = get_terminal!(manager, window);
+    let created = terminal
+        .layout_tree
+        .with_dashboard_store_mut(|ds| ds.create(trimmed));
     if created {
-        store.persist_dashboards();
-        store.emit_dashboards(&app);
+        terminal.layout_tree.persist_dashboards();
+        terminal.layout_tree.emit_dashboards(&app);
     }
     Ok(created)
 }
@@ -299,9 +368,17 @@ pub fn wm_create_dashboard(
 /// Clears the dirty flag. Call this when `auto_save` is off and the user
 /// explicitly requests a save.
 #[tauri::command]
-pub fn wm_save_dashboard(store: State<'_, LayoutTree>, app: AppHandle) {
-    store.save_dashboard();
-    store.emit_dashboards(&app);
+pub fn wm_save_dashboard(
+    window: Window,
+    manager: State<'_, TerminalManager>,
+    app: AppHandle,
+) {
+    let Some(terminal) = manager.get(window.label()) else {
+        eprintln!("[wm_save_dashboard] terminal '{}' not found", window.label());
+        return;
+    };
+    terminal.layout_tree.save_dashboard();
+    terminal.layout_tree.emit_dashboards(&app);
 }
 
 /// Rename a dashboard. Returns `false` if `old_name` doesn't exist or
@@ -310,17 +387,21 @@ pub fn wm_save_dashboard(store: State<'_, LayoutTree>, app: AppHandle) {
 pub fn wm_rename_dashboard(
     old_name: String,
     new_name: String,
-    store: State<'_, LayoutTree>,
+    window: Window,
+    manager: State<'_, TerminalManager>,
     app: AppHandle,
 ) -> Result<bool, String> {
     let new_trimmed = new_name.trim().to_string();
     if new_trimmed.is_empty() {
         return Err("dashboard name must not be empty".into());
     }
-    let renamed = store.with_dashboard_store_mut(|ds| ds.rename(&old_name, new_trimmed));
+    let terminal = get_terminal!(manager, window);
+    let renamed = terminal
+        .layout_tree
+        .with_dashboard_store_mut(|ds| ds.rename(&old_name, new_trimmed));
     if renamed {
-        store.persist_dashboards();
-        store.emit_dashboards(&app);
+        terminal.layout_tree.persist_dashboards();
+        terminal.layout_tree.emit_dashboards(&app);
     }
     Ok(renamed)
 }
@@ -330,13 +411,17 @@ pub fn wm_rename_dashboard(
 #[tauri::command]
 pub fn wm_delete_dashboard(
     name: String,
-    store: State<'_, LayoutTree>,
+    window: Window,
+    manager: State<'_, TerminalManager>,
     app: AppHandle,
 ) -> Result<bool, String> {
-    let deleted = store.with_dashboard_store_mut(|ds| ds.delete(&name));
+    let terminal = get_terminal!(manager, window);
+    let deleted = terminal
+        .layout_tree
+        .with_dashboard_store_mut(|ds| ds.delete(&name));
     if deleted {
-        store.persist_dashboards();
-        store.emit_dashboards(&app);
+        terminal.layout_tree.persist_dashboards();
+        terminal.layout_tree.emit_dashboards(&app);
     }
     Ok(deleted)
 }
@@ -345,16 +430,39 @@ pub fn wm_delete_dashboard(
 /// current store are ignored; names present but missing from `order` are
 /// dropped.
 #[tauri::command]
-pub fn wm_reorder_dashboards(order: Vec<String>, store: State<'_, LayoutTree>, app: AppHandle) {
-    store.with_dashboard_store_mut(|ds| ds.reorder(&order));
-    store.persist_dashboards();
-    store.emit_dashboards(&app);
+pub fn wm_reorder_dashboards(
+    order: Vec<String>,
+    window: Window,
+    manager: State<'_, TerminalManager>,
+    app: AppHandle,
+) {
+    let Some(terminal) = manager.get(window.label()) else {
+        eprintln!(
+            "[wm_reorder_dashboards] terminal '{}' not found",
+            window.label()
+        );
+        return;
+    };
+    terminal
+        .layout_tree
+        .with_dashboard_store_mut(|ds| ds.reorder(&order));
+    terminal.layout_tree.persist_dashboards();
+    terminal.layout_tree.emit_dashboards(&app);
 }
 
 /// Enable or disable auto-save. When switching from off→on, the live layout
 /// is immediately snapshotted and persisted.
 #[tauri::command]
-pub fn wm_set_auto_save(enabled: bool, store: State<'_, LayoutTree>, app: AppHandle) {
-    store.set_auto_save(enabled);
-    store.emit_dashboards(&app);
+pub fn wm_set_auto_save(
+    enabled: bool,
+    window: Window,
+    manager: State<'_, TerminalManager>,
+    app: AppHandle,
+) {
+    let Some(terminal) = manager.get(window.label()) else {
+        eprintln!("[wm_set_auto_save] terminal '{}' not found", window.label());
+        return;
+    };
+    terminal.layout_tree.set_auto_save(enabled);
+    terminal.layout_tree.emit_dashboards(&app);
 }

@@ -2,7 +2,7 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
   "description": "Capability for the window-manager chrome webview",
-  "windows": ["wm-chrome", "wm"],
+  "windows": ["terminal-main-chrome", "terminal-main-overlay", "terminal-*"],
   "permissions": [
     "core:default",
     "core:webview:allow-create-webview",

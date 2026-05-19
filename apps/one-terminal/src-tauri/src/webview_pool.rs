@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, LogicalPosition, LogicalSize, Manager, WebviewBuilder, WebviewUrl};
 use uuid::Uuid;
 
-use crate::{OverlayState, WIN};
+use crate::terminal::state::OverlayState;
 
 /// Pool of pre-warmed blank webviews, ready for immediate navigation.
 ///
@@ -47,7 +47,7 @@ impl WebviewPool {
     /// The new webview lands after the overlay in z-order (above it), so the
     /// overlay is marked stale so `wm_ctx_menu_open` will push it back to
     /// the top on the next context-menu open.
-    pub fn replenish(&self, app: &AppHandle, overlay: &OverlayState) {
+    pub fn replenish(&self, app: &AppHandle, overlay: &OverlayState, terminal_id: &str) {
         let depth = self.available.lock().unwrap().len();
         if self.target_size == 0 || depth >= self.target_size {
             return;
@@ -56,19 +56,21 @@ impl WebviewPool {
         let available = Arc::clone(&self.available);
         let app = app.clone();
         let overlay = Arc::clone(overlay);
+        let terminal_id = terminal_id.to_string();
 
         tauri::async_runtime::spawn(async move {
-            let label = pool_label(crate::WIN);
+            let label = pool_label(&terminal_id);
             let (tx, rx) = std::sync::mpsc::channel::<Result<(), String>>();
             let label_main = label.clone();
             let app_main = app.clone();
+            let terminal_id_main = terminal_id.clone();
 
             if app
                 .run_on_main_thread(move || {
                     let result = (|| -> Result<(), String> {
                         let win = app_main
-                            .get_window(WIN)
-                            .ok_or_else(|| "wm window not found".to_string())?;
+                            .get_window(&terminal_id_main)
+                            .ok_or_else(|| format!("window '{}' not found", terminal_id_main))?;
                         let sf = win.scale_factor().unwrap_or(1.0);
                         let sz = win.inner_size().unwrap_or(tauri::PhysicalSize {
                             width: 1600,

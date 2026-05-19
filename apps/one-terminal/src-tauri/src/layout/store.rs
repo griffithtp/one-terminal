@@ -1,7 +1,7 @@
-//! `LayoutTree` — thread-safe, Tauri-managed store for the N-ary layout tree.
+//! `LayoutTree` — thread-safe store for the N-ary layout tree.
 //!
-//! Registered once at startup via `app.manage(LayoutTree::new(w, h))` and
-//! accessed from commands via `State<'_, LayoutTree>`.
+//! One `LayoutTree` lives inside each `TerminalState`. Commands reach it via
+//! `manager.get(window.label())?.layout_tree`.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
