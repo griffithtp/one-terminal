@@ -2,10 +2,13 @@ mod config;
 mod engine;
 mod engines;
 mod layout;
+mod terminal;
 mod webview_pool;
 
 use config::TerminalConfig;
 use engine::WmHostIdentity;
+use terminal::state::{OverlayInner, OverlayState, TerminalState};
+use terminal::TerminalManager;
 use layout::commands::{
     close_tab, update_layout, wm_begin_tab_drag, wm_close_leaf, wm_close_stack,
     wm_create_dashboard, wm_delete_dashboard, wm_end_tab_drag, wm_list_dashboards,
@@ -30,26 +33,16 @@ const WIN: &str = "terminal-main";
 
 // ── Overlay webview state ─────────────────────────────────────────────────────
 //
-// The overlay webview (`wm-overlay`) renders floating UI — context menus, etc.
-// — that must appear above panel content webviews.  Because Tauri's child-
-// webview z-order equals insertion order, the overlay must be the *last*
-// webview added after each `wm_open`.  Rather than recreating it eagerly on
-// every panel open (which would reload the bundle), we mark it stale and
-// recreate on-demand inside `wm_ctx_menu_open`, then wait for the overlay to
-// signal readiness before emitting the menu payload.
-
-struct OverlayInner {
-    is_ready: bool,
-    /// Set to `true` when a new content panel is added after the overlay was
-    /// last created — the overlay is no longer the topmost child webview.
-    stale: bool,
-    /// Multiple `wm_ctx_menu_open` calls can be in flight concurrently (rapid
-    /// right-clicks).  All of them wait on the same ready signal, so we keep
-    /// every pending sender — `wm_overlay_ready` drains and notifies all.
-    wakers: Vec<oneshot::Sender<()>>,
-}
-
-type OverlayState = Arc<Mutex<OverlayInner>>;
+// The overlay webview renders floating UI — context menus, command palette,
+// overflow dropdowns — that must appear above panel content webviews.  Because
+// Tauri's child-webview z-order equals insertion order, the overlay must be
+// the *last* webview added after each `wm_open`.  Rather than recreating it
+// eagerly on every panel open (which would reload the bundle), we mark it
+// stale and recreate on-demand inside `wm_ctx_menu_open`, then wait for the
+// overlay to signal readiness before emitting the menu payload.
+//
+// `OverlayInner` and `OverlayState` are defined in `terminal::state` and
+// re-exported here for use by the command layer.
 
 // ── Out-of-process launch (engine that this WM can't host) ────────────────────
 
@@ -690,16 +683,13 @@ pub fn run() {
     let cfg = TerminalConfig::load();
     let tree = LayoutTree::new(WIN, cfg.window.width, cfg.window.height);
     let identity = WmHostIdentity::from_env();
-    let overlay_state: OverlayState = Arc::new(Mutex::new(OverlayInner {
-        is_ready: false,
-        stale: false,
-        wakers: Vec::new(),
-    }));
+    let overlay_state: OverlayState = Arc::new(Mutex::new(OverlayInner::default()));
     let pool_size = std::env::var("OT_WEBVIEW_POOL_SIZE")
         .ok()
         .and_then(|v| v.parse::<usize>().ok())
         .unwrap_or(1);
     let pool = WebviewPool::new(pool_size);
+    let manager = TerminalManager::new();
     println!(
         "[wm] engine: {}@{} (runtime={:?})",
         identity.binding.family.as_dir(),
@@ -722,6 +712,7 @@ pub fn run() {
         )
         .manage(tree.clone())
         .manage(identity.clone())
+        .manage(manager.clone())
         .manage(overlay_state.clone())
         .manage(cfg.clone())
         .manage(pool.clone())
@@ -835,6 +826,30 @@ pub fn run() {
                 if let Some(snap) = tree.snapshot() {
                     let _ = app.handle().emit("wm:layout", &snap);
                 }
+            }
+
+            // ── Register main terminal in TerminalManager ─────────────────
+            // Wraps the already-initialised tree/pool/overlay so command
+            // handlers can resolve per-terminal objects by window label once
+            // the migration to TerminalManager is complete (PR 6).
+            {
+                let main_state = Arc::new(TerminalState {
+                    id: WIN.to_string(),
+                    name: cfg.title.clone(),
+                    layout_tree: tree.clone(),
+                    overlay: overlay_state.clone(),
+                    pool: pool.clone(),
+                    fdc3_channel: Arc::new(std::sync::RwLock::new(None)),
+                });
+                manager.register(main_state);
+            }
+
+            // Spawn any additional terminals persisted from previous sessions
+            // (no-op until `wm_new_terminal` is introduced in PR 7).
+            if let Err(e) =
+                terminal::spawn::load_persisted_terminals(app.handle(), &manager, pool_size)
+            {
+                eprintln!("[wm] load_persisted_terminals: {e}");
             }
 
             // ── Resize listener — reposition all webviews on window resize ─

@@ -101,6 +101,17 @@ impl LayoutTree {
         }
     }
 
+    /// Store the `AppHandle` without loading any persisted state.
+    ///
+    /// Used by `spawn_terminal` for newly-created Terminal windows so that
+    /// `schedule_save` has an `AppHandle` to resolve `app_data_dir`, without
+    /// accidentally loading the hardcoded `terminals/main` path that `init`
+    /// uses. The caller is responsible for loading and applying any persisted
+    /// layout separately.
+    pub fn register_app_handle(&self, app: &AppHandle) {
+        let _ = self.app.set(app.clone());
+    }
+
     /// Store the `AppHandle` and load any persisted layout from disk.
     ///
     /// Must be called once from the Tauri `setup` closure before any panels
