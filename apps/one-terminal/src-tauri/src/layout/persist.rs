@@ -199,6 +199,17 @@ pub fn update_terminal_name(
     save_terminal_for(terminal_id, &existing, data_dir)
 }
 
+/// Update only the `fdc3_channel` field, preserving all other fields.
+pub fn update_fdc3_channel(
+    terminal_id: &str,
+    channel_id: Option<&str>,
+    data_dir: &Path,
+) -> Result<(), String> {
+    let mut existing = load_terminal_for(terminal_id, data_dir).unwrap_or_default();
+    existing.fdc3_channel = channel_id.map(str::to_string);
+    save_terminal_for(terminal_id, &existing, data_dir)
+}
+
 // ── Load ──────────────────────────────────────────────────────────────────────
 
 /// Load from `<data_dir>/terminals/<id>/dashboards.json`.

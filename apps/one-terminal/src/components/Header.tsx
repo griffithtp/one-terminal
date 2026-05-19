@@ -22,6 +22,64 @@ import type { AppRecord, EngineBinding, OsKey, TerminalConfig } from "../types";
 import { DashboardSwitcher } from "./DashboardSwitcher";
 import type { UseDashboardsResult } from "../hooks/useDashboards";
 
+// ── FDC3 system channels ─────────────────────────────────────────────────────
+//
+// The 8 standard FDC3 2.2 system channels with their display colours.
+
+interface FdcChannel {
+  id: string;
+  name: string;
+  color: string;
+}
+
+const FDC3_CHANNELS: FdcChannel[] = [
+  { id: "fdc3.channel.1", name: "Channel 1", color: "#e11d48" },
+  { id: "fdc3.channel.2", name: "Channel 2", color: "#ea580c" },
+  { id: "fdc3.channel.3", name: "Channel 3", color: "#ca8a04" },
+  { id: "fdc3.channel.4", name: "Channel 4", color: "#16a34a" },
+  { id: "fdc3.channel.5", name: "Channel 5", color: "#0891b2" },
+  { id: "fdc3.channel.6", name: "Channel 6", color: "#2563eb" },
+  { id: "fdc3.channel.7", name: "Channel 7", color: "#7c3aed" },
+  { id: "fdc3.channel.8", name: "Channel 8", color: "#db2777" },
+];
+
+// ── ChannelSelector ───────────────────────────────────────────────────────────
+
+interface ChannelSelectorProps {
+  channelId: string | null;
+  onPillClick: (rect: DOMRect) => void;
+}
+
+function ChannelSelector({ channelId, onPillClick }: ChannelSelectorProps) {
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const current = FDC3_CHANNELS.find((c) => c.id === channelId) ?? null;
+
+  const handleClick = useCallback(() => {
+    if (btnRef.current) onPillClick(btnRef.current.getBoundingClientRect());
+  }, [onPillClick]);
+
+  return (
+    <button
+      ref={btnRef}
+      type="button"
+      className="wm-channel-selector__pill"
+      title={current ? `FDC3: ${current.name} — click to change` : "FDC3: No channel — click to join"}
+      onClick={handleClick}
+      aria-haspopup="listbox"
+    >
+      <span
+        className="wm-channel-selector__dot"
+        style={{ background: current?.color ?? "transparent" }}
+        aria-hidden
+      />
+      <span className="wm-channel-selector__label">
+        {current ? current.name : "No channel"}
+      </span>
+      <span className="wm-channel-selector__caret" aria-hidden>▾</span>
+    </button>
+  );
+}
+
 function detectCurrentOs(): OsKey {
   const ua = navigator.userAgent;
   if (/Mac|iPhone|iPad/i.test(ua)) return "macos";
@@ -212,6 +270,7 @@ export function Header({ onOpenTab, dashboards }: Props) {
   const [downloading, setDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState<DownloadEvent | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [channelId, setChannelId] = useState<string | null>(null);
   const currentOs = useMemo(() => detectCurrentOs(), []);
 
   // Fetch config from Rust once on mount, then load the app directory.
@@ -225,6 +284,28 @@ export function Header({ onOpenTab, dashboards }: Props) {
       .then((d) => setApps(d.applications ?? []))
       .catch(() => {});
   }, []);
+
+  // Hydrate FDC3 channel on mount and subscribe to changes.
+  useEffect(() => {
+    invoke<string | null>("wm_get_terminal_fdc3_channel")
+      .then((id) => setChannelId(id ?? null))
+      .catch(() => {});
+
+    const unlisten = listen<{ channelId: string | null }>("wm:terminal-channel", (e) => {
+      setChannelId(e.payload.channelId);
+    });
+    return () => {
+      unlisten.then((fn) => fn()).catch(() => {});
+    };
+  }, []);
+
+  const handleChannelPillClick = useCallback((rect: DOMRect) => {
+    invoke("wm_channel_picker_open", {
+      x: rect.left,
+      y: rect.bottom + 4,
+      channelId,
+    }).catch(console.error);
+  }, [channelId]);
 
   // ── Park panels while any picker / download dialog is open ──────────────
   //
@@ -390,6 +471,8 @@ export function Header({ onOpenTab, dashboards }: Props) {
       </span>
 
       <DashboardSwitcher ds={dashboards} />
+
+      <ChannelSelector channelId={channelId} onPillClick={handleChannelPillClick} />
 
       <div className="wm-header__apps">
         {apps.map((app) => {

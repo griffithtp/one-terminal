@@ -896,6 +896,79 @@ fn wm_rename_terminal(
     Ok(())
 }
 
+/// Return the FDC3 context channel currently selected for the invoking Terminal.
+/// `None` means the Terminal is on no channel (global / unfiltered context).
+#[tauri::command]
+fn wm_get_terminal_fdc3_channel(
+    window: Window,
+    manager: State<'_, TerminalManager>,
+) -> Option<String> {
+    manager
+        .get(window.label())
+        .and_then(|t| t.fdc3_channel.read().unwrap().clone())
+}
+
+/// Raise the overlay webview and emit `wm:channel-picker` so the overlay can
+/// render the channel dropdown above all panel webviews.
+///
+/// `x` / `y` are the logical-pixel coordinates of the pill button's bottom-left
+/// corner in the chrome's coordinate space — the overlay positions its dropdown
+/// relative to these.
+#[tauri::command]
+async fn wm_channel_picker_open(
+    x: f64,
+    y: f64,
+    channel_id: Option<String>,
+    window: Window,
+    manager: State<'_, TerminalManager>,
+    app: AppHandle,
+) -> Result<(), String> {
+    let terminal = get_terminal!(manager, window);
+    overlay_raise(Arc::clone(&terminal.overlay), window.label(), &app).await?;
+    app.emit(
+        "wm:channel-picker",
+        serde_json::json!({ "x": x, "y": y, "channelId": channel_id }),
+    )
+    .map_err(|e| e.to_string())
+}
+
+/// Set (or clear) the FDC3 context channel for the invoking Terminal.
+///
+/// Persists the selection immediately and emits `wm:terminal-channel` on the
+/// Terminal's own chrome webview so the header can reflect the change.
+/// Also emits the global `wm:terminals` event so the switcher stays in sync.
+#[tauri::command]
+fn wm_set_terminal_fdc3_channel(
+    channel_id: Option<String>,
+    window: Window,
+    manager: State<'_, TerminalManager>,
+    app: AppHandle,
+) -> Result<(), String> {
+    let terminal = get_terminal!(manager, window);
+    *terminal.fdc3_channel.write().unwrap() = channel_id.clone();
+
+    if let Ok(data_dir) = app.path().app_data_dir() {
+        if let Err(e) = layout_persist::update_fdc3_channel(
+            window.label(),
+            channel_id.as_deref(),
+            &data_dir,
+        ) {
+            eprintln!("[wm_set_terminal_fdc3_channel] persist: {e}");
+        }
+    }
+
+    let chrome_label = format!("{}-chrome", window.label());
+    if let Some(wv) = app.get_webview(&chrome_label) {
+        let _ = wv.emit(
+            "wm:terminal-channel",
+            serde_json::json!({ "channelId": channel_id }),
+        );
+    }
+
+    manager.emit_terminals(&app);
+    Ok(())
+}
+
 /// Close a Terminal window. Returns `TerminalError::LastTerminal` if it is
 /// the only remaining Terminal. Returns `TerminalError::NeedsConfirm` if any
 /// Dashboard in the Terminal has unsaved changes (auto-save off). Otherwise
@@ -1258,6 +1331,9 @@ pub fn run() {
             wm_new_terminal,
             wm_list_terminals,
             wm_rename_terminal,
+            wm_get_terminal_fdc3_channel,
+            wm_set_terminal_fdc3_channel,
+            wm_channel_picker_open,
             wm_close_terminal,
             wm_focus_terminal,
             wm_reset_terminal_position,
