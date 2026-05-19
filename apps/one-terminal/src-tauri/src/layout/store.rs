@@ -6,9 +6,12 @@
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
 
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{
+    AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewBuilder, WebviewUrl, Window,
+};
 use uuid::Uuid;
 
+use super::dashboard::{DashboardError, DashboardStore, DashboardsSnapshot};
 use super::docking::{add_leaf_as_sibling, append_to_stack_at, is_stack_at, move_leaf, DropZone};
 use super::host::{compute_host_layout, HostLayout};
 use super::node::{Direction, LayoutNode};
@@ -65,6 +68,9 @@ struct Inner {
 #[derive(Clone)]
 pub struct LayoutTree {
     inner: Arc<RwLock<Inner>>,
+    /// Named layout snapshots. Populated from disk in `init`; the active
+    /// dashboard is the source of truth for what gets restored on startup.
+    dashboard_store: Arc<RwLock<DashboardStore>>,
     /// Set once during `init` so all subsequent `schedule_save` calls can
     /// resolve `app_data_dir` without threading it through every call site.
     app: Arc<OnceLock<AppHandle>>,
@@ -84,6 +90,7 @@ impl LayoutTree {
                 width,
                 height,
             })),
+            dashboard_store: Arc::new(RwLock::new(DashboardStore::with_default())),
             app: Arc::new(OnceLock::new()),
             save_handle: Arc::new(Mutex::new(None)),
         }
@@ -100,28 +107,35 @@ impl LayoutTree {
         let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
         std::fs::create_dir_all(&data_dir).map_err(|e| e.to_string())?;
 
-        if let Some(persisted) = persist::load(&data_dir) {
-            let mut g = self.inner.write().unwrap();
-            g.root = persisted.tree;
-            g.meta = persisted
-                .meta
-                .into_iter()
-                .map(|(label, pm)| {
-                    (
-                        label,
-                        LeafMeta {
-                            app_id: pm.app_id,
-                            url: pm.url,
-                            title: pm.title,
-                            engine_binding: pm.engine_binding,
-                            display_name: pm.display_name,
-                            zoom_factor: pm.zoom_factor,
-                        },
-                    )
-                })
-                .collect();
-            g.active_panel = persisted.active_panel;
-            g.maximized_stack_id = persisted.maximized_stack_id;
+        if let Some(terminal_persist) = persist::load_terminal(&data_dir) {
+            let ds = DashboardStore::from_persist(terminal_persist);
+
+            // Load the active dashboard's layout into Inner.
+            if let Some(layout) = ds.load_active() {
+                let mut g = self.inner.write().unwrap();
+                g.root = layout.tree;
+                g.meta = layout
+                    .meta
+                    .into_iter()
+                    .map(|(label, pm)| {
+                        (
+                            label,
+                            LeafMeta {
+                                app_id: pm.app_id,
+                                url: pm.url,
+                                title: pm.title,
+                                engine_binding: pm.engine_binding,
+                                display_name: pm.display_name,
+                                zoom_factor: pm.zoom_factor,
+                            },
+                        )
+                    })
+                    .collect();
+                g.active_panel = layout.active_panel;
+                g.maximized_stack_id = layout.maximized_stack_id;
+            }
+
+            *self.dashboard_store.write().unwrap() = ds;
         }
 
         Ok(())
@@ -689,6 +703,273 @@ impl LayoutTree {
         }
         changed
     }
+
+    // ── Dashboard operations ──────────────────────────────────────────────────
+
+    /// Emit the current dashboard list state as `wm:dashboards`.
+    pub fn emit_dashboards(&self, app: &AppHandle) {
+        let snapshot = self.dashboard_store.read().unwrap().as_snapshot();
+        let _ = app.emit("wm:dashboards", &snapshot);
+    }
+
+    /// Return the current dashboard list state without emitting an event.
+    pub fn dashboards_snapshot(&self) -> DashboardsSnapshot {
+        self.dashboard_store.read().unwrap().as_snapshot()
+    }
+
+    /// Write the current `DashboardStore` to disk immediately without touching
+    /// `Inner`. Used by metadata-only mutations (create, rename, delete, reorder).
+    pub fn persist_dashboards(&self) {
+        let Some(app) = self.app.get() else { return };
+        let terminal_persist = self.dashboard_store.read().unwrap().to_terminal_persist();
+        if let Ok(data_dir) = app.path().app_data_dir() {
+            if let Err(e) = persist::save_terminal(&terminal_persist, &data_dir) {
+                eprintln!("[layout] persist_dashboards: {e}");
+            }
+        }
+    }
+
+    /// Expose a write-locked reference to the dashboard store for commands
+    /// that need to mutate it directly (create / rename / delete / reorder).
+    pub fn with_dashboard_store_mut<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce(&mut DashboardStore) -> R,
+    {
+        f(&mut self.dashboard_store.write().unwrap())
+    }
+
+    /// Set auto-save mode. When switching from off→on, the live layout is
+    /// immediately snapshotted and persisted, clearing the dirty flag.
+    pub fn set_auto_save(&self, enabled: bool) {
+        let should_flush = {
+            let mut ds = self.dashboard_store.write().unwrap();
+            let was_off = !ds.auto_save;
+            ds.auto_save = enabled;
+            was_off && enabled && ds.dirty
+        };
+        if should_flush {
+            self.schedule_save(0);
+        }
+    }
+
+    /// Snapshot the current live layout into the active dashboard slot and
+    /// write immediately to disk. Clears the dirty flag.
+    pub fn save_dashboard(&self) {
+        let layout = {
+            let g = self.inner.read().unwrap();
+            snapshot_for_persist(&g)
+        };
+        let terminal_persist = {
+            let mut ds = self.dashboard_store.write().unwrap();
+            ds.snapshot_current(layout);
+            ds.dirty = false;
+            ds.to_terminal_persist()
+        };
+        let Some(app) = self.app.get() else { return };
+        if let Ok(data_dir) = app.path().app_data_dir() {
+            if let Err(e) = persist::save_terminal(&terminal_persist, &data_dir) {
+                eprintln!("[layout] save_dashboard: {e}");
+            }
+        }
+    }
+
+    /// Reload the saved active dashboard snapshot into `Inner`, discarding all
+    /// unsaved live changes, and reconcile panel webviews on the main thread.
+    /// Clears the dirty flag. `win` is required to create any missing webviews.
+    pub fn discard_dashboard(&self, win: &Window, app: &AppHandle) -> Result<(), DashboardError> {
+        // Collect what's currently alive so we can diff.
+        let current_labels: Vec<String> = {
+            let g = self.inner.read().unwrap();
+            let mut labels = Vec::new();
+            if let Some(root) = &g.root {
+                collect_leaf_labels(root, &mut labels);
+            }
+            labels
+        };
+
+        // Load the clean snapshot and reset Inner.
+        let clean_layout = {
+            let mut ds = self.dashboard_store.write().unwrap();
+            ds.dirty = false;
+            ds.load_active()
+        };
+        let panels_to_create = self.apply_layout_to_inner(clean_layout);
+
+        // Reconcile webviews on the main thread.
+        self.reconcile_panel_webviews(current_labels, panels_to_create, win, app)?;
+
+        self.reflow(app);
+        self.emit_host(app);
+        if let Some(snap) = self.snapshot() {
+            let _ = app.emit("wm:layout", &snap);
+        }
+        Ok(())
+    }
+
+    /// Switch the active dashboard to `name`, performing the full webview
+    /// destroy/recreate lifecycle.
+    ///
+    /// Returns `DashboardError::NeedsConfirm` when `auto_save` is off and the
+    /// live layout has unsaved changes — the frontend must show a
+    /// save/discard/cancel dialog and retry.
+    pub fn switch_dashboard(
+        &self,
+        name: &str,
+        win: &Window,
+        app: &AppHandle,
+    ) -> Result<(), DashboardError> {
+        // Validate and check dirty state without holding any write lock.
+        {
+            let ds = self.dashboard_store.read().unwrap();
+            if ds.active == name {
+                return Ok(());
+            }
+            if !ds.dashboards.contains_key(name) {
+                return Err(DashboardError::NotFound);
+            }
+            if !ds.auto_save && ds.dirty {
+                return Err(DashboardError::NeedsConfirm);
+            }
+        }
+
+        // Collect current panel labels (to destroy later).
+        let current_labels: Vec<String> = {
+            let g = self.inner.read().unwrap();
+            let mut labels = Vec::new();
+            if let Some(root) = &g.root {
+                collect_leaf_labels(root, &mut labels);
+            }
+            labels
+        };
+
+        // Snapshot outgoing dashboard if auto_save is on, then switch active.
+        let new_layout = {
+            let mut ds = self.dashboard_store.write().unwrap();
+            if ds.auto_save {
+                let layout = {
+                    let g = self.inner.read().unwrap();
+                    snapshot_for_persist(&g)
+                };
+                ds.snapshot_current(layout);
+            }
+            ds.active = name.to_string();
+            ds.dirty = false;
+            ds.load_active()
+        };
+
+        // Load new dashboard into Inner and collect panels to create.
+        let panels_to_create = self.apply_layout_to_inner(new_layout);
+
+        // Destroy old webviews + create new ones on the main thread.
+        self.reconcile_panel_webviews(current_labels, panels_to_create, win, app)?;
+
+        // Persist the updated store (new active + snapshot of outgoing dashboard).
+        self.schedule_save(0);
+
+        self.reflow(app);
+        self.emit_host(app);
+        if let Some(snap) = self.snapshot() {
+            let _ = app.emit("wm:layout", &snap);
+        }
+
+        Ok(())
+    }
+
+    /// Load a `PersistedLayout` (or empty layout when `None`) into `Inner`.
+    /// Returns the `(label, url)` pairs of all panels in the new layout,
+    /// ordered depth-first.
+    fn apply_layout_to_inner(&self, layout: Option<PersistedLayout>) -> Vec<(String, String)> {
+        match layout {
+            Some(l) => {
+                let mut panels = Vec::new();
+                {
+                    let mut g = self.inner.write().unwrap();
+                    g.root = l.tree;
+                    g.meta = l
+                        .meta
+                        .into_iter()
+                        .map(|(label, pm)| {
+                            let url = pm.url.clone();
+                            let meta = LeafMeta {
+                                app_id: pm.app_id,
+                                url,
+                                title: pm.title,
+                                engine_binding: pm.engine_binding,
+                                display_name: pm.display_name,
+                                zoom_factor: pm.zoom_factor,
+                            };
+                            (label, meta)
+                        })
+                        .collect();
+                    g.active_panel = l.active_panel;
+                    g.maximized_stack_id = l.maximized_stack_id;
+
+                    // Collect panel pairs depth-first from the new tree.
+                    if let Some(root) = &g.root {
+                        collect_panel_urls(root, &g.meta, &mut panels);
+                    }
+                }
+                panels
+            }
+            None => {
+                let mut g = self.inner.write().unwrap();
+                g.root = None;
+                g.meta.clear();
+                g.active_panel = None;
+                g.maximized_stack_id = None;
+                Vec::new()
+            }
+        }
+    }
+
+    /// Close all webviews whose label is in `to_destroy`, then open fresh
+    /// webviews for each `(label, url)` pair in `to_create`. Dispatched on
+    /// the main thread because `add_child` requires it on Windows/macOS.
+    fn reconcile_panel_webviews(
+        &self,
+        to_destroy: Vec<String>,
+        to_create: Vec<(String, String)>,
+        win: &Window,
+        app: &AppHandle,
+    ) -> Result<(), DashboardError> {
+        let (tx, rx) = std::sync::mpsc::channel::<Result<(), String>>();
+        let app_for_main = app.clone();
+        let win_for_main = win.clone();
+
+        app.run_on_main_thread(move || {
+            let result = (|| -> Result<(), String> {
+                for label in &to_destroy {
+                    if let Some(wv) = app_for_main.get_webview(label) {
+                        wv.close().map_err(|e| e.to_string())?;
+                    }
+                }
+                for (label, url) in &to_create {
+                    if let Ok(parsed) = url.parse::<tauri::Url>() {
+                        win_for_main
+                            .add_child(
+                                WebviewBuilder::new(label, WebviewUrl::External(parsed)),
+                                LogicalPosition::new(0.0, 0.0),
+                                LogicalSize::new(1.0, 1.0),
+                            )
+                            .map_err(|e| e.to_string())?;
+                    } else {
+                        eprintln!("[layout] switch: invalid url '{url}' for panel '{label}'");
+                    }
+                }
+                Ok(())
+            })();
+            let _ = tx.send(result);
+        })
+        .map_err(|e| DashboardError::Other {
+            message: e.to_string(),
+        })?;
+
+        rx.recv()
+            .map_err(|e| DashboardError::Other {
+                message: e.to_string(),
+            })?
+            .map_err(DashboardError::from)
+    }
 }
 
 // ── Private helpers ───────────────────────────────────────────────────────────
@@ -736,9 +1017,24 @@ impl LayoutTree {
             }
         };
 
-        let snapshot = {
-            let g = self.inner.read().unwrap();
-            snapshot_for_persist(&g)
+        // When auto_save is off: just mark dirty and do not touch the
+        // persisted dashboard snapshot.
+        let auto_save = self.dashboard_store.read().unwrap().auto_save;
+        if !auto_save {
+            self.dashboard_store.write().unwrap().dirty = true;
+            return;
+        }
+
+        // Snapshot the current layout and fold it into the active dashboard,
+        // then serialise the whole store for the async write task.
+        let terminal_persist = {
+            let layout = {
+                let g = self.inner.read().unwrap();
+                snapshot_for_persist(&g)
+            };
+            let mut ds = self.dashboard_store.write().unwrap();
+            ds.snapshot_current(layout);
+            ds.to_terminal_persist()
         };
 
         let mut handle = self.save_handle.lock().unwrap();
@@ -749,8 +1045,8 @@ impl LayoutTree {
             if debounce_ms > 0 {
                 tokio::time::sleep(std::time::Duration::from_millis(debounce_ms)).await;
             }
-            if let Err(e) = persist::save(&snapshot, &data_dir) {
-                eprintln!("[layout] persist::save failed: {e}");
+            if let Err(e) = persist::save_terminal(&terminal_persist, &data_dir) {
+                eprintln!("[layout] persist::save_terminal failed: {e}");
             }
         }));
     }

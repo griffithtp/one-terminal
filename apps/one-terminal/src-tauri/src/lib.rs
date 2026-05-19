@@ -7,17 +7,19 @@ mod webview_pool;
 use config::TerminalConfig;
 use engine::WmHostIdentity;
 use layout::commands::{
-    close_tab, update_layout, wm_begin_tab_drag, wm_close_leaf, wm_close_stack, wm_end_tab_drag,
-    wm_rename_panel, wm_rename_tab, wm_set_active_tab, wm_set_zoom, wm_splitter_drag,
-    wm_toggle_maximize_stack,
+    close_tab, update_layout, wm_begin_tab_drag, wm_close_leaf, wm_close_stack,
+    wm_create_dashboard, wm_delete_dashboard, wm_end_tab_drag, wm_list_dashboards,
+    wm_rename_dashboard, wm_rename_panel, wm_rename_tab, wm_reorder_dashboards, wm_save_dashboard,
+    wm_set_active_tab, wm_set_auto_save, wm_set_zoom, wm_splitter_drag, wm_toggle_maximize_stack,
 };
+use layout::dashboard::DashboardError;
 use layout::drag::wm_drag_move;
 use layout::host::HostLayout;
 use layout::store::{LayoutTree, PanelSpec};
 use layout::{LayoutSnapshot, SplitDir};
 use ot_core::engine::{is_system_version, EngineBinding, EngineFamily};
 use std::sync::{Arc, Mutex};
-use tauri::{AppHandle, Manager, State, WebviewBuilder, WebviewUrl};
+use tauri::{AppHandle, Manager, State, WebviewBuilder, WebviewUrl, Window};
 use tauri::{Emitter, LogicalPosition, LogicalSize};
 use tokio::sync::oneshot;
 use webview_pool::WebviewPool;
@@ -606,6 +608,50 @@ async fn wm_overflow_menu_open(
         .map_err(|e| e.to_string())
 }
 
+// ── Dashboard commands (need OverlayState access) ─────────────────────────────
+
+/// Switch the active dashboard to `name`, performing the full webview
+/// destroy/recreate lifecycle.  Returns `DashboardError::NeedsConfirm` when
+/// `auto_save` is off and there are unsaved changes — the frontend should show
+/// a Save / Discard / Cancel dialog and retry accordingly.
+#[tauri::command]
+async fn wm_switch_dashboard(
+    name: String,
+    window: Window,
+    tree: State<'_, LayoutTree>,
+    overlay: State<'_, OverlayState>,
+    app: AppHandle,
+) -> Result<(), DashboardError> {
+    tree.switch_dashboard(&name, &window, &app)?;
+    {
+        let mut inner = overlay.lock().unwrap();
+        inner.stale = true;
+        inner.is_ready = false;
+    }
+    tree.emit_dashboards(&app);
+    Ok(())
+}
+
+/// Reload the active dashboard's saved snapshot, discarding all unsaved live
+/// changes. Reconciles panel webviews (creates/destroys as needed) then
+/// reflows and emits the updated layout events.
+#[tauri::command]
+async fn wm_discard_dashboard(
+    window: Window,
+    tree: State<'_, LayoutTree>,
+    overlay: State<'_, OverlayState>,
+    app: AppHandle,
+) -> Result<(), DashboardError> {
+    tree.discard_dashboard(&window, &app)?;
+    {
+        let mut inner = overlay.lock().unwrap();
+        inner.stale = true;
+        inner.is_ready = false;
+    }
+    tree.emit_dashboards(&app);
+    Ok(())
+}
+
 // ── Picker overlay parking ────────────────────────────────────────────────────
 //
 // Panel webviews sit above the chrome webview in z-order, so the chrome can't
@@ -853,6 +899,15 @@ pub fn run() {
             wm_palette_open,
             wm_overflow_menu_open,
             wm_request_rename,
+            wm_list_dashboards,
+            wm_switch_dashboard,
+            wm_create_dashboard,
+            wm_save_dashboard,
+            wm_discard_dashboard,
+            wm_rename_dashboard,
+            wm_delete_dashboard,
+            wm_reorder_dashboards,
+            wm_set_auto_save,
         ])
         .run(tauri::generate_context!())
         .expect("error while running one-terminal");
