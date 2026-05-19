@@ -24,9 +24,9 @@ use tauri::{Emitter, LogicalPosition, LogicalSize};
 use tokio::sync::oneshot;
 use webview_pool::WebviewPool;
 
-const CHROME: &str = "wm-chrome";
-const OVERLAY: &str = "wm-overlay";
-const WIN: &str = "wm";
+const CHROME: &str = "terminal-main-chrome";
+const OVERLAY: &str = "terminal-main-overlay";
+const WIN: &str = "terminal-main";
 
 // ── Overlay webview state ─────────────────────────────────────────────────────
 //
@@ -688,7 +688,7 @@ fn wm_config(cfg: State<'_, TerminalConfig>) -> TerminalConfig {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let cfg = TerminalConfig::load();
-    let tree = LayoutTree::new(cfg.window.width, cfg.window.height);
+    let tree = LayoutTree::new(WIN, cfg.window.width, cfg.window.height);
     let identity = WmHostIdentity::from_env();
     let overlay_state: OverlayState = Arc::new(Mutex::new(OverlayInner {
         is_ready: false,
@@ -786,7 +786,7 @@ pub fn run() {
             // activated in wm_open (same flow as cold panel creation).
             if pool.target_size > 0 {
                 for _ in 0..pool.target_size {
-                    let label = webview_pool::pool_label();
+                    let label = webview_pool::pool_label(WIN);
                     match win.add_child(
                         WebviewBuilder::new(
                             &label,

@@ -77,10 +77,14 @@ pub struct LayoutTree {
     /// Handle for the pending debounced save task. Replaced on every mutation
     /// so rapid changes coalesce into a single disk write.
     save_handle: Arc<Mutex<Option<tauri::async_runtime::JoinHandle<()>>>>,
+    /// Stable identifier for this Terminal instance. Used as the prefix for
+    /// all panel labels (`<terminal_id>-panel-<uuid>`) so that multiple
+    /// Terminals can coexist without label collisions.
+    terminal_id: Arc<str>,
 }
 
 impl LayoutTree {
-    pub fn new(width: f64, height: f64) -> Self {
+    pub fn new(terminal_id: &str, width: f64, height: f64) -> Self {
         Self {
             inner: Arc::new(RwLock::new(Inner {
                 root: None,
@@ -93,6 +97,7 @@ impl LayoutTree {
             dashboard_store: Arc::new(RwLock::new(DashboardStore::with_default())),
             app: Arc::new(OnceLock::new()),
             save_handle: Arc::new(Mutex::new(None)),
+            terminal_id: Arc::from(terminal_id),
         }
     }
 
@@ -440,7 +445,7 @@ impl LayoutTree {
         target: Option<&str>,
         dir: Option<SplitDir>,
     ) -> String {
-        let label = format!("panel-{}", short_id());
+        let label = format!("{}-panel-{}", self.terminal_id, short_id());
         self.insert_panel(label, spec, target, dir)
     }
 

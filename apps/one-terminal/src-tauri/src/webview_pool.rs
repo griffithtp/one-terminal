@@ -58,7 +58,7 @@ impl WebviewPool {
         let overlay = Arc::clone(overlay);
 
         tauri::async_runtime::spawn(async move {
-            let label = pool_label();
+            let label = pool_label(crate::WIN);
             let (tx, rx) = std::sync::mpsc::channel::<Result<(), String>>();
             let label_main = label.clone();
             let app_main = app.clone();
@@ -111,6 +111,6 @@ impl WebviewPool {
     }
 }
 
-pub fn pool_label() -> String {
-    format!("pool-{}", &Uuid::new_v4().to_string()[..8])
+pub fn pool_label(terminal_id: &str) -> String {
+    format!("{}-pool-{}", terminal_id, &Uuid::new_v4().to_string()[..8])
 }
