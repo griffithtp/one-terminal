@@ -20,6 +20,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { AppRecord, EngineBinding, OsKey, TerminalConfig } from "../types";
 import { DashboardSwitcher } from "./DashboardSwitcher";
+import { TerminalSwitcher } from "./TerminalSwitcher";
 import type { UseDashboardsResult } from "../hooks/useDashboards";
 
 // ── FDC3 system channels ─────────────────────────────────────────────────────
@@ -469,6 +470,8 @@ export function Header({ onOpenTab, dashboards }: Props) {
       <span className="wm-header__brand" data-tauri-drag-region>
         {cfg?.title ?? "OneTerminal"}
       </span>
+
+      <TerminalSwitcher />
 
       <DashboardSwitcher ds={dashboards} />
 

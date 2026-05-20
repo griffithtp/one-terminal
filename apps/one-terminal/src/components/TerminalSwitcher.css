@@ -1,0 +1,206 @@
+/* ── Trigger button ───────────────────────────────────────────────────────── */
+
+.wm-ts {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.wm-ts__trigger {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  background: #1e293b;
+  color: #94a3b8;
+  border: 1px solid #334155;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition:
+    background 120ms,
+    color 120ms,
+    border-color 120ms;
+  user-select: none;
+}
+
+.wm-ts__trigger:hover,
+.wm-ts__trigger--open {
+  background: #273548;
+  color: #cbd5e1;
+  border-color: #475569;
+}
+
+.wm-ts__current-name {
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wm-ts__caret {
+  font-size: 10px;
+  color: #64748b;
+}
+
+/* ── Dropdown ─────────────────────────────────────────────────────────────── */
+
+.wm-ts__dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 2000;
+  background: #1e293b;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  padding: 4px;
+  min-width: 180px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+/* ── Terminal item ────────────────────────────────────────────────────────── */
+
+.wm-ts__item {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.wm-ts__item--current {
+  background: #1d3a5e;
+}
+
+.wm-ts__item-name {
+  flex: 1;
+  min-width: 0;
+  padding: 5px 8px;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  color: #cbd5e1;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wm-ts__item-name:hover {
+  background: #273548;
+}
+
+.wm-ts__item--current .wm-ts__item-name {
+  color: #93c5fd;
+  font-weight: 500;
+}
+
+.wm-ts__item-badge {
+  font-size: 10px;
+  color: #60a5fa;
+}
+
+.wm-ts__item-close {
+  flex-shrink: 0;
+  padding: 3px 6px;
+  background: none;
+  border: none;
+  color: #475569;
+  font-size: 10px;
+  cursor: pointer;
+  border-radius: 3px;
+  transition:
+    color 120ms,
+    background 120ms;
+}
+
+.wm-ts__item-close:hover {
+  color: #f87171;
+  background: #450a0a;
+}
+
+.wm-ts__item-close:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* ── Separator ────────────────────────────────────────────────────────────── */
+
+.wm-ts__separator {
+  height: 1px;
+  background: #334155;
+  margin: 4px 2px;
+}
+
+/* ── New Terminal button ──────────────────────────────────────────────────── */
+
+.wm-ts__add {
+  display: block;
+  width: 100%;
+  padding: 5px 8px;
+  background: none;
+  border: none;
+  border-radius: 4px;
+  color: #60a5fa;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 120ms;
+}
+
+.wm-ts__add:hover {
+  background: #172554;
+}
+
+/* ── NewTerminalDialog mode options ──────────────────────────────────────── */
+
+.wm-ntd__modes {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.wm-ntd__mode {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  grid-template-rows: auto auto;
+  column-gap: 8px;
+  align-items: start;
+  padding: 6px 8px;
+  border: 1px solid #334155;
+  border-radius: 4px;
+  cursor: pointer;
+  transition:
+    border-color 120ms,
+    background 120ms;
+}
+
+.wm-ntd__mode:has(input:checked) {
+  border-color: #2563eb;
+  background: #172554;
+}
+
+.wm-ntd__mode--disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.wm-ntd__mode input[type="radio"] {
+  grid-row: span 2;
+  margin-top: 2px;
+  accent-color: #3b82f6;
+  cursor: inherit;
+}
+
+.wm-ntd__mode-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #e2e8f0;
+}
+
+.wm-ntd__mode-desc {
+  font-size: 11px;
+  color: #64748b;
+}

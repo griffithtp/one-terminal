@@ -387,7 +387,10 @@ async fn wm_open(
     tree.emit_host(&app);
 
     let snap = tree.snapshot().ok_or("layout empty after add")?;
-    app.emit("wm:layout", &snap).ok();
+    let chrome = format!("{}-chrome", window.label());
+    if let Some(wv) = app.get_webview(&chrome) {
+        wv.emit("wm:layout", &snap).ok();
+    }
     Ok(snap)
 }
 
@@ -410,12 +413,11 @@ fn wm_close(
     terminal.layout_tree.emit_host(&app);
 
     let snap = terminal.layout_tree.snapshot();
-    match &snap {
-        Some(s) => {
-            app.emit("wm:layout", s).ok();
-        }
-        None => {
-            app.emit("wm:layout", serde_json::Value::Null).ok();
+    let chrome = format!("{}-chrome", window.label());
+    if let Some(wv) = app.get_webview(&chrome) {
+        match &snap {
+            Some(s) => { wv.emit("wm:layout", s).ok(); }
+            None => { wv.emit("wm:layout", serde_json::Value::Null).ok(); }
         }
     }
     Ok(snap)
@@ -597,20 +599,23 @@ async fn wm_ctx_menu_open(
 ) -> Result<(), String> {
     let terminal = get_terminal!(manager, window);
     overlay_raise(Arc::clone(&terminal.overlay), window.label(), &app).await?;
-    app.emit(
-        "wm:ctx-menu",
-        serde_json::json!({
-            "x": x,
-            "y": y,
-            "stackPath": stack_path,
-            "nTabs": n_tabs,
-            "tabLabel": tab_label,
-            "appId": app_id,
-            "displayName": display_name,
-            "zoomFactor": zoom_factor,
-        }),
-    )
-    .map_err(|e| e.to_string())
+    let overlay = format!("{}-overlay", window.label());
+    app.get_webview(&overlay)
+        .ok_or("overlay not found".to_string())?
+        .emit(
+            "wm:ctx-menu",
+            serde_json::json!({
+                "x": x,
+                "y": y,
+                "stackPath": stack_path,
+                "nTabs": n_tabs,
+                "tabLabel": tab_label,
+                "appId": app_id,
+                "displayName": display_name,
+                "zoomFactor": zoom_factor,
+            }),
+        )
+        .map_err(|e| e.to_string())
 }
 
 /// Signal the chrome webview to enter inline rename mode for `label`.
@@ -618,7 +623,13 @@ async fn wm_ctx_menu_open(
 /// without a backend round-trip for state.
 #[tauri::command]
 fn wm_request_rename(label: String, app: AppHandle) {
-    let _ = app.emit("wm:request-rename", serde_json::json!({ "label": label }));
+    // Panel labels are "{terminal_id}-panel-{uuid}" — extract the terminal prefix.
+    if let Some(terminal_id) = label.split("-panel-").next() {
+        let chrome = format!("{}-chrome", terminal_id);
+        if let Some(wv) = app.get_webview(&chrome) {
+            let _ = wv.emit("wm:request-rename", serde_json::json!({ "label": label }));
+        }
+    }
 }
 
 /// Hide the overlay by parking it offscreen.  Called by the overlay itself
@@ -643,7 +654,10 @@ async fn wm_palette_open(
 ) -> Result<(), String> {
     let terminal = get_terminal!(manager, window);
     overlay_raise(Arc::clone(&terminal.overlay), window.label(), &app).await?;
-    app.emit("wm:palette-open", commands)
+    let overlay = format!("{}-overlay", window.label());
+    app.get_webview(&overlay)
+        .ok_or("overlay not found".to_string())?
+        .emit("wm:palette-open", commands)
         .map_err(|e| e.to_string())
 }
 
@@ -660,7 +674,10 @@ async fn wm_overflow_menu_open(
 ) -> Result<(), String> {
     let terminal = get_terminal!(manager, window);
     overlay_raise(Arc::clone(&terminal.overlay), window.label(), &app).await?;
-    app.emit("wm:overflow-menu", payload)
+    let overlay = format!("{}-overlay", window.label());
+    app.get_webview(&overlay)
+        .ok_or("overlay not found".to_string())?
+        .emit("wm:overflow-menu", payload)
         .map_err(|e| e.to_string())
 }
 
@@ -925,11 +942,14 @@ async fn wm_channel_picker_open(
 ) -> Result<(), String> {
     let terminal = get_terminal!(manager, window);
     overlay_raise(Arc::clone(&terminal.overlay), window.label(), &app).await?;
-    app.emit(
-        "wm:channel-picker",
-        serde_json::json!({ "x": x, "y": y, "channelId": channel_id }),
-    )
-    .map_err(|e| e.to_string())
+    let overlay = format!("{}-overlay", window.label());
+    app.get_webview(&overlay)
+        .ok_or("overlay not found".to_string())?
+        .emit(
+            "wm:channel-picker",
+            serde_json::json!({ "x": x, "y": y, "channelId": channel_id }),
+        )
+        .map_err(|e| e.to_string())
 }
 
 /// Set (or clear) the FDC3 context channel for the invoking Terminal.
@@ -994,14 +1014,18 @@ async fn wm_close_terminal(
         return Err(TerminalError::NeedsConfirm);
     }
 
-    // Flush the layout to disk before destroying webviews.
-    terminal.layout_tree.save_dashboard();
-
     manager.remove(&id);
 
     // Close the OS window — Tauri destroys all child webviews with it.
     if let Some(win) = app.get_window(&id) {
         let _ = win.close();
+    }
+
+    // Remove persisted state so the terminal is not restored on next startup.
+    if let Ok(data_dir) = app.path().app_data_dir() {
+        if let Err(e) = layout_persist::delete_terminal_for(&id, &data_dir) {
+            eprintln!("[wm_close_terminal] persist delete: {e}");
+        }
     }
 
     manager.emit_terminals(&app);
@@ -1267,13 +1291,6 @@ pub fn run() {
                     window_config: Arc::clone(&main_window_config),
                 });
                 manager.register(main_state);
-            }
-
-            // Spawn any additional terminals persisted from previous sessions.
-            if let Err(e) =
-                terminal::spawn::load_persisted_terminals(app.handle(), &manager, pool_size)
-            {
-                eprintln!("[wm] load_persisted_terminals: {e}");
             }
 
             // Emit the initial terminal list to all chrome webviews.

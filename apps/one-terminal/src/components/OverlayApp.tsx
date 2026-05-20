@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { listen, emit } from "@tauri-apps/api/event";
+import { listen, emit, emitTo } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { ctxMenuItemsFor, type CtxMenuContext } from "./contextMenuItems";
 import { PanelHighlightLayer } from "./CommandPalette";
 import { bigramScore } from "../commands/registry";
 import type { SerializableCommand } from "../commands/registry";
-import type { LayoutSnapshot, HostLayout, OverflowMenuPayload } from "../types";
+import type { LayoutSnapshot, HostLayout, OverflowMenuPayload, TerminalListItem } from "../types";
 
 // ── FDC3 channel picker types ─────────────────────────────────────────────────
 
@@ -31,6 +32,17 @@ const FDC3_CHANNELS: FdcChannel[] = [
   { id: "fdc3.channel.7", name: "Channel 7", color: "#7c3aed" },
   { id: "fdc3.channel.8", name: "Channel 8", color: "#db2777" },
 ];
+
+// ── Terminal-switcher types ────────────────────────────────────────────────────
+
+interface TerminalSwitcherPayload {
+  x: number;
+  y: number;
+  terminals: TerminalListItem[];
+  currentId: string;
+}
+
+type TerminalSwitcherAction = { type: "new" } | { type: "close"; id: string };
 
 // ── Context-menu types ─────────────────────────────────────────────────────────
 
@@ -119,6 +131,9 @@ export function OverlayApp() {
   // ── Channel picker state ─────────────────────────────────────────────────
   const [channelPicker, setChannelPicker] = useState<ChannelPickerPayload | null>(null);
 
+  // ── Terminal switcher state ───────────────────────────────────────────────
+  const [terminalSwitcher, setTerminalSwitcher] = useState<TerminalSwitcherPayload | null>(null);
+
   // ── Palette state ────────────────────────────────────────────────────────
   const [paletteCommands, setPaletteCommands] = useState<SerializableCommand[] | null>(null);
   const [paletteQuery, setPaletteQuery] = useState("");
@@ -139,12 +154,13 @@ export function OverlayApp() {
     let cancelled = false;
 
     (async () => {
-      const [unCtxMenu, unPalette, unLayout, unHostLayout, unOverflow, unChannelPicker] = await Promise.all([
+      const [unCtxMenu, unPalette, unLayout, unHostLayout, unOverflow, unChannelPicker, unTerminalSwitcher] = await Promise.all([
         listen<CtxMenuPayload>("wm:ctx-menu", (e) => {
           setMenu(e.payload);
           setZoomOpen(false);
           setOverflowMenu(null);
           setChannelPicker(null);
+          setTerminalSwitcher(null);
         }),
         listen<SerializableCommand[]>("wm:palette-open", (e) => {
           setPaletteCommands(e.payload);
@@ -152,6 +168,7 @@ export function OverlayApp() {
           setPaletteSelectedIdx(0);
           setOverflowMenu(null);
           setChannelPicker(null);
+          setTerminalSwitcher(null);
           requestAnimationFrame(() => paletteInputRef.current?.focus());
         }),
         listen<LayoutSnapshot>("wm:layout", (e) => setLayout(e.payload)),
@@ -160,19 +177,27 @@ export function OverlayApp() {
           setOverflowMenu(e.payload);
           setMenu(null);
           setChannelPicker(null);
+          setTerminalSwitcher(null);
         }),
         listen<ChannelPickerPayload>("wm:channel-picker", (e) => {
           setChannelPicker(e.payload);
           setMenu(null);
           setOverflowMenu(null);
+          setTerminalSwitcher(null);
+        }),
+        listen<TerminalSwitcherPayload>("wm:terminal-switcher", (e) => {
+          setTerminalSwitcher(e.payload);
+          setMenu(null);
+          setOverflowMenu(null);
+          setChannelPicker(null);
         }),
       ]);
 
       if (cancelled) {
-        [unCtxMenu, unPalette, unLayout, unHostLayout, unOverflow, unChannelPicker].forEach((fn) => fn());
+        [unCtxMenu, unPalette, unLayout, unHostLayout, unOverflow, unChannelPicker, unTerminalSwitcher].forEach((fn) => fn());
         return;
       }
-      unlisteners = [unCtxMenu, unPalette, unLayout, unHostLayout, unOverflow, unChannelPicker];
+      unlisteners = [unCtxMenu, unPalette, unLayout, unHostLayout, unOverflow, unChannelPicker, unTerminalSwitcher];
       invoke("wm_overlay_ready").catch(console.error);
     })();
 
@@ -248,6 +273,19 @@ export function OverlayApp() {
   function selectChannel(id: string | null) {
     invoke("wm_set_terminal_fdc3_channel", { channelId: id }).catch(console.error);
     dismissChannelPicker();
+  }
+
+  // ── Terminal switcher actions ─────────────────────────────────────────────
+
+  function dismissTerminalSwitcher() {
+    setTerminalSwitcher(null);
+    invoke("wm_ctx_menu_close").catch(console.error);
+  }
+
+  function emitTerminalAction(action: TerminalSwitcherAction) {
+    const chromeLabel = `${getCurrentWindow().label}-chrome`;
+    emitTo(chromeLabel, "wm:terminal-switcher-action", action).catch(console.error);
+    dismissTerminalSwitcher();
   }
 
   // ── Context menu actions ─────────────────────────────────────────────────
@@ -408,6 +446,60 @@ export function OverlayApp() {
               </li>
             ))}
           </ul>
+        </>
+      )}
+
+      {/* ── Terminal switcher dropdown ── */}
+      {terminalSwitcher && (
+        <>
+          <div style={{ position: "fixed", inset: 0 }} onPointerDown={dismissTerminalSwitcher} />
+          <div
+            className="wm-ts__dropdown"
+            role="listbox"
+            style={{ position: "fixed", left: terminalSwitcher.x, top: terminalSwitcher.y }}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            {terminalSwitcher.terminals.map((t) => (
+              <div
+                key={t.id}
+                className={`wm-ts__item${t.id === terminalSwitcher.currentId ? " wm-ts__item--current" : ""}`}
+              >
+                <button
+                  type="button"
+                  className="wm-ts__item-name"
+                  role="option"
+                  aria-selected={t.id === terminalSwitcher.currentId}
+                  onClick={() => {
+                    invoke("wm_focus_terminal", { id: t.id }).catch(console.error);
+                    dismissTerminalSwitcher();
+                  }}
+                >
+                  {t.name}
+                  {t.id === terminalSwitcher.currentId && (
+                    <span className="wm-ts__item-badge" aria-hidden> ✓</span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  className="wm-ts__item-close"
+                  title={`Close ${t.name}`}
+                  aria-label={`Close ${t.name}`}
+                  disabled={terminalSwitcher.terminals.length <= 1}
+                  onClick={() => emitTerminalAction({ type: "close", id: t.id })}
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+            <div className="wm-ts__separator" aria-hidden />
+            <button
+              type="button"
+              className="wm-ts__add"
+              onClick={() => emitTerminalAction({ type: "new" })}
+            >
+              + New Terminal
+            </button>
+          </div>
         </>
       )}
 

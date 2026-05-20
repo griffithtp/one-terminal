@@ -352,7 +352,10 @@ impl LayoutTree {
     /// Matches reflow's HEADER_HEIGHT offset so overlays align with webviews.
     pub fn emit_host(&self, app: &AppHandle) {
         let payload = self.host_snapshot();
-        let _ = app.emit("wm:host-layout", &payload);
+        let chrome = format!("{}-chrome", self.terminal_id);
+        if let Some(wv) = app.get_webview(&chrome) {
+            let _ = wv.emit("wm:host-layout", &payload);
+        }
     }
 
     /// Update the display title for the panel identified by `label`.
@@ -730,7 +733,10 @@ impl LayoutTree {
     /// Emit the current dashboard list state as `wm:dashboards`.
     pub fn emit_dashboards(&self, app: &AppHandle) {
         let snapshot = self.dashboard_store.read().unwrap().as_snapshot();
-        let _ = app.emit("wm:dashboards", &snapshot);
+        let chrome = format!("{}-chrome", self.terminal_id);
+        if let Some(wv) = app.get_webview(&chrome) {
+            let _ = wv.emit("wm:dashboards", &snapshot);
+        }
     }
 
     /// Return the current dashboard list state without emitting an event.
@@ -828,7 +834,10 @@ impl LayoutTree {
         self.reflow(app);
         self.emit_host(app);
         if let Some(snap) = self.snapshot() {
-            let _ = app.emit("wm:layout", &snap);
+            let chrome = format!("{}-chrome", self.terminal_id);
+            if let Some(wv) = app.get_webview(&chrome) {
+                let _ = wv.emit("wm:layout", &snap);
+            }
         }
         Ok(())
     }
@@ -896,7 +905,10 @@ impl LayoutTree {
         self.reflow(app);
         self.emit_host(app);
         if let Some(snap) = self.snapshot() {
-            let _ = app.emit("wm:layout", &snap);
+            let chrome = format!("{}-chrome", self.terminal_id);
+            if let Some(wv) = app.get_webview(&chrome) {
+                let _ = wv.emit("wm:layout", &snap);
+            }
         }
 
         Ok(())

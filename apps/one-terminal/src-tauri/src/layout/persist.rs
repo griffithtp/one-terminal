@@ -210,6 +210,21 @@ pub fn update_fdc3_channel(
     save_terminal_for(terminal_id, &existing, data_dir)
 }
 
+// ── Delete ────────────────────────────────────────────────────────────────────
+
+/// Remove the persisted state directory for a terminal so it is not restored
+/// on next startup. Silently succeeds if the directory does not exist.
+pub fn delete_terminal_for(terminal_id: &str, data_dir: &Path) -> Result<(), String> {
+    let dir = data_dir
+        .join("terminals")
+        .join(terminal_dir_name(terminal_id));
+    match std::fs::remove_dir_all(&dir) {
+        Ok(_) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
 // ── Load ──────────────────────────────────────────────────────────────────────
 
 /// Load from `<data_dir>/terminals/<id>/dashboards.json`.
