@@ -210,6 +210,32 @@ pub fn update_fdc3_channel(
     save_terminal_for(terminal_id, &existing, data_dir)
 }
 
+// ── List ──────────────────────────────────────────────────────────────────────
+
+/// Return window labels for all saved non-main terminals by scanning
+/// `<data_dir>/terminals/`. Used at startup to restore previously open Terminals.
+pub fn list_saved_terminal_ids(data_dir: &Path) -> Vec<String> {
+    let terminals_dir = data_dir.join("terminals");
+    let Ok(entries) = std::fs::read_dir(&terminals_dir) else {
+        return Vec::new();
+    };
+    let mut ids: Vec<String> = entries
+        .flatten()
+        .filter_map(|e| {
+            let path = e.path();
+            if path.is_dir() && path.join("dashboards.json").exists() {
+                let name = path.file_name()?.to_str()?;
+                if name != "main" {
+                    return Some(format!("terminal-{name}"));
+                }
+            }
+            None
+        })
+        .collect();
+    ids.sort();
+    ids
+}
+
 // ── Delete ────────────────────────────────────────────────────────────────────
 
 /// Remove the persisted state directory for a terminal so it is not restored

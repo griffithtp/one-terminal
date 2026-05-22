@@ -92,6 +92,15 @@ pub fn install_window_listeners(
 
     win.on_window_event(move |evt| {
         match evt {
+            tauri::WindowEvent::CloseRequested { api, .. } => {
+                // Intercept OS-level close so the frontend can show a
+                // confirmation dialog before wm_close_terminal is called.
+                api.prevent_close();
+                let chrome = format!("{terminal_id_s}-chrome");
+                if let Some(wv) = app_h.get_webview(&chrome) {
+                    let _ = wv.emit("wm:confirm-close", serde_json::json!(null));
+                }
+            }
             tauri::WindowEvent::Resized(phys) => {
                 let sf = app_h
                     .get_window(&terminal_id_s)

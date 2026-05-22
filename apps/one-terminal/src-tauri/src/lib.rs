@@ -886,6 +886,64 @@ fn wm_duplicate_dashboard_to(
     Ok(created)
 }
 
+// ── Terminal lifecycle commands ───────────────────────────────────────────────
+
+/// Spawn a brand-new Terminal window with zero dashboards and register it in
+/// the TerminalManager. Called from the Desktop Agent tray "Open New Terminal"
+/// action via IPC.
+#[tauri::command]
+fn wm_spawn_terminal(
+    manager: State<'_, TerminalManager>,
+    app: AppHandle,
+) -> Result<terminal::state::TerminalInfo, String> {
+    let label = manager.next_label();
+    let pool_size = std::env::var("OT_WEBVIEW_POOL_SIZE")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(1);
+    let info = terminal::spawn::spawn_terminal(&label, None, &manager, &app, pool_size, None)?;
+    manager.emit_terminals(&app);
+    Ok(info)
+}
+
+/// Return the window labels of all saved non-main terminals by scanning the
+/// app data directory. Used by the Desktop Agent startup restore loop.
+#[tauri::command]
+fn wm_list_saved_terminals(app: AppHandle) -> Vec<String> {
+    app.path()
+        .app_data_dir()
+        .map(|d| layout_persist::list_saved_terminal_ids(&d))
+        .unwrap_or_default()
+}
+
+/// Close a Terminal window after the user has confirmed the prompt.
+///
+/// Removes the terminal from the registry, deletes its persisted state so it
+/// is not restored on next startup, force-destroys the OS window, and emits
+/// `wm:terminals` to keep any switcher UI in sync.
+#[tauri::command]
+fn wm_close_terminal(
+    label: String,
+    manager: State<'_, TerminalManager>,
+    app: AppHandle,
+) -> Result<(), String> {
+    manager.remove(&label);
+
+    if let Ok(data_dir) = app.path().app_data_dir() {
+        if let Err(e) = layout_persist::delete_terminal_for(&label, &data_dir) {
+            eprintln!("[wm_close_terminal] delete persist for {label}: {e}");
+        }
+    }
+
+    // destroy() bypasses CloseRequested, so the confirm dialog is not re-shown.
+    if let Some(win) = app.get_window(&label) {
+        win.destroy().map_err(|e| e.to_string())?;
+    }
+
+    manager.emit_terminals(&app);
+    Ok(())
+}
+
 // ── App entry point ───────────────────────────────────────────────────────────
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -1137,6 +1195,9 @@ pub fn run() {
             wm_set_terminal_fdc3_channel,
             wm_channel_picker_open,
             wm_duplicate_dashboard_to,
+            wm_spawn_terminal,
+            wm_list_saved_terminals,
+            wm_close_terminal,
         ])
         .run(tauri::generate_context!())
         .expect("error while running one-terminal");

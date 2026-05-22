@@ -145,9 +145,8 @@ impl DashboardStore {
         } else if let Some(first) = dashboards.keys().next() {
             first.clone()
         } else {
-            let name = "Default".to_string();
-            dashboards.insert(name.clone(), PersistedDashboard::empty(name.clone()));
-            name
+            // No dashboards persisted — start empty; user creates the first one.
+            String::new()
         };
 
         Self {
