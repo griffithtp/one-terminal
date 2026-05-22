@@ -17,6 +17,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useLayout } from "./hooks/useLayout";
 import { useHostLayout } from "./hooks/useHostLayout";
 import { useTabDrag } from "./hooks/useTabDrag";
@@ -35,6 +36,67 @@ import { registry } from "./commands/registry";
 import { useDashboards } from "./hooks/useDashboards";
 import type { EngineBinding, StackHeader } from "./types";
 import "./wm.css";
+
+// ── TerminalCloseDialog ───────────────────────────────────────────────────────
+//
+// Listens for `wm:confirm-close` (emitted by the Rust CloseRequested intercept)
+// and shows a confirmation dialog. On confirm it calls `wm_close_terminal` which
+// deletes persisted state and force-destroys the window. On cancel it dismisses.
+
+function TerminalCloseDialog() {
+  const [visible, setVisible] = useState(false);
+  const parkedRef = useRef(false);
+
+  useEffect(() => {
+    const unlisten = listen("wm:confirm-close", () => setVisible(true));
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, []);
+
+  useEffect(() => {
+    if (visible && !parkedRef.current) {
+      parkedRef.current = true;
+      invoke("wm_park_panels").catch(console.error);
+    } else if (!visible && parkedRef.current) {
+      parkedRef.current = false;
+      invoke("wm_unpark_panels").catch(console.error);
+    }
+  }, [visible]);
+
+  const handleConfirm = useCallback(() => {
+    const label = getCurrentWindow().label;
+    invoke("wm_close_terminal", { label }).catch(console.error);
+    setVisible(false);
+  }, []);
+
+  const handleCancel = useCallback(() => setVisible(false), []);
+
+  if (!visible) return null;
+
+  return (
+    <div className="wm-ds-dialog__backdrop" role="dialog" aria-modal="true">
+      <div className="wm-ds-dialog">
+        <div className="wm-ds-dialog__title">Close Terminal</div>
+        <p className="wm-ds-dialog__body">
+          Close this Terminal? This will permanently remove it and all its dashboards.
+        </p>
+        <div className="wm-ds-dialog__actions">
+          <button type="button" className="wm-ds-dialog__btn" onClick={handleCancel}>
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="wm-ds-dialog__btn wm-ds-dialog__btn--danger"
+            onClick={handleConfirm}
+          >
+            Close Terminal
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function App() {
   // The overlay webview loads the same bundle with `#overlay` in the URL.
@@ -234,11 +296,17 @@ function ChromeApp() {
 
       {settingsOpen && <KeybindingsSettings onClose={() => setSettingsOpen(false)} />}
 
-      {/* Empty-state hint when no panels are open */}
+      <TerminalCloseDialog />
+
+      {/* Empty-state hint: different message depending on whether dashboards exist */}
       {(!layout || layout.panels.length === 0) &&
         (!hostLayout || hostLayout.stacks.length === 0) && (
           <div className="wm-empty">
-            <p>No panels open — launch an app from the header.</p>
+            <p>
+              {dashboards.dashboards.length === 0
+                ? "Create a dashboard to get started."
+                : "No panels open — launch an app from the header."}
+            </p>
           </div>
         )}
 

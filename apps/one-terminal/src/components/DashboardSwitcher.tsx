@@ -337,20 +337,26 @@ export function DashboardSwitcher({ ds }: Props) {
     <>
       <div className="wm-ds" data-tauri-drag-region>
         <div className="wm-ds__strip" data-tauri-drag-region>
-          {dashboards.map((d) => (
-            <Pill
-              key={d.name}
-              info={d}
-              dragOver={dragOverName === d.name}
-              onClick={() => switchTo(d.name).catch(console.error)}
-              onClose={() => handleDelete(d.name)}
-              onContextMenu={(e) => handleContextMenu(e, d.name)}
-              onDragStart={() => handleDragStart(d.name)}
-              onDragOver={(e) => handleDragOver(e, d.name)}
-              onDrop={(e) => handleDrop(e, d.name)}
-              onDragEnd={handleDragEnd}
-            />
-          ))}
+          {dashboards.length === 0 ? (
+            <span className="wm-ds__empty-hint" data-tauri-drag-region>
+              No dashboards
+            </span>
+          ) : (
+            dashboards.map((d) => (
+              <Pill
+                key={d.name}
+                info={d}
+                dragOver={dragOverName === d.name}
+                onClick={() => switchTo(d.name).catch(console.error)}
+                onClose={() => handleDelete(d.name)}
+                onContextMenu={(e) => handleContextMenu(e, d.name)}
+                onDragStart={() => handleDragStart(d.name)}
+                onDragOver={(e) => handleDragOver(e, d.name)}
+                onDrop={(e) => handleDrop(e, d.name)}
+                onDragEnd={handleDragEnd}
+              />
+            ))
+          )}
         </div>
         <button
           type="button"

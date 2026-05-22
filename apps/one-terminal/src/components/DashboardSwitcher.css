@@ -107,6 +107,15 @@
   flex-shrink: 0;
 }
 
+/* ── Empty hint (no dashboards) ─────────────────────────────────────────── */
+.wm-ds__empty-hint {
+  font-size: 11px;
+  color: #475569;
+  white-space: nowrap;
+  user-select: none;
+  padding: 0 4px;
+}
+
 /* ── Add button ──────────────────────────────────────────────────────────── */
 .wm-ds__add {
   padding: 3px 7px;
