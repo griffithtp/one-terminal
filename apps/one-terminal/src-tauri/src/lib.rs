@@ -948,6 +948,10 @@ fn wm_close_terminal(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // When set by the Desktop Agent, skip all disk restore so this process
+    // starts with a clean slate (zero dashboards, no extra terminal windows).
+    let fresh_start = std::env::var("OT_FRESH_START").is_ok();
+
     let cfg = TerminalConfig::load();
     let tree = LayoutTree::new(WIN, cfg.window.width, cfg.window.height);
     let identity = WmHostIdentity::from_env();
@@ -983,9 +987,10 @@ pub fn run() {
         .manage(cfg.clone())
         .setup(move |app| {
             // ── Load persisted layout state ───────────────────────────────
-            // Hydrates the LayoutTree from layout.json if it exists. Must run
-            // before any webview is created so the restored tree is in place.
-            tree.init(app.handle())?;
+            // Skip when OT_FRESH_START is set (Desktop Agent "Open New Terminal").
+            if !fresh_start {
+                tree.init(app.handle())?;
+            }
 
             // ── Load saved window position for terminal-main ──────────────
             let saved_window_config: PersistedWindowConfig = app
@@ -1137,6 +1142,17 @@ pub fn run() {
                     window_config: Arc::clone(&main_window_config),
                 });
                 manager.register(main_state);
+            }
+
+            // ── Restore saved non-main terminals ──────────────────────────
+            // Each saved terminal/<id>/dashboards.json becomes a new OS window
+            // with its own layout and panel webviews. Skipped on fresh start.
+            if !fresh_start {
+                terminal::spawn::load_persisted_terminals(
+                    &manager,
+                    app.handle(),
+                    pool_size,
+                );
             }
 
             // Emit the initial terminal list to all chrome webviews.

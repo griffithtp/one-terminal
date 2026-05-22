@@ -174,17 +174,13 @@ fn schedule_position_save(
     }));
 }
 
-// ── spawn_terminal ────────────────────────────────────────────────────────────
+// ── spawn_terminal / restore_terminal ────────────────────────────────────────
 
 /// Create a new Terminal OS window and register it in `manager`.
 ///
-/// `label` must be globally unique. Use `manager.next_label()` for
-/// dynamically-spawned Terminals; pass `"terminal-main"` for the primary
-/// window (which is instead initialised via lib.rs setup).
-///
-/// Every terminal starts with an empty dashboard list. `persist` is used only
-/// for the initial window geometry and FDC3 channel; dashboard state is never
-/// loaded from disk here.
+/// Starts with an empty dashboard list. `persist` supplies only the initial
+/// window geometry and FDC3 channel; any existing `terminals/<label>/` persist
+/// directory is deleted so the new terminal is guaranteed to start fresh.
 pub fn spawn_terminal(
     label: &str,
     name: Option<String>,
@@ -192,6 +188,53 @@ pub fn spawn_terminal(
     app: &AppHandle,
     pool_size: usize,
     persist: Option<TerminalPersist>,
+) -> Result<TerminalInfo, String> {
+    spawn_or_restore(label, name, manager, app, pool_size, persist, false)
+}
+
+/// Re-open a Terminal that was previously saved to disk.
+///
+/// Loads `terminals/<label>/dashboards.json` for the window geometry, FDC3
+/// channel, and — via `LayoutTree::init` — all dashboards and their panels.
+pub fn restore_terminal(
+    label: &str,
+    manager: &TerminalManager,
+    app: &AppHandle,
+    pool_size: usize,
+) -> Result<TerminalInfo, String> {
+    let persist = app
+        .path()
+        .app_data_dir()
+        .ok()
+        .and_then(|d| persist::load_terminal_for(label, &d));
+    spawn_or_restore(label, None, manager, app, pool_size, persist, true)
+}
+
+/// Scan `<data_dir>/terminals/` for saved non-main terminal directories and
+/// restore each one. Called once from `one-terminal`'s setup so that all
+/// terminals open in the previous session reappear automatically.
+pub fn load_persisted_terminals(manager: &TerminalManager, app: &AppHandle, pool_size: usize) {
+    let Ok(data_dir) = app.path().app_data_dir() else {
+        return;
+    };
+    for id in persist::list_saved_terminal_ids(&data_dir) {
+        match restore_terminal(&id, manager, app, pool_size) {
+            Ok(info) => eprintln!("[wm] restored terminal: {} ({})", info.id, info.name),
+            Err(e) => eprintln!("[wm] failed to restore terminal {id}: {e}"),
+        }
+    }
+}
+
+// ── Shared implementation ─────────────────────────────────────────────────────
+
+fn spawn_or_restore(
+    label: &str,
+    name: Option<String>,
+    manager: &TerminalManager,
+    app: &AppHandle,
+    pool_size: usize,
+    persist: Option<TerminalPersist>,
+    restore: bool,
 ) -> Result<TerminalInfo, String> {
     // Determine display name: caller arg > saved name > label.
     let display_name = name.unwrap_or_else(|| {
@@ -237,7 +280,6 @@ pub fn spawn_terminal(
                 saved_window.y,
             )));
         }
-        // If not reachable on any monitor, keep the OS-chosen default position.
     }
 
     let (init_w, init_h) = {
@@ -250,17 +292,25 @@ pub fn spawn_terminal(
     };
 
     // ── Layout tree ───────────────────────────────────────────────────────────
-    // New terminals always start empty. Delete any stale persisted directory
-    // for this label (left over from a previous session that was not explicitly
-    // closed) so it can never be loaded later, then register the AppHandle
-    // without reading from disk.
-    if let Ok(data_dir) = app.path().app_data_dir() {
-        if let Err(e) = crate::layout::persist::delete_terminal_for(label, &data_dir) {
-            eprintln!("[spawn_terminal] stale persist cleanup for {label}: {e}");
+    let tree = if restore {
+        // Load dashboards and panels from disk for this terminal ID.
+        let t = LayoutTree::new(label, init_w, init_h);
+        if let Err(e) = t.init(app) {
+            eprintln!("[restore_terminal] init failed for {label}: {e}");
         }
-    }
-    let tree = LayoutTree::new(label, init_w, init_h);
-    tree.register_app_handle(app);
+        t
+    } else {
+        // New terminal — delete any stale persisted directory so it can never
+        // be loaded on a future restore pass, then start with a clean slate.
+        if let Ok(data_dir) = app.path().app_data_dir() {
+            if let Err(e) = crate::layout::persist::delete_terminal_for(label, &data_dir) {
+                eprintln!("[spawn_terminal] stale persist cleanup for {label}: {e}");
+            }
+        }
+        let t = LayoutTree::new(label, init_w, init_h);
+        t.register_app_handle(app);
+        t
+    };
 
     // ── Overlay state ─────────────────────────────────────────────────────────
     let overlay: OverlayState = Arc::new(Mutex::new(OverlayInner::default()));
@@ -340,13 +390,7 @@ pub fn spawn_terminal(
     let window_config = Arc::new(RwLock::new(saved_window));
 
     // ── Resize / move listener ────────────────────────────────────────────────
-    install_window_listeners(
-        label,
-        &win,
-        &tree,
-        app,
-        Arc::clone(&window_config),
-    );
+    install_window_listeners(label, &win, &tree, app, Arc::clone(&window_config));
 
     // ── Register ──────────────────────────────────────────────────────────────
     let state = Arc::new(TerminalState {
