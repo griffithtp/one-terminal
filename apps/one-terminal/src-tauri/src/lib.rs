@@ -8,10 +8,7 @@ mod webview_pool;
 use config::TerminalConfig;
 use engine::WmHostIdentity;
 use layout::persist::{self as layout_persist, PersistedWindowConfig};
-use terminal::manager::TerminalListItem;
-use terminal::spawn::{
-    install_window_listeners, is_rect_on_any_monitor, primary_monitor_center, DEFAULT_H, DEFAULT_W,
-};
+use terminal::spawn::{install_window_listeners, is_rect_on_any_monitor};
 use terminal::state::{OverlayInner, OverlayState, TerminalState};
 use terminal::TerminalManager;
 use layout::commands::{
@@ -774,145 +771,6 @@ fn wm_config(cfg: State<'_, TerminalConfig>) -> TerminalConfig {
     cfg.inner().clone()
 }
 
-// ── Terminal error type ───────────────────────────────────────────────────────
-
-/// Typed error returned by terminal-mutating commands so the frontend can
-/// distinguish actionable states from unexpected failures.
-#[derive(Debug, serde::Serialize)]
-#[serde(tag = "code", rename_all = "camelCase")]
-enum TerminalError {
-    /// Cannot close — this is the last remaining Terminal window.
-    LastTerminal,
-    /// Auto-save is off and one or more Dashboards have unsaved changes.
-    /// The frontend should prompt Save / Discard / Cancel before retrying.
-    NeedsConfirm,
-    /// A runtime error that should not normally occur.
-    Other { message: String },
-}
-
-impl From<String> for TerminalError {
-    fn from(message: String) -> Self {
-        Self::Other { message }
-    }
-}
-
-// ── Terminal management commands ──────────────────────────────────────────────
-
-/// Spawn a new Terminal OS window with an empty Default dashboard. The new
-/// Terminal opens on the same monitor as the invoking Terminal. Returns the
-/// `{ id, name }` of the new Terminal.
-#[tauri::command]
-async fn wm_new_terminal(
-    name: Option<String>,
-    window: Window,
-    manager: State<'_, TerminalManager>,
-    app: AppHandle,
-) -> Result<terminal::state::TerminalInfo, String> {
-    let pool_size = std::env::var("OT_WEBVIEW_POOL_SIZE")
-        .ok()
-        .and_then(|v| v.parse::<usize>().ok())
-        .unwrap_or(1);
-    let label = manager.next_label();
-    let display_name = name.unwrap_or_else(|| {
-        let id_num = label.strip_prefix("terminal-").unwrap_or(&label);
-        format!("Terminal {id_num}")
-    });
-
-    // Prefer opening on the same monitor as the calling terminal.
-    let (pos_x, pos_y) = if let Some(win) = app.get_window(window.label()) {
-        if let (Ok(pos), Ok(sf)) = (win.outer_position(), win.scale_factor()) {
-            (pos.x as f64 / sf, pos.y as f64 / sf)
-        } else {
-            primary_monitor_center(&app, DEFAULT_W, DEFAULT_H)
-        }
-    } else {
-        primary_monitor_center(&app, DEFAULT_W, DEFAULT_H)
-    };
-
-    let (tx, rx) = std::sync::mpsc::channel::<Result<terminal::state::TerminalInfo, String>>();
-    let manager_c = (*manager).clone();
-    let app_c = app.clone();
-    let label_c = label.clone();
-    let display_name_c = display_name.clone();
-
-    app.run_on_main_thread(move || {
-        let result = terminal::spawn::spawn_terminal(
-            &label_c,
-            Some(display_name_c),
-            &manager_c,
-            &app_c,
-            pool_size,
-            Some(layout_persist::TerminalPersist {
-                name: label_c.clone(),
-                window: PersistedWindowConfig {
-                    x: pos_x,
-                    y: pos_y,
-                    width: DEFAULT_W,
-                    height: DEFAULT_H,
-                    monitor: None,
-                },
-                ..Default::default()
-            }),
-        );
-        let _ = tx.send(result);
-    })
-    .map_err(|e| e.to_string())?;
-
-    let info = rx.recv().map_err(|e| e.to_string())??;
-    manager.emit_terminals(&app);
-    Ok(info)
-}
-
-/// Return the full Terminal list with per-Terminal dashboard metadata.
-#[tauri::command]
-fn wm_list_terminals(manager: State<'_, TerminalManager>) -> Vec<TerminalListItem> {
-    manager
-        .list()
-        .into_iter()
-        .map(|t| {
-            let name = t.name.read().unwrap().clone();
-            let ds = t.layout_tree.dashboards_snapshot();
-            let fdc3 = t.fdc3_channel.read().unwrap().clone();
-            TerminalListItem {
-                id: t.id.clone(),
-                name,
-                active_dashboard: ds.active,
-                dashboard_count: ds.dashboards.len(),
-                fdc3_channel: fdc3,
-            }
-        })
-        .collect()
-}
-
-/// Rename a Terminal. Updates the OS window title and persists immediately.
-/// Emits `wm:terminals` to all chrome webviews.
-#[tauri::command]
-fn wm_rename_terminal(
-    id: String,
-    name: String,
-    manager: State<'_, TerminalManager>,
-    app: AppHandle,
-) -> Result<(), String> {
-    let trimmed = name.trim();
-    if trimmed.is_empty() {
-        return Err("terminal name must not be empty".into());
-    }
-    let terminal = manager
-        .get(&id)
-        .ok_or_else(|| format!("terminal '{id}' not found"))?;
-    *terminal.name.write().unwrap() = trimmed.to_string();
-    if let Some(win) = app.get_window(&id) {
-        let _ = win.set_title(&format!("OneTerminal — {trimmed}"));
-    }
-    if let Ok(data_dir) = app.path().app_data_dir() {
-        if let Err(e) = layout_persist::update_terminal_name(&id, trimmed, &data_dir) {
-            eprintln!("[wm_rename_terminal] persist: {e}");
-        }
-    }
-    manager.emit_terminals(&app);
-    Ok(())
-}
-
 /// Return the FDC3 context channel currently selected for the invoking Terminal.
 /// `None` means the Terminal is on no channel (global / unfiltered context).
 #[tauri::command]
@@ -986,78 +844,6 @@ fn wm_set_terminal_fdc3_channel(
     }
 
     manager.emit_terminals(&app);
-    Ok(())
-}
-
-/// Close a Terminal window. Returns `TerminalError::LastTerminal` if it is
-/// the only remaining Terminal. Returns `TerminalError::NeedsConfirm` if any
-/// Dashboard in the Terminal has unsaved changes (auto-save off). Otherwise
-/// saves all Dashboards, destroys all webviews, and closes the OS window.
-#[tauri::command]
-async fn wm_close_terminal(
-    id: String,
-    manager: State<'_, TerminalManager>,
-    app: AppHandle,
-) -> Result<(), TerminalError> {
-    if manager.count() <= 1 {
-        return Err(TerminalError::LastTerminal);
-    }
-    let terminal = manager
-        .get(&id)
-        .ok_or_else(|| TerminalError::Other { message: format!("terminal '{id}' not found") })?;
-
-    // Dirty check: refuse if auto_save is off and any dashboard has unsaved changes.
-    let needs_confirm = terminal
-        .layout_tree
-        .with_dashboard_store_mut(|ds| !ds.auto_save && ds.dirty);
-    if needs_confirm {
-        return Err(TerminalError::NeedsConfirm);
-    }
-
-    manager.remove(&id);
-
-    // Close the OS window — Tauri destroys all child webviews with it.
-    if let Some(win) = app.get_window(&id) {
-        let _ = win.close();
-    }
-
-    // Remove persisted state so the terminal is not restored on next startup.
-    if let Ok(data_dir) = app.path().app_data_dir() {
-        if let Err(e) = layout_persist::delete_terminal_for(&id, &data_dir) {
-            eprintln!("[wm_close_terminal] persist delete: {e}");
-        }
-    }
-
-    manager.emit_terminals(&app);
-    Ok(())
-}
-
-/// Bring the Terminal identified by `id` to the front.
-#[tauri::command]
-fn wm_focus_terminal(id: String, app: AppHandle) -> Result<(), String> {
-    app.get_window(&id)
-        .ok_or_else(|| format!("terminal '{id}' not found"))?
-        .set_focus()
-        .map_err(|e| e.to_string())
-}
-
-/// Recentre the Terminal identified by `id` (or the current Terminal when
-/// `id` is omitted) on the primary monitor at the default size.
-#[tauri::command]
-fn wm_reset_terminal_position(
-    id: Option<String>,
-    window: Window,
-    app: AppHandle,
-) -> Result<(), String> {
-    let target_id = id.unwrap_or_else(|| window.label().to_string());
-    let win = app
-        .get_window(&target_id)
-        .ok_or_else(|| format!("terminal '{target_id}' not found"))?;
-    let (cx, cy) = primary_monitor_center(&app, DEFAULT_W, DEFAULT_H);
-    win.set_size(tauri::Size::Logical(LogicalSize::new(DEFAULT_W, DEFAULT_H)))
-        .map_err(|e| e.to_string())?;
-    win.set_position(tauri::Position::Logical(LogicalPosition::new(cx, cy)))
-        .map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -1347,15 +1133,9 @@ pub fn run() {
             wm_delete_dashboard,
             wm_reorder_dashboards,
             wm_set_auto_save,
-            wm_new_terminal,
-            wm_list_terminals,
-            wm_rename_terminal,
             wm_get_terminal_fdc3_channel,
             wm_set_terminal_fdc3_channel,
             wm_channel_picker_open,
-            wm_close_terminal,
-            wm_focus_terminal,
-            wm_reset_terminal_position,
             wm_duplicate_dashboard_to,
         ])
         .run(tauri::generate_context!())

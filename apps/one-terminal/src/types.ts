@@ -140,16 +140,6 @@ export interface AppRecord {
   engineBindings?: Partial<Record<OsKey, EngineBinding[]>>;
 }
 
-// ── Terminal list (mirrors terminal/manager.rs TerminalListItem) ──────────────
-
-export interface TerminalListItem {
-  id: string;
-  name: string;
-  activeDashboard: string;
-  dashboardCount: number;
-  fdc3Channel: string | null;
-}
-
 // ── Terminal configuration (mirrors src-tauri/src/config.rs) ──────────────────
 
 export interface WindowConfig {
