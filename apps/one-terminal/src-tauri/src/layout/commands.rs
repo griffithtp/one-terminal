@@ -242,7 +242,10 @@ pub fn wm_rename_tab(
     }
     terminal.layout_tree.emit_host(&app);
     if let Some(snap) = terminal.layout_tree.snapshot() {
-        let _ = app.emit("wm:layout", &snap);
+        let chrome = format!("{}-chrome", window.label());
+        if let Some(wv) = app.get_webview(&chrome) {
+            let _ = wv.emit("wm:layout", &snap);
+        }
     }
     Ok(())
 }
@@ -266,7 +269,10 @@ pub async fn wm_rename_panel(
     }
     terminal.layout_tree.emit_host(&app);
     if let Some(snap) = terminal.layout_tree.snapshot() {
-        let _ = app.emit("wm:layout", &snap);
+        let chrome = format!("{}-chrome", window.label());
+        if let Some(wv) = app.get_webview(&chrome) {
+            let _ = wv.emit("wm:layout", &snap);
+        }
     }
     Ok(())
 }
@@ -292,7 +298,10 @@ pub async fn wm_set_zoom(
     }
     terminal.layout_tree.emit_host(&app);
     if let Some(snap) = terminal.layout_tree.snapshot() {
-        let _ = app.emit("wm:layout", &snap);
+        let chrome = format!("{}-chrome", window.label());
+        if let Some(wv) = app.get_webview(&chrome) {
+            let _ = wv.emit("wm:layout", &snap);
+        }
     }
     Ok(())
 }
@@ -406,10 +415,11 @@ pub fn wm_rename_dashboard(
     Ok(renamed)
 }
 
-/// Delete a dashboard. The last remaining dashboard cannot be deleted.
-/// Returns `false` if `name` doesn't exist or is the only dashboard.
+/// Delete a dashboard. Deleting the active dashboard switches to the next one,
+/// or leaves the terminal empty if it was the last. Returns `false` if `name`
+/// doesn't exist.
 #[tauri::command]
-pub fn wm_delete_dashboard(
+pub async fn wm_delete_dashboard(
     name: String,
     window: Window,
     manager: State<'_, TerminalManager>,
@@ -418,7 +428,8 @@ pub fn wm_delete_dashboard(
     let terminal = get_terminal!(manager, window);
     let deleted = terminal
         .layout_tree
-        .with_dashboard_store_mut(|ds| ds.delete(&name));
+        .delete_dashboard(&name, &window, &app)
+        .map_err(|e| format!("{e:?}"))?;
     if deleted {
         terminal.layout_tree.persist_dashboards();
         terminal.layout_tree.emit_dashboards(&app);

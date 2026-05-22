@@ -158,17 +158,14 @@ impl DashboardStore {
         }
     }
 
-    /// Create a store with a single empty dashboard called "Default".
-    /// Used as the initial state before `init` loads from disk.
-    pub fn with_default() -> Self {
-        let name = "Default".to_string();
-        let mut dashboards = IndexMap::new();
-        dashboards.insert(name.clone(), PersistedDashboard::empty(name.clone()));
+    /// Create an empty store with no dashboards. Used for freshly-spawned
+    /// Terminal windows so the user starts with a blank slate.
+    pub fn with_empty() -> Self {
         Self {
-            active: name,
+            active: String::new(),
             auto_save: true,
             dirty: false,
-            dashboards,
+            dashboards: IndexMap::new(),
         }
     }
 
@@ -268,14 +265,12 @@ impl DashboardStore {
     /// Delete a dashboard. The last dashboard cannot be deleted.
     /// Returns `false` if `name` doesn't exist or is the only dashboard.
     pub fn delete(&mut self, name: &str) -> bool {
-        if self.dashboards.len() <= 1 || !self.dashboards.contains_key(name) {
+        if !self.dashboards.contains_key(name) {
             return false;
         }
         self.dashboards.shift_remove(name);
         if self.active == name {
-            if let Some(first) = self.dashboards.keys().next() {
-                self.active = first.clone();
-            }
+            self.active = self.dashboards.keys().next().cloned().unwrap_or_default();
         }
         true
     }

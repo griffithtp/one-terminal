@@ -71,7 +71,7 @@ export function useDashboards(): UseDashboardsResult {
 
   // ── Window title ──────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!payload) return;
+    if (!payload?.active) return;
     const suffix = payload.dirty && !payload.autoSave ? " *" : "";
     getCurrentWindow().setTitle(`OneTerminal — ${payload.active}${suffix}`).catch(console.error);
   }, [payload]);

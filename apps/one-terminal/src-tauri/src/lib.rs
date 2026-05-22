@@ -1274,7 +1274,9 @@ pub fn run() {
                 tree.reflow(app.handle());
                 tree.emit_host(app.handle());
                 if let Some(snap) = tree.snapshot() {
-                    let _ = app.handle().emit("wm:layout", &snap);
+                    if let Some(wv) = app.handle().get_webview(CHROME) {
+                        let _ = wv.emit("wm:layout", &snap);
+                    }
                 }
             }
 

@@ -111,7 +111,9 @@ pub fn install_window_listeners(
                 tree_c.reflow(&app_h);
                 tree_c.emit_host(&app_h);
                 if let Some(snap) = tree_c.snapshot() {
-                    let _ = app_h.emit("wm:layout", &snap);
+                    if let Some(wv) = app_h.get_webview(&chrome_label) {
+                        let _ = wv.emit("wm:layout", &snap);
+                    }
                 }
 
                 {
@@ -171,8 +173,9 @@ fn schedule_position_save(
 /// dynamically-spawned Terminals; pass `"terminal-main"` for the primary
 /// window (which is instead initialised via lib.rs setup).
 ///
-/// `persist` contains the previously saved state to restore. When `None` the
-/// Terminal starts with a single empty "Default" dashboard.
+/// Every terminal starts with an empty dashboard list. `persist` is used only
+/// for the initial window geometry and FDC3 channel; dashboard state is never
+/// loaded from disk here.
 pub fn spawn_terminal(
     label: &str,
     name: Option<String>,
@@ -238,10 +241,17 @@ pub fn spawn_terminal(
     };
 
     // ── Layout tree ───────────────────────────────────────────────────────────
-    // `init` registers the AppHandle and loads the persisted dashboard state
-    // from `terminals/<label>/dashboards.json` if present.
+    // New terminals always start empty. Delete any stale persisted directory
+    // for this label (left over from a previous session that was not explicitly
+    // closed) so it can never be loaded later, then register the AppHandle
+    // without reading from disk.
+    if let Ok(data_dir) = app.path().app_data_dir() {
+        if let Err(e) = crate::layout::persist::delete_terminal_for(label, &data_dir) {
+            eprintln!("[spawn_terminal] stale persist cleanup for {label}: {e}");
+        }
+    }
     let tree = LayoutTree::new(label, init_w, init_h);
-    tree.init(app).map_err(|e| format!("LayoutTree::init for {label}: {e}"))?;
+    tree.register_app_handle(app);
 
     // ── Overlay state ─────────────────────────────────────────────────────────
     let overlay: OverlayState = Arc::new(Mutex::new(OverlayInner::default()));
@@ -310,7 +320,10 @@ pub fn spawn_terminal(
         tree.reflow(app);
         tree.emit_host(app);
         if let Some(snap) = tree.snapshot() {
-            let _ = app.emit("wm:layout", &snap);
+            let chrome = format!("{label}-chrome");
+            if let Some(wv) = app.get_webview(&chrome) {
+                let _ = wv.emit("wm:layout", &snap);
+            }
         }
     }
 

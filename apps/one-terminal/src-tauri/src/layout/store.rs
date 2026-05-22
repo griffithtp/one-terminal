@@ -94,7 +94,7 @@ impl LayoutTree {
                 width,
                 height,
             })),
-            dashboard_store: Arc::new(RwLock::new(DashboardStore::with_default())),
+            dashboard_store: Arc::new(RwLock::new(DashboardStore::with_empty())),
             app: Arc::new(OnceLock::new()),
             save_handle: Arc::new(Mutex::new(None)),
             terminal_id: Arc::from(terminal_id),
@@ -105,7 +105,6 @@ impl LayoutTree {
     ///
     /// Retained for call sites that need to wire up the AppHandle before
     /// calling `init` separately. Most callers should prefer `init` directly.
-    #[allow(dead_code)]
     pub fn register_app_handle(&self, app: &AppHandle) {
         let _ = self.app.set(app.clone());
     }
@@ -912,6 +911,60 @@ impl LayoutTree {
         }
 
         Ok(())
+    }
+
+    /// Delete a dashboard by name, reconciling panel webviews when the active
+    /// dashboard is the one being removed. Returns `false` if `name` doesn't
+    /// exist. Allowed to delete the last dashboard, leaving the terminal empty.
+    pub fn delete_dashboard(
+        &self,
+        name: &str,
+        win: &Window,
+        app: &AppHandle,
+    ) -> Result<bool, DashboardError> {
+        // Check existence and whether this is the active dashboard.
+        let (is_active, current_labels) = {
+            let ds = self.dashboard_store.read().unwrap();
+            if !ds.dashboards.contains_key(name) {
+                return Ok(false);
+            }
+            let is_active = ds.active == name;
+            let labels = if is_active {
+                let g = self.inner.read().unwrap();
+                let mut out = Vec::new();
+                if let Some(root) = &g.root {
+                    collect_leaf_labels(root, &mut out);
+                }
+                out
+            } else {
+                vec![]
+            };
+            (is_active, labels)
+        };
+
+        self.with_dashboard_store_mut(|ds| ds.delete(name));
+
+        if !is_active {
+            return Ok(true);
+        }
+
+        // Deleted the active dashboard — load whatever is now active (or None).
+        let new_layout = self.dashboard_store.read().unwrap().load_active();
+        let panels_to_create = self.apply_layout_to_inner(new_layout);
+        self.reconcile_panel_webviews(current_labels, panels_to_create, win, app)?;
+
+        self.reflow(app);
+        self.emit_host(app);
+        let chrome = format!("{}-chrome", self.terminal_id);
+        if let Some(wv) = app.get_webview(&chrome) {
+            if let Some(snap) = self.snapshot() {
+                let _ = wv.emit("wm:layout", &snap);
+            } else {
+                let _ = wv.emit("wm:layout", serde_json::Value::Null);
+            }
+        }
+
+        Ok(true)
     }
 
     /// Load a `PersistedLayout` (or empty layout when `None`) into `Inner`.
