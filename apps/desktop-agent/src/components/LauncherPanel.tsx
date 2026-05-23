@@ -4,6 +4,96 @@ import { useAppDirectory } from "../hooks/useAppDirectory";
 import { useEngineOverride } from "../hooks/useEngineOverride";
 import type { AppRecord } from "../types";
 
+// ── TerminalCard ───────────────────────────────────────────────────────────────
+
+function TerminalCard() {
+  const [launching, setLaunching] = useState(false);
+  const [feedback, setFeedback] = useState<string | null>(null);
+
+  const handleOpen = async () => {
+    setLaunching(true);
+    setFeedback(null);
+    try {
+      await invoke("cda_open_terminal");
+      setFeedback("Launched");
+    } catch (e) {
+      setFeedback(String(e));
+    } finally {
+      setLaunching(false);
+    }
+  };
+
+  return (
+    <div className="lp__card lp__card--pinned">
+      <div className="lp__card-header">
+        <span className="lp__card-name">Terminal</span>
+        <span className="lp__card-built-in">built-in</span>
+      </div>
+      <p className="lp__card-desc">Open a new OneTerminal window</p>
+      <div className="lp__card-footer">
+        <button className="lp__launch-btn" onClick={handleOpen} disabled={launching}>
+          {launching ? "Opening…" : "Open"}
+        </button>
+      </div>
+      {feedback && (
+        <div
+          className={`lp__feedback ${feedback === "Launched" ? "lp__feedback--ok" : "lp__feedback--err"}`}
+        >
+          {feedback}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── AppDirectoryCard ───────────────────────────────────────────────────────────
+
+function AppDirectoryCard() {
+  const [opening, setOpening] = useState(false);
+  const [feedback, setFeedback] = useState<string | null>(null);
+  const [appDirUrl, setAppDirUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    invoke<string>("cda_get_app_dir_url").then(setAppDirUrl).catch(() => null);
+  }, []);
+
+  const handleOpen = async () => {
+    setOpening(true);
+    setFeedback(null);
+    try {
+      await invoke("cda_open_app_directory");
+      setFeedback("Opened");
+    } catch (e) {
+      setFeedback(String(e));
+    } finally {
+      setOpening(false);
+    }
+  };
+
+  return (
+    <div className="lp__card lp__card--pinned">
+      <div className="lp__card-header">
+        <span className="lp__card-name">App Directory</span>
+        <span className="lp__card-built-in">built-in</span>
+      </div>
+      <p className="lp__card-desc">Browse and manage app registrations</p>
+      <div className="lp__card-footer">
+        {appDirUrl && <span className="lp__card-url">{appDirUrl}</span>}
+        <button className="lp__launch-btn" onClick={handleOpen} disabled={opening}>
+          {opening ? "Opening…" : "Open"}
+        </button>
+      </div>
+      {feedback && (
+        <div
+          className={`lp__feedback ${feedback === "Opened" ? "lp__feedback--ok" : "lp__feedback--err"}`}
+        >
+          {feedback}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── AppCard ────────────────────────────────────────────────────────────────────
 
 interface AppCardProps {
@@ -123,6 +213,8 @@ export function LauncherPanel() {
       )}
 
       <div className="lp__grid">
+        <TerminalCard />
+        <AppDirectoryCard />
         {apps.map((app: AppRecord) => (
           <AppCard key={app.appId} app={app} />
         ))}

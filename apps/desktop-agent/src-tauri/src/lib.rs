@@ -228,6 +228,25 @@ fn cda_raise_intent_from_dashboard(
 
 // ── App Directory commands ─────────────────────────────────────────────────────
 
+/// Spawn a fresh Terminal (one-terminal) window with no prior session restored.
+#[tauri::command]
+fn cda_open_terminal() {
+    spawn_wm_instance_fresh();
+}
+
+/// Return the configured App Directory URL (respects OT_APP_DIR_URL override).
+#[tauri::command]
+fn cda_get_app_dir_url(cfg: State<'_, AgentConfig>) -> String {
+    cfg.app_directory_url.clone()
+}
+
+/// Open the App Directory management UI in the system browser.
+#[tauri::command]
+fn cda_open_app_directory(cfg: State<'_, AgentConfig>) -> Result<(), String> {
+    tauri_plugin_opener::open_url(&cfg.app_directory_url, None::<&str>)
+        .map_err(|e| format!("Failed to open App Directory: {e}"))
+}
+
 /// Return the current in-memory App Directory snapshot.
 #[tauri::command]
 async fn cda_list_app_directory(
@@ -796,6 +815,9 @@ pub fn run() {
             cda_list_peers,
             cda_list_intent_handlers,
             cda_raise_intent_from_dashboard,
+            cda_open_terminal,
+            cda_get_app_dir_url,
+            cda_open_app_directory,
             cda_list_app_directory,
             cda_refresh_app_directory,
             cda_launch_app,

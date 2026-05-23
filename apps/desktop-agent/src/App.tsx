@@ -21,7 +21,7 @@ const TAB_LABELS: Record<MainTab, string> = {
 
 export default function App() {
   const { connections, channels, peers, activityLog, disconnectSpoke } = useCdaEvents();
-  const [tab, setTab] = useState<MainTab>("dashboard");
+  const [tab, setTab] = useState<MainTab>("launcher");
   useFdcBus();
 
   return (

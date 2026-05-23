@@ -561,6 +561,17 @@ body {
   flex-direction: column;
   gap: 8px;
 }
+.lp__card--pinned {
+  border-top: 2px solid var(--accent);
+}
+.lp__card-built-in {
+  font-size: 10px;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+  margin-left: auto;
+}
 .lp__card-header {
   display: flex;
   align-items: baseline;
