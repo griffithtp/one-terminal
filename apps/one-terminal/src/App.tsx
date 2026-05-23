@@ -45,24 +45,16 @@ import "./wm.css";
 
 function TerminalCloseDialog() {
   const [visible, setVisible] = useState(false);
-  const parkedRef = useRef(false);
 
   useEffect(() => {
-    const unlisten = listen("wm:confirm-close", () => setVisible(true));
+    const unlisten = listen("wm:confirm-close", async () => {
+      await invoke("wm_park_panels").catch(console.error);
+      setVisible(true);
+    });
     return () => {
       unlisten.then((fn) => fn());
     };
   }, []);
-
-  useEffect(() => {
-    if (visible && !parkedRef.current) {
-      parkedRef.current = true;
-      invoke("wm_park_panels").catch(console.error);
-    } else if (!visible && parkedRef.current) {
-      parkedRef.current = false;
-      invoke("wm_unpark_panels").catch(console.error);
-    }
-  }, [visible]);
 
   const handleConfirm = useCallback(() => {
     const label = getCurrentWindow().label;
@@ -70,7 +62,10 @@ function TerminalCloseDialog() {
     setVisible(false);
   }, []);
 
-  const handleCancel = useCallback(() => setVisible(false), []);
+  const handleCancel = useCallback(() => {
+    invoke("wm_unpark_panels").catch(console.error);
+    setVisible(false);
+  }, []);
 
   if (!visible) return null;
 

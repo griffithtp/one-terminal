@@ -177,6 +177,10 @@
   align-items: center;
   justify-content: center;
   z-index: 1000;
+  /* Chrome webview is pointer-events: none by default — opt in so dialog
+     receives clicks. Without this, the backdrop and buttons silently
+     pass clicks through to whatever is below. */
+  pointer-events: auto;
 }
 .wm-ds-dialog {
   background: #0f172a;
