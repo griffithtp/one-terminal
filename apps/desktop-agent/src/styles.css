@@ -561,6 +561,17 @@ body {
   flex-direction: column;
   gap: 8px;
 }
+.lp__card--pinned {
+  border-top: 2px solid var(--accent);
+}
+.lp__card-built-in {
+  font-size: 10px;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+  margin-left: auto;
+}
 .lp__card-header {
   display: flex;
   align-items: baseline;
@@ -817,4 +828,110 @@ body {
 .btn--sm {
   padding: 2px 6px;
   font-size: 11px;
+}
+
+/* ── QuitConfirmModal ─────────────────────────────────────────────────────────── */
+.qcm__overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+.qcm__dialog {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  width: 400px;
+  max-width: 95vw;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.qcm__header {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.qcm__title {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text);
+}
+.qcm__body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.qcm__message {
+  font-size: 13px;
+  color: var(--text);
+}
+.qcm__detail {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+.qcm__error {
+  font-size: 12px;
+  color: var(--danger);
+}
+.qcm__footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+}
+.qcm__cancel-btn {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: var(--radius);
+  padding: 5px 14px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.qcm__cancel-btn:hover {
+  border-color: var(--text);
+  color: var(--text);
+}
+.qcm__cancel-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.qcm__discard-btn {
+  background: none;
+  border: 1px solid var(--danger);
+  color: var(--danger);
+  border-radius: var(--radius);
+  padding: 5px 14px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.qcm__discard-btn:hover {
+  background: rgba(248, 81, 73, 0.1);
+}
+.qcm__discard-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.qcm__save-btn {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius);
+  padding: 5px 16px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.qcm__save-btn:hover {
+  opacity: 0.85;
+}
+.qcm__save-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
 }

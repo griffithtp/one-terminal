@@ -61,6 +61,7 @@
     "apps/desktop-agent/src/components/IntentResolverModal.tsx",
     "apps/desktop-agent/src/components/InteropDashboard.tsx",
     "apps/desktop-agent/src/components/LauncherPanel.tsx",
+    "apps/desktop-agent/src/components/QuitConfirmModal.tsx",
     "apps/desktop-agent/src/hooks/useAppDirectory.ts",
     "apps/desktop-agent/src/hooks/useCdaEvents.ts",
     "apps/desktop-agent/src/hooks/useEngineOverride.ts",
