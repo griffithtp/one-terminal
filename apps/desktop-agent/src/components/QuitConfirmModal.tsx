@@ -65,8 +65,8 @@ export function QuitConfirmModal() {
           <p className="qcm__detail">
             <strong>Save</strong> — Terminal windows will be restored on the next launch.
             <br />
-            <strong>Don't Save</strong> — All Terminal state is deleted. Next launch starts
-            with no open windows.
+            <strong>Dont&#39 Save</strong> — All Terminal state is deleted. Next launch starts with
+            no open windows.
           </p>
           {error && <div className="qcm__error">{error}</div>}
         </div>

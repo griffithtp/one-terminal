@@ -832,9 +832,7 @@ pub fn run() {
                     "exit" => {
                         // Show the dashboard window and ask the user whether to
                         // save or discard Terminal state before quitting.
-                        if let Some(w) =
-                            app.get_webview_window("desktop-agent-dashboard")
-                        {
+                        if let Some(w) = app.get_webview_window("desktop-agent-dashboard") {
                             let _ = w.show();
                             let _ = w.unminimize();
                             let _ = w.set_focus();

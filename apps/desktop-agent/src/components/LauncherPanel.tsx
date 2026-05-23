@@ -54,7 +54,9 @@ function AppDirectoryCard() {
   const [appDirUrl, setAppDirUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    invoke<string>("cda_get_app_dir_url").then(setAppDirUrl).catch(() => null);
+    invoke<string>("cda_get_app_dir_url")
+      .then(setAppDirUrl)
+      .catch(() => null);
   }, []);
 
   const handleOpen = async () => {
