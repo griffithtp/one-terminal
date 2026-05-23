@@ -2,6 +2,24 @@
   "schemaVersion": 1,
   "versions": [
     {
+      "version": "0.1.5",
+      "releaseDate": "2026-05-23",
+      "breaking": false,
+      "changelogUrl": "https://github.com/one-terminal/one-terminal/releases/tag/v0.1.5",
+      "migrations": [
+        {
+          "type": "structural",
+          "id": "0.1.5-lib-rs",
+          "target": "apps/desktop-agent/src-tauri/src/lib.rs",
+          "operations": [
+            {
+              "op": "insert-after-line-matching"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "version": "0.1.4",
       "releaseDate": "2026-05-17",
       "breaking": false,

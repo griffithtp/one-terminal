@@ -4,11 +4,12 @@
 //! Flow: chrome panel header pointermove → `wm_drag_move(panel_id, window_x,
 //! window_y)` → hit-test the layout tree → swap the two leaves → reflow.
 
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, State, Window};
+
+use crate::terminal::TerminalManager;
 
 use super::node::{Direction, LayoutNode};
 use super::reflow::TAB_STRIP_HEIGHT;
-use super::store::LayoutTree;
 use super::HEADER_HEIGHT;
 
 /// Hit-test the N-ary tree at the given window-space coordinates. Returns the
@@ -68,9 +69,15 @@ pub fn wm_drag_move(
     panel_id: String,
     window_x: f64,
     window_y: f64,
-    tree: State<'_, LayoutTree>,
+    window: Window,
+    manager: State<'_, TerminalManager>,
     app: AppHandle,
 ) -> Result<(), String> {
+    let terminal = manager
+        .get(window.label())
+        .ok_or_else(|| format!("terminal '{}' not found", window.label()))?;
+    let tree = &terminal.layout_tree;
+
     let (w, h) = tree.size();
     let content_x = 0.0;
     let content_y = HEADER_HEIGHT;

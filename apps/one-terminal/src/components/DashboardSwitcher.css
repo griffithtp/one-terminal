@@ -27,13 +27,12 @@
 .wm-ds__pill {
   display: flex;
   align-items: center;
-  gap: 5px;
-  padding: 3px 10px;
+  gap: 2px;
+  padding: 2px 4px 2px 10px;
   background: #1e293b;
   color: #94a3b8;
   border: 1px solid #334155;
   border-radius: 12px;
-  cursor: pointer;
   font-size: 12px;
   font-weight: 500;
   white-space: nowrap;
@@ -61,6 +60,46 @@
   background: #172554;
 }
 
+/* ── Pill label button ───────────────────────────────────────────────────── */
+.wm-ds__pill-label {
+  background: none;
+  border: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  padding: 1px 0;
+}
+
+/* ── Pill close button ───────────────────────────────────────────────────── */
+.wm-ds__pill-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  background: none;
+  border: none;
+  border-radius: 50%;
+  color: #64748b;
+  font-size: 9px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition:
+    background 120ms,
+    color 120ms;
+}
+.wm-ds__pill-close:hover {
+  background: rgba(248, 113, 113, 0.15);
+  color: #f87171;
+}
+.wm-ds__pill--active .wm-ds__pill-close {
+  color: rgba(255, 255, 255, 0.5);
+}
+.wm-ds__pill--active .wm-ds__pill-close:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: #fff;
+}
+
 /* ── Dirty indicator ─────────────────────────────────────────────────────── */
 .wm-ds__dirty {
   width: 6px;
@@ -68,6 +107,15 @@
   border-radius: 50%;
   background: #f59e0b;
   flex-shrink: 0;
+}
+
+/* ── Empty hint (no dashboards) ─────────────────────────────────────────── */
+.wm-ds__empty-hint {
+  font-size: 11px;
+  color: #475569;
+  white-space: nowrap;
+  user-select: none;
+  padding: 0 4px;
 }
 
 /* ── Add button ──────────────────────────────────────────────────────────── */
@@ -131,6 +179,10 @@
   align-items: center;
   justify-content: center;
   z-index: 1000;
+  /* Chrome webview is pointer-events: none by default — opt in so dialog
+     receives clicks. Without this, the backdrop and buttons silently
+     pass clicks through to whatever is below. */
+  pointer-events: auto;
 }
 .wm-ds-dialog {
   background: #0f172a;

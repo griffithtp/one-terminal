@@ -7,6 +7,31 @@ import { bigramScore } from "../commands/registry";
 import type { SerializableCommand } from "../commands/registry";
 import type { LayoutSnapshot, HostLayout, OverflowMenuPayload } from "../types";
 
+// ── FDC3 channel picker types ─────────────────────────────────────────────────
+
+interface ChannelPickerPayload {
+  x: number;
+  y: number;
+  channelId: string | null;
+}
+
+interface FdcChannel {
+  id: string;
+  name: string;
+  color: string;
+}
+
+const FDC3_CHANNELS: FdcChannel[] = [
+  { id: "fdc3.channel.1", name: "Channel 1", color: "#e11d48" },
+  { id: "fdc3.channel.2", name: "Channel 2", color: "#ea580c" },
+  { id: "fdc3.channel.3", name: "Channel 3", color: "#ca8a04" },
+  { id: "fdc3.channel.4", name: "Channel 4", color: "#16a34a" },
+  { id: "fdc3.channel.5", name: "Channel 5", color: "#0891b2" },
+  { id: "fdc3.channel.6", name: "Channel 6", color: "#2563eb" },
+  { id: "fdc3.channel.7", name: "Channel 7", color: "#7c3aed" },
+  { id: "fdc3.channel.8", name: "Channel 8", color: "#db2777" },
+];
+
 // ── Context-menu types ─────────────────────────────────────────────────────────
 
 interface CtxMenuPayload {
@@ -91,6 +116,9 @@ export function OverlayApp() {
   // ── Overflow menu state ──────────────────────────────────────────────────
   const [overflowMenu, setOverflowMenu] = useState<OverflowMenuPayload | null>(null);
 
+  // ── Channel picker state ─────────────────────────────────────────────────
+  const [channelPicker, setChannelPicker] = useState<ChannelPickerPayload | null>(null);
+
   // ── Palette state ────────────────────────────────────────────────────────
   const [paletteCommands, setPaletteCommands] = useState<SerializableCommand[] | null>(null);
   const [paletteQuery, setPaletteQuery] = useState("");
@@ -111,32 +139,43 @@ export function OverlayApp() {
     let cancelled = false;
 
     (async () => {
-      const [unCtxMenu, unPalette, unLayout, unHostLayout, unOverflow] = await Promise.all([
-        listen<CtxMenuPayload>("wm:ctx-menu", (e) => {
-          setMenu(e.payload);
-          setZoomOpen(false);
-          setOverflowMenu(null);
-        }),
-        listen<SerializableCommand[]>("wm:palette-open", (e) => {
-          setPaletteCommands(e.payload);
-          setPaletteQuery("");
-          setPaletteSelectedIdx(0);
-          setOverflowMenu(null);
-          requestAnimationFrame(() => paletteInputRef.current?.focus());
-        }),
-        listen<LayoutSnapshot>("wm:layout", (e) => setLayout(e.payload)),
-        listen<HostLayout>("wm:host-layout", (e) => setHostLayout(e.payload)),
-        listen<OverflowMenuPayload>("wm:overflow-menu", (e) => {
-          setOverflowMenu(e.payload);
-          setMenu(null);
-        }),
-      ]);
+      const [unCtxMenu, unPalette, unLayout, unHostLayout, unOverflow, unChannelPicker] =
+        await Promise.all([
+          listen<CtxMenuPayload>("wm:ctx-menu", (e) => {
+            setMenu(e.payload);
+            setZoomOpen(false);
+            setOverflowMenu(null);
+            setChannelPicker(null);
+          }),
+          listen<SerializableCommand[]>("wm:palette-open", (e) => {
+            setPaletteCommands(e.payload);
+            setPaletteQuery("");
+            setPaletteSelectedIdx(0);
+            setOverflowMenu(null);
+            setChannelPicker(null);
+            requestAnimationFrame(() => paletteInputRef.current?.focus());
+          }),
+          listen<LayoutSnapshot>("wm:layout", (e) => setLayout(e.payload)),
+          listen<HostLayout>("wm:host-layout", (e) => setHostLayout(e.payload)),
+          listen<OverflowMenuPayload>("wm:overflow-menu", (e) => {
+            setOverflowMenu(e.payload);
+            setMenu(null);
+            setChannelPicker(null);
+          }),
+          listen<ChannelPickerPayload>("wm:channel-picker", (e) => {
+            setChannelPicker(e.payload);
+            setMenu(null);
+            setOverflowMenu(null);
+          }),
+        ]);
 
       if (cancelled) {
-        [unCtxMenu, unPalette, unLayout, unHostLayout, unOverflow].forEach((fn) => fn());
+        [unCtxMenu, unPalette, unLayout, unHostLayout, unOverflow, unChannelPicker].forEach((fn) =>
+          fn()
+        );
         return;
       }
-      unlisteners = [unCtxMenu, unPalette, unLayout, unHostLayout, unOverflow];
+      unlisteners = [unCtxMenu, unPalette, unLayout, unHostLayout, unOverflow, unChannelPicker];
       invoke("wm_overlay_ready").catch(console.error);
     })();
 
@@ -200,6 +239,18 @@ export function OverlayApp() {
   function dismissOverflow() {
     setOverflowMenu(null);
     invoke("wm_ctx_menu_close").catch(console.error);
+  }
+
+  // ── Channel picker actions ───────────────────────────────────────────────
+
+  function dismissChannelPicker() {
+    setChannelPicker(null);
+    invoke("wm_ctx_menu_close").catch(console.error);
+  }
+
+  function selectChannel(id: string | null) {
+    invoke("wm_set_terminal_fdc3_channel", { channelId: id }).catch(console.error);
+    dismissChannelPicker();
   }
 
   // ── Context menu actions ─────────────────────────────────────────────────
@@ -319,6 +370,50 @@ export function OverlayApp() {
               </button>
             ))}
           </div>
+        </>
+      )}
+
+      {/* ── FDC3 channel picker ── */}
+      {channelPicker && (
+        <>
+          <div style={{ position: "fixed", inset: 0 }} onPointerDown={dismissChannelPicker} />
+          <ul
+            className="wm-channel-picker-menu"
+            role="listbox"
+            aria-label="FDC3 channel"
+            style={{ position: "fixed", left: channelPicker.x, top: channelPicker.y }}
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            <li role="option" aria-selected={channelPicker.channelId === null}>
+              <button
+                type="button"
+                className={`wm-channel-picker-menu__item${channelPicker.channelId === null ? " wm-channel-picker-menu__item--active" : ""}`}
+                onClick={() => selectChannel(null)}
+              >
+                <span
+                  className="wm-channel-picker-menu__dot wm-channel-picker-menu__dot--none"
+                  aria-hidden
+                />
+                No channel
+              </button>
+            </li>
+            {FDC3_CHANNELS.map((ch) => (
+              <li key={ch.id} role="option" aria-selected={channelPicker.channelId === ch.id}>
+                <button
+                  type="button"
+                  className={`wm-channel-picker-menu__item${channelPicker.channelId === ch.id ? " wm-channel-picker-menu__item--active" : ""}`}
+                  onClick={() => selectChannel(ch.id)}
+                >
+                  <span
+                    className="wm-channel-picker-menu__dot"
+                    style={{ background: ch.color }}
+                    aria-hidden
+                  />
+                  {ch.name}
+                </button>
+              </li>
+            ))}
+          </ul>
         </>
       )}
 

@@ -337,19 +337,26 @@ export function DashboardSwitcher({ ds }: Props) {
     <>
       <div className="wm-ds" data-tauri-drag-region>
         <div className="wm-ds__strip" data-tauri-drag-region>
-          {dashboards.map((d) => (
-            <Pill
-              key={d.name}
-              info={d}
-              dragOver={dragOverName === d.name}
-              onClick={() => switchTo(d.name).catch(console.error)}
-              onContextMenu={(e) => handleContextMenu(e, d.name)}
-              onDragStart={() => handleDragStart(d.name)}
-              onDragOver={(e) => handleDragOver(e, d.name)}
-              onDrop={(e) => handleDrop(e, d.name)}
-              onDragEnd={handleDragEnd}
-            />
-          ))}
+          {dashboards.length === 0 ? (
+            <span className="wm-ds__empty-hint" data-tauri-drag-region>
+              No dashboards
+            </span>
+          ) : (
+            dashboards.map((d) => (
+              <Pill
+                key={d.name}
+                info={d}
+                dragOver={dragOverName === d.name}
+                onClick={() => switchTo(d.name).catch(console.error)}
+                onClose={() => handleDelete(d.name)}
+                onContextMenu={(e) => handleContextMenu(e, d.name)}
+                onDragStart={() => handleDragStart(d.name)}
+                onDragOver={(e) => handleDragOver(e, d.name)}
+                onDrop={(e) => handleDrop(e, d.name)}
+                onDragEnd={handleDragEnd}
+              />
+            ))
+          )}
         </div>
         <button
           type="button"
@@ -401,7 +408,6 @@ export function DashboardSwitcher({ ds }: Props) {
             type="button"
             className="wm-ds-ctx__item wm-ds-ctx__item--danger"
             onClick={() => handleDelete(ctxMenu.name)}
-            disabled={dashboards.length <= 1}
           >
             Delete
           </button>
@@ -417,6 +423,7 @@ interface PillProps {
   info: DashboardInfo;
   dragOver: boolean;
   onClick: () => void;
+  onClose: () => void;
   onContextMenu: (e: React.MouseEvent) => void;
   onDragStart: () => void;
   onDragOver: (e: React.DragEvent) => void;
@@ -428,6 +435,7 @@ function Pill({
   info,
   dragOver,
   onClick,
+  onClose,
   onContextMenu,
   onDragStart,
   onDragOver,
@@ -443,21 +451,36 @@ function Pill({
     .join(" ");
 
   return (
-    <button
-      type="button"
+    <span
       className={classes}
       draggable
-      onClick={onClick}
       onContextMenu={onContextMenu}
       onDragStart={onDragStart}
       onDragOver={onDragOver}
       onDrop={onDrop}
       onDragEnd={onDragEnd}
       title={info.dirty ? `${info.name} (unsaved changes)` : info.name}
-      aria-current={info.active ? "page" : undefined}
     >
       {info.dirty && <span className="wm-ds__dirty" aria-label="unsaved changes" />}
-      {info.name}
-    </button>
+      <button
+        type="button"
+        className="wm-ds__pill-label"
+        onClick={onClick}
+        aria-current={info.active ? "page" : undefined}
+      >
+        {info.name}
+      </button>
+      <button
+        type="button"
+        className="wm-ds__pill-close"
+        aria-label={`Close ${info.name}`}
+        onClick={(e) => {
+          e.stopPropagation();
+          onClose();
+        }}
+      >
+        ✕
+      </button>
+    </span>
   );
 }

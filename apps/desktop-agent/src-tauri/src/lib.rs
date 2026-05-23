@@ -455,12 +455,30 @@ fn locate_wm_binary() -> Result<std::path::PathBuf, String> {
     Ok(candidate)
 }
 
-/// Spawn a new Window Manager instance. Every call creates a fresh, independent process.
+/// Spawn a Window Manager instance that restores previously saved terminals.
+/// Called once at Desktop Agent startup.
 fn spawn_wm_instance() {
     match locate_wm_binary() {
         Ok(bin) => {
             if let Err(e) = std::process::Command::new(&bin).spawn() {
                 eprintln!("[cda/tray] Failed to spawn window-manager: {e}");
+            }
+        }
+        Err(e) => eprintln!("[cda/tray] {e}"),
+    }
+}
+
+/// Spawn a Window Manager instance that starts fresh with zero dashboards.
+/// Called from the tray "Open New Terminal" action so the user always gets a
+/// clean slate rather than a restoration of a previous session.
+fn spawn_wm_instance_fresh() {
+    match locate_wm_binary() {
+        Ok(bin) => {
+            if let Err(e) = std::process::Command::new(&bin)
+                .env("OT_FRESH_START", "1")
+                .spawn()
+            {
+                eprintln!("[cda/tray] Failed to spawn fresh window-manager: {e}");
             }
         }
         Err(e) => eprintln!("[cda/tray] {e}"),
@@ -474,7 +492,7 @@ async fn build_tray_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Menu<tau
     let apps = app.state::<AppDirectoryCache>().list_all().await;
 
     let open_item = MenuItemBuilder::with_id("open", "Open CDA").build(app)?;
-    let terminal_item = MenuItemBuilder::with_id("terminal", "Launch Terminal").build(app)?;
+    let terminal_item = MenuItemBuilder::with_id("terminal", "Open New Terminal").build(app)?;
     let exit_item = MenuItemBuilder::with_id("exit", "Exit").build(app)?;
 
     let mut sub = SubmenuBuilder::new(app, "Launch App");
@@ -692,11 +710,16 @@ pub fn run() {
                 }
             });
 
+            // ── Auto-launch one-terminal ───────────────────────────────────────
+            // Restore previously open Terminal windows. one-terminal's own startup
+            // handles restoring all saved non-main terminals via load_persisted_terminals.
+            spawn_wm_instance();
+
             // ── System tray ────────────────────────────────────────────────────
             // Initial menu: apps list is empty until the App Directory fetch completes.
             let open_item = MenuItemBuilder::with_id("open", "Open CDA").build(app)?;
             let terminal_item =
-                MenuItemBuilder::with_id("terminal", "Launch Terminal").build(app)?;
+                MenuItemBuilder::with_id("terminal", "Open New Terminal").build(app)?;
             let exit_item = MenuItemBuilder::with_id("exit", "Exit").build(app)?;
             let placeholder = MenuItemBuilder::with_id("no-apps", "No apps available")
                 .enabled(false)
@@ -725,7 +748,7 @@ pub fn run() {
                         }
                     }
                     "terminal" => {
-                        spawn_wm_instance();
+                        spawn_wm_instance_fresh();
                     }
                     "exit" => {
                         app.exit(0);

@@ -1,7 +1,7 @@
-//! `LayoutTree` — thread-safe, Tauri-managed store for the N-ary layout tree.
+//! `LayoutTree` — thread-safe store for the N-ary layout tree.
 //!
-//! Registered once at startup via `app.manage(LayoutTree::new(w, h))` and
-//! accessed from commands via `State<'_, LayoutTree>`.
+//! One `LayoutTree` lives inside each `TerminalState`. Commands reach it via
+//! `manager.get(window.label())?.layout_tree`.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
@@ -77,10 +77,14 @@ pub struct LayoutTree {
     /// Handle for the pending debounced save task. Replaced on every mutation
     /// so rapid changes coalesce into a single disk write.
     save_handle: Arc<Mutex<Option<tauri::async_runtime::JoinHandle<()>>>>,
+    /// Stable identifier for this Terminal instance. Used as the prefix for
+    /// all panel labels (`<terminal_id>-panel-<uuid>`) so that multiple
+    /// Terminals can coexist without label collisions.
+    terminal_id: Arc<str>,
 }
 
 impl LayoutTree {
-    pub fn new(width: f64, height: f64) -> Self {
+    pub fn new(terminal_id: &str, width: f64, height: f64) -> Self {
         Self {
             inner: Arc::new(RwLock::new(Inner {
                 root: None,
@@ -90,10 +94,19 @@ impl LayoutTree {
                 width,
                 height,
             })),
-            dashboard_store: Arc::new(RwLock::new(DashboardStore::with_default())),
+            dashboard_store: Arc::new(RwLock::new(DashboardStore::with_empty())),
             app: Arc::new(OnceLock::new()),
             save_handle: Arc::new(Mutex::new(None)),
+            terminal_id: Arc::from(terminal_id),
         }
+    }
+
+    /// Store the `AppHandle` without loading any persisted state.
+    ///
+    /// Retained for call sites that need to wire up the AppHandle before
+    /// calling `init` separately. Most callers should prefer `init` directly.
+    pub fn register_app_handle(&self, app: &AppHandle) {
+        let _ = self.app.set(app.clone());
     }
 
     /// Store the `AppHandle` and load any persisted layout from disk.
@@ -107,7 +120,14 @@ impl LayoutTree {
         let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
         std::fs::create_dir_all(&data_dir).map_err(|e| e.to_string())?;
 
-        if let Some(terminal_persist) = persist::load_terminal(&data_dir) {
+        // Use terminal_id-aware load so each Terminal reads its own file.
+        // For "terminal-main" this also handles migration from the legacy layout.json.
+        let terminal_persist_opt = if self.terminal_id.as_ref() == "terminal-main" {
+            persist::load_terminal(&data_dir)
+        } else {
+            persist::load_terminal_for(&self.terminal_id, &data_dir)
+        };
+        if let Some(terminal_persist) = terminal_persist_opt {
             let ds = DashboardStore::from_persist(terminal_persist);
 
             // Load the active dashboard's layout into Inner.
@@ -331,7 +351,10 @@ impl LayoutTree {
     /// Matches reflow's HEADER_HEIGHT offset so overlays align with webviews.
     pub fn emit_host(&self, app: &AppHandle) {
         let payload = self.host_snapshot();
-        let _ = app.emit("wm:host-layout", &payload);
+        let chrome = format!("{}-chrome", self.terminal_id);
+        if let Some(wv) = app.get_webview(&chrome) {
+            let _ = wv.emit("wm:host-layout", &payload);
+        }
     }
 
     /// Update the display title for the panel identified by `label`.
@@ -440,7 +463,7 @@ impl LayoutTree {
         target: Option<&str>,
         dir: Option<SplitDir>,
     ) -> String {
-        let label = format!("panel-{}", short_id());
+        let label = format!("{}-panel-{}", self.terminal_id, short_id());
         self.insert_panel(label, spec, target, dir)
     }
 
@@ -709,7 +732,10 @@ impl LayoutTree {
     /// Emit the current dashboard list state as `wm:dashboards`.
     pub fn emit_dashboards(&self, app: &AppHandle) {
         let snapshot = self.dashboard_store.read().unwrap().as_snapshot();
-        let _ = app.emit("wm:dashboards", &snapshot);
+        let chrome = format!("{}-chrome", self.terminal_id);
+        if let Some(wv) = app.get_webview(&chrome) {
+            let _ = wv.emit("wm:dashboards", &snapshot);
+        }
     }
 
     /// Return the current dashboard list state without emitting an event.
@@ -723,7 +749,8 @@ impl LayoutTree {
         let Some(app) = self.app.get() else { return };
         let terminal_persist = self.dashboard_store.read().unwrap().to_terminal_persist();
         if let Ok(data_dir) = app.path().app_data_dir() {
-            if let Err(e) = persist::save_terminal(&terminal_persist, &data_dir) {
+            let tid = self.terminal_id.to_string();
+            if let Err(e) = persist::save_terminal_dashboards(&tid, &terminal_persist, &data_dir) {
                 eprintln!("[layout] persist_dashboards: {e}");
             }
         }
@@ -767,7 +794,8 @@ impl LayoutTree {
         };
         let Some(app) = self.app.get() else { return };
         if let Ok(data_dir) = app.path().app_data_dir() {
-            if let Err(e) = persist::save_terminal(&terminal_persist, &data_dir) {
+            let tid = self.terminal_id.to_string();
+            if let Err(e) = persist::save_terminal_dashboards(&tid, &terminal_persist, &data_dir) {
                 eprintln!("[layout] save_dashboard: {e}");
             }
         }
@@ -801,7 +829,10 @@ impl LayoutTree {
         self.reflow(app);
         self.emit_host(app);
         if let Some(snap) = self.snapshot() {
-            let _ = app.emit("wm:layout", &snap);
+            let chrome = format!("{}-chrome", self.terminal_id);
+            if let Some(wv) = app.get_webview(&chrome) {
+                let _ = wv.emit("wm:layout", &snap);
+            }
         }
         Ok(())
     }
@@ -869,10 +900,67 @@ impl LayoutTree {
         self.reflow(app);
         self.emit_host(app);
         if let Some(snap) = self.snapshot() {
-            let _ = app.emit("wm:layout", &snap);
+            let chrome = format!("{}-chrome", self.terminal_id);
+            if let Some(wv) = app.get_webview(&chrome) {
+                let _ = wv.emit("wm:layout", &snap);
+            }
         }
 
         Ok(())
+    }
+
+    /// Delete a dashboard by name, reconciling panel webviews when the active
+    /// dashboard is the one being removed. Returns `false` if `name` doesn't
+    /// exist. Allowed to delete the last dashboard, leaving the terminal empty.
+    pub fn delete_dashboard(
+        &self,
+        name: &str,
+        win: &Window,
+        app: &AppHandle,
+    ) -> Result<bool, DashboardError> {
+        // Check existence and whether this is the active dashboard.
+        let (is_active, current_labels) = {
+            let ds = self.dashboard_store.read().unwrap();
+            if !ds.dashboards.contains_key(name) {
+                return Ok(false);
+            }
+            let is_active = ds.active == name;
+            let labels = if is_active {
+                let g = self.inner.read().unwrap();
+                let mut out = Vec::new();
+                if let Some(root) = &g.root {
+                    collect_leaf_labels(root, &mut out);
+                }
+                out
+            } else {
+                vec![]
+            };
+            (is_active, labels)
+        };
+
+        self.with_dashboard_store_mut(|ds| ds.delete(name));
+
+        if !is_active {
+            return Ok(true);
+        }
+
+        // Deleted the active dashboard — load whatever is now active (or None).
+        let new_layout = self.dashboard_store.read().unwrap().load_active();
+        let panels_to_create = self.apply_layout_to_inner(new_layout);
+        self.reconcile_panel_webviews(current_labels, panels_to_create, win, app)?;
+
+        self.reflow(app);
+        self.emit_host(app);
+        let chrome = format!("{}-chrome", self.terminal_id);
+        if let Some(wv) = app.get_webview(&chrome) {
+            if let Some(snap) = self.snapshot() {
+                let _ = wv.emit("wm:layout", &snap);
+            } else {
+                let _ = wv.emit("wm:layout", serde_json::Value::Null);
+            }
+        }
+
+        Ok(true)
     }
 
     /// Load a `PersistedLayout` (or empty layout when `None`) into `Inner`.
@@ -1037,6 +1125,7 @@ impl LayoutTree {
             ds.to_terminal_persist()
         };
 
+        let terminal_id = self.terminal_id.to_string();
         let mut handle = self.save_handle.lock().unwrap();
         if let Some(h) = handle.take() {
             h.abort();
@@ -1045,8 +1134,10 @@ impl LayoutTree {
             if debounce_ms > 0 {
                 tokio::time::sleep(std::time::Duration::from_millis(debounce_ms)).await;
             }
-            if let Err(e) = persist::save_terminal(&terminal_persist, &data_dir) {
-                eprintln!("[layout] persist::save_terminal failed: {e}");
+            if let Err(e) =
+                persist::save_terminal_dashboards(&terminal_id, &terminal_persist, &data_dir)
+            {
+                eprintln!("[layout] persist::save_terminal_dashboards failed: {e}");
             }
         }));
     }

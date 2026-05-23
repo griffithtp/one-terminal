@@ -145,9 +145,8 @@ impl DashboardStore {
         } else if let Some(first) = dashboards.keys().next() {
             first.clone()
         } else {
-            let name = "Default".to_string();
-            dashboards.insert(name.clone(), PersistedDashboard::empty(name.clone()));
-            name
+            // No dashboards persisted — start empty; user creates the first one.
+            String::new()
         };
 
         Self {
@@ -158,17 +157,14 @@ impl DashboardStore {
         }
     }
 
-    /// Create a store with a single empty dashboard called "Default".
-    /// Used as the initial state before `init` loads from disk.
-    pub fn with_default() -> Self {
-        let name = "Default".to_string();
-        let mut dashboards = IndexMap::new();
-        dashboards.insert(name.clone(), PersistedDashboard::empty(name.clone()));
+    /// Create an empty store with no dashboards. Used for freshly-spawned
+    /// Terminal windows so the user starts with a blank slate.
+    pub fn with_empty() -> Self {
         Self {
-            active: name,
+            active: String::new(),
             auto_save: true,
             dirty: false,
-            dashboards,
+            dashboards: IndexMap::new(),
         }
     }
 
@@ -218,6 +214,18 @@ impl DashboardStore {
         }
     }
 
+    /// Create a new dashboard pre-populated with `layout` under `name`.
+    /// Returns `false` if `name` is already taken.
+    pub fn create_from(&mut self, name: String, layout: PersistedDashboard) -> bool {
+        if self.dashboards.contains_key(&name) {
+            return false;
+        }
+        let mut d = layout;
+        d.name = name.clone();
+        self.dashboards.insert(name, d);
+        true
+    }
+
     /// Create a new empty dashboard with `name`. Returns `false` if the name
     /// is already taken.
     pub fn create(&mut self, name: String) -> bool {
@@ -256,14 +264,12 @@ impl DashboardStore {
     /// Delete a dashboard. The last dashboard cannot be deleted.
     /// Returns `false` if `name` doesn't exist or is the only dashboard.
     pub fn delete(&mut self, name: &str) -> bool {
-        if self.dashboards.len() <= 1 || !self.dashboards.contains_key(name) {
+        if !self.dashboards.contains_key(name) {
             return false;
         }
         self.dashboards.shift_remove(name);
         if self.active == name {
-            if let Some(first) = self.dashboards.keys().next() {
-                self.active = first.clone();
-            }
+            self.active = self.dashboards.keys().next().cloned().unwrap_or_default();
         }
         true
     }
@@ -283,11 +289,17 @@ impl DashboardStore {
     // ── Serialisation ─────────────────────────────────────────────────────────
 
     /// Convert to `TerminalPersist` for writing to disk.
+    ///
+    /// Only populates dashboard-owned fields (`active_dashboard`, `auto_save`,
+    /// `dashboards`). Callers that do a full write use
+    /// `persist::save_terminal_dashboards` which read-modify-writes the file so
+    /// that `name`, `fdc3_channel`, and `window` are preserved.
     pub fn to_terminal_persist(&self) -> super::persist::TerminalPersist {
         super::persist::TerminalPersist {
             active_dashboard: self.active.clone(),
             auto_save: self.auto_save,
             dashboards: self.dashboards.values().cloned().collect(),
+            ..Default::default()
         }
     }
 }
