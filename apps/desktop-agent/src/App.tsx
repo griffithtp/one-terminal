@@ -7,6 +7,7 @@ import { EngineDevOverride } from "./components/EngineDevOverride";
 import { InteropDashboard } from "./components/InteropDashboard";
 import { IntentResolverModal } from "./components/IntentResolverModal";
 import { LauncherPanel } from "./components/LauncherPanel";
+import { QuitConfirmModal } from "./components/QuitConfirmModal";
 import { useCdaEvents } from "./hooks/useCdaEvents";
 import { useFdcBus } from "./hooks/useFdcBus";
 
@@ -67,6 +68,9 @@ export default function App() {
 
       {/* IntentResolverModal listens globally — always mounted */}
       <IntentResolverModal />
+
+      {/* QuitConfirmModal listens globally — always mounted */}
+      <QuitConfirmModal />
 
       {/* Dev-only engine override overlay — floats bottom-right */}
       {import.meta.env.DEV && <EngineDevOverride />}

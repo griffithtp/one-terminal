@@ -234,6 +234,37 @@ fn cda_open_terminal() {
     spawn_wm_instance_fresh();
 }
 
+/// Quit the Desktop Agent, preserving all Terminal state on disk.
+/// One-terminal's auto-save has already persisted the current layout, so this
+/// simply exits the process.
+#[tauri::command]
+fn cda_quit(app: AppHandle) {
+    app.exit(0);
+}
+
+/// Quit the Desktop Agent and discard all Terminal state files so nothing is
+/// restored on the next launch.  Deletes every directory under the
+/// `com.one-terminal.one-terminal/terminals/` data folder, then exits.
+#[tauri::command]
+fn cda_quit_discard(app: AppHandle) -> Result<(), String> {
+    // Derive one-terminal's data directory by stepping one level above the
+    // Desktop Agent's own app_data_dir, then descending into the Window Manager
+    // identifier.  Works on all platforms without hard-coding OS paths.
+    let da_data = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("cannot resolve data dir: {e}"))?;
+    if let Some(base) = da_data.parent() {
+        let wm_terminals = base.join("com.one-terminal.one-terminal").join("terminals");
+        if wm_terminals.exists() {
+            std::fs::remove_dir_all(&wm_terminals)
+                .map_err(|e| format!("failed to clear terminal state: {e}"))?;
+        }
+    }
+    app.exit(0);
+    Ok(())
+}
+
 /// Return the configured App Directory URL (respects OT_APP_DIR_URL override).
 #[tauri::command]
 fn cda_get_app_dir_url(cfg: State<'_, AgentConfig>) -> String {
@@ -770,7 +801,19 @@ pub fn run() {
                         spawn_wm_instance_fresh();
                     }
                     "exit" => {
-                        app.exit(0);
+                        // Show the dashboard window and ask the user whether to
+                        // save or discard Terminal state before quitting.
+                        if let Some(w) =
+                            app.get_webview_window("desktop-agent-dashboard")
+                        {
+                            let _ = w.show();
+                            let _ = w.unminimize();
+                            let _ = w.set_focus();
+                            let _ = tauri::Emitter::emit(app, "cda:quit-requested", ());
+                        } else {
+                            // No dashboard window (shouldn't happen), fall back.
+                            app.exit(0);
+                        }
                     }
                     id if id.starts_with("launch:") => {
                         let app_id = id.trim_start_matches("launch:").to_string();
@@ -818,6 +861,8 @@ pub fn run() {
             cda_open_terminal,
             cda_get_app_dir_url,
             cda_open_app_directory,
+            cda_quit,
+            cda_quit_discard,
             cda_list_app_directory,
             cda_refresh_app_directory,
             cda_launch_app,
