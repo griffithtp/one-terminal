@@ -185,13 +185,6 @@ pub fn update_window_config(
     save_terminal_for(terminal_id, &existing, data_dir)
 }
 
-/// Update only the `name` field, preserving all other fields.
-pub fn update_terminal_name(terminal_id: &str, name: &str, data_dir: &Path) -> Result<(), String> {
-    let mut existing = load_terminal_for(terminal_id, data_dir).unwrap_or_default();
-    existing.name = name.to_string();
-    save_terminal_for(terminal_id, &existing, data_dir)
-}
-
 /// Update only the `fdc3_channel` field, preserving all other fields.
 pub fn update_fdc3_channel(
     terminal_id: &str,

@@ -54,25 +54,6 @@ pub fn is_rect_on_any_monitor(app: &AppHandle, x: f64, y: f64, w: f64, h: f64) -
     false
 }
 
-/// Return the logical (x, y) of the top-left corner that would centre a window
-/// of `(w, h)` on the primary monitor. Falls back to `(0, 0)` if the primary
-/// monitor is unavailable.
-pub fn primary_monitor_center(app: &AppHandle, w: f64, h: f64) -> (f64, f64) {
-    if let Ok(Some(m)) = app.primary_monitor() {
-        let mp = m.position();
-        let ms = m.size();
-        let sf = m.scale_factor();
-        let mx = mp.x as f64 / sf;
-        let my = mp.y as f64 / sf;
-        let mw = ms.width as f64 / sf;
-        let mh = ms.height as f64 / sf;
-        let x = (mx + (mw - w) / 2.0).max(mx);
-        let y = (my + (mh - h) / 2.0).max(my);
-        return (x, y);
-    }
-    (0.0, 0.0)
-}
-
 // ── Window event listener ─────────────────────────────────────────────────────
 
 /// Install resize and move listeners on `win` that:
@@ -256,7 +237,7 @@ fn spawn_or_restore(
 
     // ── OS window ─────────────────────────────────────────────────────────────
     let win = tauri::WindowBuilder::new(app, label)
-        .title(&format!("OneTerminal — {display_name}"))
+        .title(format!("OneTerminal — {display_name}"))
         .inner_size(DEFAULT_W, DEFAULT_H)
         .min_inner_size(MIN_W, MIN_H)
         .resizable(true)
@@ -265,23 +246,24 @@ fn spawn_or_restore(
         .map_err(|e| e.to_string())?;
 
     // ── Apply saved window position (if valid) ─────────────────────────────
-    if saved_window.width > 0.0 && saved_window.height > 0.0 {
-        if is_rect_on_any_monitor(
+    if saved_window.width > 0.0
+        && saved_window.height > 0.0
+        && is_rect_on_any_monitor(
             app,
             saved_window.x,
             saved_window.y,
             saved_window.width,
             saved_window.height,
-        ) {
-            let _ = win.set_size(tauri::Size::Logical(LogicalSize::new(
-                saved_window.width,
-                saved_window.height,
-            )));
-            let _ = win.set_position(tauri::Position::Logical(LogicalPosition::new(
-                saved_window.x,
-                saved_window.y,
-            )));
-        }
+        )
+    {
+        let _ = win.set_size(tauri::Size::Logical(LogicalSize::new(
+            saved_window.width,
+            saved_window.height,
+        )));
+        let _ = win.set_position(tauri::Position::Logical(LogicalPosition::new(
+            saved_window.x,
+            saved_window.y,
+        )));
     }
 
     let (init_w, init_h) = {
@@ -323,7 +305,7 @@ fn spawn_or_restore(
     // ── Chrome webview — lowest z-order ───────────────────────────────────────
     win.add_child(
         WebviewBuilder::new(
-            &format!("{label}-chrome"),
+            format!("{label}-chrome"),
             WebviewUrl::App("index.html".into()),
         ),
         LogicalPosition::new(0.0, 0.0),
@@ -334,7 +316,7 @@ fn spawn_or_restore(
     // ── Overlay webview — above chrome, below future panel webviews ───────────
     win.add_child(
         WebviewBuilder::new(
-            &format!("{label}-overlay"),
+            format!("{label}-overlay"),
             WebviewUrl::App("index.html#overlay".into()),
         )
         .transparent(true),

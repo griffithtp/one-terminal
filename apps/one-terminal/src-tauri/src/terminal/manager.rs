@@ -83,11 +83,6 @@ impl TerminalManager {
             .collect()
     }
 
-    /// Number of registered terminals.
-    pub fn count(&self) -> usize {
-        self.inner.read().unwrap().terminals.len()
-    }
-
     /// Generate the next unique terminal window label (`"terminal-2"`,
     /// `"terminal-3"`, …). Increments the internal counter atomically.
     pub fn next_label(&self) -> String {

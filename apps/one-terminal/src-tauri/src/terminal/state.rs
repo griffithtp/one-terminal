@@ -12,6 +12,7 @@ use crate::webview_pool::WebviewPool;
 
 /// Mutable state for the overlay webview (context menus, command palette,
 /// overflow dropdowns).
+#[derive(Default)]
 pub struct OverlayInner {
     pub is_ready: bool,
     /// `true` when a content panel was added after the overlay was last
@@ -21,16 +22,6 @@ pub struct OverlayInner {
     /// Senders waiting for the overlay to call `wm_overlay_ready`. All are
     /// drained and notified at once when readiness is signalled.
     pub wakers: Vec<oneshot::Sender<()>>,
-}
-
-impl Default for OverlayInner {
-    fn default() -> Self {
-        Self {
-            is_ready: false,
-            stale: false,
-            wakers: Vec::new(),
-        }
-    }
 }
 
 pub type OverlayState = Arc<Mutex<OverlayInner>>;
