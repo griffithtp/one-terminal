@@ -234,19 +234,48 @@ fn cda_open_terminal() {
     spawn_wm_instance_fresh();
 }
 
+/// Best-effort signal all running one-terminal processes.  `force = true`
+/// sends SIGKILL/taskkill /F for immediate termination; `force = false`
+/// sends SIGTERM/taskkill (graceful) so the Tauri runtime can flush any
+/// in-flight state writes before exiting.
+fn signal_terminals(force: bool) {
+    #[cfg(target_os = "windows")]
+    {
+        let mut cmd = std::process::Command::new("taskkill");
+        cmd.args(["/IM", "one-terminal.exe"]);
+        if force {
+            cmd.arg("/F");
+        }
+        let _ = cmd.output();
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let mut cmd = std::process::Command::new("killall");
+        if force {
+            cmd.arg("-KILL");
+        }
+        cmd.arg("one-terminal");
+        let _ = cmd.output();
+    }
+}
+
 /// Quit the Desktop Agent, preserving all Terminal state on disk.
-/// One-terminal's auto-save has already persisted the current layout, so this
-/// simply exits the process.
+/// One-terminal's auto-save has already persisted the current layout, and
+/// SIGTERM lets it flush any pending writes before this process exits.
 #[tauri::command]
 fn cda_quit(app: AppHandle) {
+    signal_terminals(false);
     app.exit(0);
 }
 
 /// Quit the Desktop Agent and discard all Terminal state files so nothing is
-/// restored on the next launch.  Deletes every directory under the
-/// `com.one-terminal.one-terminal/terminals/` data folder, then exits.
+/// restored on the next launch.  Force-kills any running terminals first
+/// (so they can't re-save state mid-deletion), then deletes every directory
+/// under the `com.one-terminal.one-terminal/terminals/` data folder, then exits.
 #[tauri::command]
 fn cda_quit_discard(app: AppHandle) -> Result<(), String> {
+    signal_terminals(true);
+
     // Derive one-terminal's data directory by stepping one level above the
     // Desktop Agent's own app_data_dir, then descending into the Window Manager
     // identifier.  Works on all platforms without hard-coding OS paths.
