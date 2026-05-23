@@ -118,9 +118,7 @@ fn default_auto_save() -> bool {
 ///
 /// `"terminal-main"` → `"main"`, `"terminal-2"` → `"2"`, etc.
 fn terminal_dir_name(terminal_id: &str) -> &str {
-    terminal_id
-        .strip_prefix("terminal-")
-        .unwrap_or(terminal_id)
+    terminal_id.strip_prefix("terminal-").unwrap_or(terminal_id)
 }
 
 fn terminal_dashboards_path(terminal_id: &str, data_dir: &Path) -> std::path::PathBuf {
@@ -165,12 +163,11 @@ pub fn save_terminal_dashboards(
     persist: &TerminalPersist,
     data_dir: &Path,
 ) -> Result<(), String> {
-    let mut existing = load_terminal_for(terminal_id, data_dir).unwrap_or_else(|| {
-        TerminalPersist {
+    let mut existing =
+        load_terminal_for(terminal_id, data_dir).unwrap_or_else(|| TerminalPersist {
             name: terminal_dir_name(terminal_id).to_string(),
             ..Default::default()
-        }
-    });
+        });
     existing.active_dashboard = persist.active_dashboard.clone();
     existing.auto_save = persist.auto_save;
     existing.dashboards = persist.dashboards.clone();
@@ -189,11 +186,7 @@ pub fn update_window_config(
 }
 
 /// Update only the `name` field, preserving all other fields.
-pub fn update_terminal_name(
-    terminal_id: &str,
-    name: &str,
-    data_dir: &Path,
-) -> Result<(), String> {
+pub fn update_terminal_name(terminal_id: &str, name: &str, data_dir: &Path) -> Result<(), String> {
     let mut existing = load_terminal_for(terminal_id, data_dir).unwrap_or_default();
     existing.name = name.to_string();
     save_terminal_for(terminal_id, &existing, data_dir)

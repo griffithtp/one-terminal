@@ -84,7 +84,9 @@ body,
   font-size: 12px;
   white-space: nowrap;
   flex-shrink: 0;
-  transition: background 120ms, border-color 120ms;
+  transition:
+    background 120ms,
+    border-color 120ms;
 }
 .wm-channel-selector__pill:hover {
   background: #273549;

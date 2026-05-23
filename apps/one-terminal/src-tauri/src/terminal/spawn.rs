@@ -9,7 +9,9 @@
 
 use std::sync::{Arc, Mutex, RwLock};
 
-use tauri::{AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewBuilder, WebviewUrl, Window};
+use tauri::{
+    AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, WebviewBuilder, WebviewUrl, Window,
+};
 
 use crate::layout::persist::{self, PersistedWindowConfig, TerminalPersist};
 use crate::layout::store::LayoutTree;
@@ -409,4 +411,3 @@ fn spawn_or_restore(
         name: display_name,
     })
 }
-

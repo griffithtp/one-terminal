@@ -63,7 +63,9 @@ function ChannelSelector({ channelId, onPillClick }: ChannelSelectorProps) {
       ref={btnRef}
       type="button"
       className="wm-channel-selector__pill"
-      title={current ? `FDC3: ${current.name} — click to change` : "FDC3: No channel — click to join"}
+      title={
+        current ? `FDC3: ${current.name} — click to change` : "FDC3: No channel — click to join"
+      }
       onClick={handleClick}
       aria-haspopup="listbox"
     >
@@ -72,10 +74,10 @@ function ChannelSelector({ channelId, onPillClick }: ChannelSelectorProps) {
         style={{ background: current?.color ?? "transparent" }}
         aria-hidden
       />
-      <span className="wm-channel-selector__label">
-        {current ? current.name : "No channel"}
+      <span className="wm-channel-selector__label">{current ? current.name : "No channel"}</span>
+      <span className="wm-channel-selector__caret" aria-hidden>
+        ▾
       </span>
-      <span className="wm-channel-selector__caret" aria-hidden>▾</span>
     </button>
   );
 }
@@ -299,13 +301,16 @@ export function Header({ onOpenTab, dashboards }: Props) {
     };
   }, []);
 
-  const handleChannelPillClick = useCallback((rect: DOMRect) => {
-    invoke("wm_channel_picker_open", {
-      x: rect.left,
-      y: rect.bottom + 4,
-      channelId,
-    }).catch(console.error);
-  }, [channelId]);
+  const handleChannelPillClick = useCallback(
+    (rect: DOMRect) => {
+      invoke("wm_channel_picker_open", {
+        x: rect.left,
+        y: rect.bottom + 4,
+        channelId,
+      }).catch(console.error);
+    },
+    [channelId]
+  );
 
   // ── Park panels while any picker / download dialog is open ──────────────
   //

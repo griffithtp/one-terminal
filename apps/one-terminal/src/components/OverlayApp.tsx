@@ -139,37 +139,40 @@ export function OverlayApp() {
     let cancelled = false;
 
     (async () => {
-      const [unCtxMenu, unPalette, unLayout, unHostLayout, unOverflow, unChannelPicker] = await Promise.all([
-        listen<CtxMenuPayload>("wm:ctx-menu", (e) => {
-          setMenu(e.payload);
-          setZoomOpen(false);
-          setOverflowMenu(null);
-          setChannelPicker(null);
-        }),
-        listen<SerializableCommand[]>("wm:palette-open", (e) => {
-          setPaletteCommands(e.payload);
-          setPaletteQuery("");
-          setPaletteSelectedIdx(0);
-          setOverflowMenu(null);
-          setChannelPicker(null);
-          requestAnimationFrame(() => paletteInputRef.current?.focus());
-        }),
-        listen<LayoutSnapshot>("wm:layout", (e) => setLayout(e.payload)),
-        listen<HostLayout>("wm:host-layout", (e) => setHostLayout(e.payload)),
-        listen<OverflowMenuPayload>("wm:overflow-menu", (e) => {
-          setOverflowMenu(e.payload);
-          setMenu(null);
-          setChannelPicker(null);
-        }),
-        listen<ChannelPickerPayload>("wm:channel-picker", (e) => {
-          setChannelPicker(e.payload);
-          setMenu(null);
-          setOverflowMenu(null);
-        }),
-      ]);
+      const [unCtxMenu, unPalette, unLayout, unHostLayout, unOverflow, unChannelPicker] =
+        await Promise.all([
+          listen<CtxMenuPayload>("wm:ctx-menu", (e) => {
+            setMenu(e.payload);
+            setZoomOpen(false);
+            setOverflowMenu(null);
+            setChannelPicker(null);
+          }),
+          listen<SerializableCommand[]>("wm:palette-open", (e) => {
+            setPaletteCommands(e.payload);
+            setPaletteQuery("");
+            setPaletteSelectedIdx(0);
+            setOverflowMenu(null);
+            setChannelPicker(null);
+            requestAnimationFrame(() => paletteInputRef.current?.focus());
+          }),
+          listen<LayoutSnapshot>("wm:layout", (e) => setLayout(e.payload)),
+          listen<HostLayout>("wm:host-layout", (e) => setHostLayout(e.payload)),
+          listen<OverflowMenuPayload>("wm:overflow-menu", (e) => {
+            setOverflowMenu(e.payload);
+            setMenu(null);
+            setChannelPicker(null);
+          }),
+          listen<ChannelPickerPayload>("wm:channel-picker", (e) => {
+            setChannelPicker(e.payload);
+            setMenu(null);
+            setOverflowMenu(null);
+          }),
+        ]);
 
       if (cancelled) {
-        [unCtxMenu, unPalette, unLayout, unHostLayout, unOverflow, unChannelPicker].forEach((fn) => fn());
+        [unCtxMenu, unPalette, unLayout, unHostLayout, unOverflow, unChannelPicker].forEach((fn) =>
+          fn()
+        );
         return;
       }
       unlisteners = [unCtxMenu, unPalette, unLayout, unHostLayout, unOverflow, unChannelPicker];
@@ -387,7 +390,10 @@ export function OverlayApp() {
                 className={`wm-channel-picker-menu__item${channelPicker.channelId === null ? " wm-channel-picker-menu__item--active" : ""}`}
                 onClick={() => selectChannel(null)}
               >
-                <span className="wm-channel-picker-menu__dot wm-channel-picker-menu__dot--none" aria-hidden />
+                <span
+                  className="wm-channel-picker-menu__dot wm-channel-picker-menu__dot--none"
+                  aria-hidden
+                />
                 No channel
               </button>
             </li>

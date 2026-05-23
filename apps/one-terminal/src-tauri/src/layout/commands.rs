@@ -18,12 +18,7 @@ macro_rules! get_terminal {
     ($manager:expr, $window:expr) => {
         match $manager.get($window.label()) {
             Some(t) => t,
-            None => {
-                return Err(format!(
-                    "terminal '{}' not found",
-                    $window.label()
-                ))
-            }
+            None => return Err(format!("terminal '{}' not found", $window.label())),
         }
     };
 }
@@ -318,7 +313,9 @@ pub fn wm_end_tab_drag(
 ) -> Result<(), String> {
     let terminal = get_terminal!(manager, window);
     if let (Some(path), Some(z)) = (target_path, zone) {
-        terminal.layout_tree.move_leaf(&source_label, &path, z, insert_index);
+        terminal
+            .layout_tree
+            .move_leaf(&source_label, &path, z, insert_index);
     }
     terminal.layout_tree.reflow(&app);
     terminal.layout_tree.emit_host(&app);
@@ -337,7 +334,10 @@ pub fn wm_list_dashboards(
     match manager.get(window.label()) {
         Some(terminal) => terminal.layout_tree.dashboards_snapshot(),
         None => {
-            eprintln!("[wm_list_dashboards] terminal '{}' not found", window.label());
+            eprintln!(
+                "[wm_list_dashboards] terminal '{}' not found",
+                window.label()
+            );
             DashboardsSnapshot {
                 active: String::new(),
                 auto_save: true,
@@ -377,13 +377,12 @@ pub fn wm_create_dashboard(
 /// Clears the dirty flag. Call this when `auto_save` is off and the user
 /// explicitly requests a save.
 #[tauri::command]
-pub fn wm_save_dashboard(
-    window: Window,
-    manager: State<'_, TerminalManager>,
-    app: AppHandle,
-) {
+pub fn wm_save_dashboard(window: Window, manager: State<'_, TerminalManager>, app: AppHandle) {
     let Some(terminal) = manager.get(window.label()) else {
-        eprintln!("[wm_save_dashboard] terminal '{}' not found", window.label());
+        eprintln!(
+            "[wm_save_dashboard] terminal '{}' not found",
+            window.label()
+        );
         return;
     };
     terminal.layout_tree.save_dashboard();

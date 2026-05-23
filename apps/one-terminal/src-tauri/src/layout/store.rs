@@ -750,9 +750,7 @@ impl LayoutTree {
         let terminal_persist = self.dashboard_store.read().unwrap().to_terminal_persist();
         if let Ok(data_dir) = app.path().app_data_dir() {
             let tid = self.terminal_id.to_string();
-            if let Err(e) =
-                persist::save_terminal_dashboards(&tid, &terminal_persist, &data_dir)
-            {
+            if let Err(e) = persist::save_terminal_dashboards(&tid, &terminal_persist, &data_dir) {
                 eprintln!("[layout] persist_dashboards: {e}");
             }
         }
@@ -797,9 +795,7 @@ impl LayoutTree {
         let Some(app) = self.app.get() else { return };
         if let Ok(data_dir) = app.path().app_data_dir() {
             let tid = self.terminal_id.to_string();
-            if let Err(e) =
-                persist::save_terminal_dashboards(&tid, &terminal_persist, &data_dir)
-            {
+            if let Err(e) = persist::save_terminal_dashboards(&tid, &terminal_persist, &data_dir) {
                 eprintln!("[layout] save_dashboard: {e}");
             }
         }

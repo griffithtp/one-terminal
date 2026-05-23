@@ -474,7 +474,10 @@ function Pill({
         type="button"
         className="wm-ds__pill-close"
         aria-label={`Close ${info.name}`}
-        onClick={(e) => { e.stopPropagation(); onClose(); }}
+        onClick={(e) => {
+          e.stopPropagation();
+          onClose();
+        }}
       >
         ✕
       </button>

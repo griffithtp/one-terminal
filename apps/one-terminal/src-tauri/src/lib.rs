@@ -7,10 +7,6 @@ mod webview_pool;
 
 use config::TerminalConfig;
 use engine::WmHostIdentity;
-use layout::persist::{self as layout_persist, PersistedWindowConfig};
-use terminal::spawn::{install_window_listeners, is_rect_on_any_monitor};
-use terminal::state::{OverlayInner, OverlayState, TerminalState};
-use terminal::TerminalManager;
 use layout::commands::{
     close_tab, update_layout, wm_begin_tab_drag, wm_close_leaf, wm_close_stack,
     wm_create_dashboard, wm_delete_dashboard, wm_end_tab_drag, wm_list_dashboards,
@@ -20,12 +16,16 @@ use layout::commands::{
 use layout::dashboard::DashboardError;
 use layout::drag::wm_drag_move;
 use layout::host::HostLayout;
+use layout::persist::{self as layout_persist, PersistedWindowConfig};
 use layout::store::{LayoutTree, PanelSpec};
 use layout::{LayoutSnapshot, SplitDir};
 use ot_core::engine::{is_system_version, EngineBinding, EngineFamily};
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Manager, State, WebviewBuilder, WebviewUrl, Window};
 use tauri::{Emitter, LogicalPosition, LogicalSize};
+use terminal::spawn::{install_window_listeners, is_rect_on_any_monitor};
+use terminal::state::{OverlayInner, OverlayState, TerminalState};
+use terminal::TerminalManager;
 use tokio::sync::oneshot;
 use webview_pool::WebviewPool;
 
@@ -210,10 +210,7 @@ fn locate_host_binary() -> Result<std::path::PathBuf, String> {
 
 /// Return the current layout snapshot (None if no panels are open).
 #[tauri::command]
-fn wm_snapshot(
-    window: Window,
-    manager: State<'_, TerminalManager>,
-) -> Option<LayoutSnapshot> {
+fn wm_snapshot(window: Window, manager: State<'_, TerminalManager>) -> Option<LayoutSnapshot> {
     manager
         .get(window.label())
         .and_then(|t| t.layout_tree.snapshot())
@@ -223,10 +220,7 @@ fn wm_snapshot(
 /// The chrome calls this on mount to hydrate `useHostLayout` in case the
 /// initial `wm:host-layout` event fired before the frontend listener was ready.
 #[tauri::command]
-fn wm_host_snapshot(
-    window: Window,
-    manager: State<'_, TerminalManager>,
-) -> HostLayout {
+fn wm_host_snapshot(window: Window, manager: State<'_, TerminalManager>) -> HostLayout {
     match manager.get(window.label()) {
         Some(t) => t.layout_tree.host_snapshot(),
         None => HostLayout {
@@ -413,8 +407,12 @@ fn wm_close(
     let chrome = format!("{}-chrome", window.label());
     if let Some(wv) = app.get_webview(&chrome) {
         match &snap {
-            Some(s) => { wv.emit("wm:layout", s).ok(); }
-            None => { wv.emit("wm:layout", serde_json::Value::Null).ok(); }
+            Some(s) => {
+                wv.emit("wm:layout", s).ok();
+            }
+            None => {
+                wv.emit("wm:layout", serde_json::Value::Null).ok();
+            }
         }
     }
     Ok(snap)
@@ -696,7 +694,9 @@ async fn wm_switch_dashboard(
         .ok_or_else(|| DashboardError::Other {
             message: format!("terminal '{}' not found", window.label()),
         })?;
-    terminal.layout_tree.switch_dashboard(&name, &window, &app)?;
+    terminal
+        .layout_tree
+        .switch_dashboard(&name, &window, &app)?;
     {
         let mut inner = terminal.overlay.lock().unwrap();
         inner.stale = true;
@@ -826,11 +826,9 @@ fn wm_set_terminal_fdc3_channel(
     *terminal.fdc3_channel.write().unwrap() = channel_id.clone();
 
     if let Ok(data_dir) = app.path().app_data_dir() {
-        if let Err(e) = layout_persist::update_fdc3_channel(
-            window.label(),
-            channel_id.as_deref(),
-            &data_dir,
-        ) {
+        if let Err(e) =
+            layout_persist::update_fdc3_channel(window.label(), channel_id.as_deref(), &data_dir)
+        {
             eprintln!("[wm_set_terminal_fdc3_channel] persist: {e}");
         }
     }
@@ -869,9 +867,9 @@ fn wm_duplicate_dashboard_to(
 
     // Take the saved snapshot of the active dashboard (not the live layout,
     // which may have unsaved changes if auto_save is off).
-    let snapshot = source.layout_tree.with_dashboard_store_mut(|ds| {
-        ds.dashboards.get(&ds.active).cloned()
-    });
+    let snapshot = source
+        .layout_tree
+        .with_dashboard_store_mut(|ds| ds.dashboards.get(&ds.active).cloned());
     let Some(dashboard) = snapshot else {
         return Err("source has no active dashboard".into());
     };
@@ -1011,7 +1009,8 @@ pub fn run() {
                 .build()?;
 
             // Apply saved position if the window rect is reachable on screen.
-            if saved_window_config.width > 0.0 && saved_window_config.height > 0.0
+            if saved_window_config.width > 0.0
+                && saved_window_config.height > 0.0
                 && is_rect_on_any_monitor(
                     app.handle(),
                     saved_window_config.x,
@@ -1148,11 +1147,7 @@ pub fn run() {
             // Each saved terminal/<id>/dashboards.json becomes a new OS window
             // with its own layout and panel webviews. Skipped on fresh start.
             if !fresh_start {
-                terminal::spawn::load_persisted_terminals(
-                    &manager,
-                    app.handle(),
-                    pool_size,
-                );
+                terminal::spawn::load_persisted_terminals(&manager, app.handle(), pool_size);
             }
 
             // Emit the initial terminal list to all chrome webviews.
