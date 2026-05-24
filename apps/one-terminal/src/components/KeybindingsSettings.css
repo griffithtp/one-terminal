@@ -79,9 +79,26 @@
   color: var(--ot-danger-text);
 }
 
+/* ── Editor (no-shell variant — used by both the modal and the drawer) ────── */
+.kb-editor {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.kb-editor__toolbar {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: flex-end;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--ot-border-subtle);
+}
+
 /* ── Table ────────────────────────────────────────────────────────────────── */
 .kb-table-wrap {
   flex: 1 1 auto;
+  overflow-x: auto;
   overflow-y: auto;
 }
 .kb-table-wrap::-webkit-scrollbar {

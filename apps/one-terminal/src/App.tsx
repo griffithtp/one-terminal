@@ -33,6 +33,7 @@ import { OverlayApp } from "./components/OverlayApp";
 import { AppMenuSidebar, type SectionDef } from "./components/AppMenuSidebar";
 import { ThemeSection } from "./components/sections/ThemeSection";
 import { AddWidgetSection } from "./components/sections/AddWidgetSection";
+import { KeybindingsSection } from "./components/sections/KeybindingsSection";
 import { registerWidgetCommands, setActivePanelLabel } from "./commands/widgetCommands";
 import { initAppCommands } from "./commands/appCommands";
 import { applyKeybindingOverrides } from "./commands/keybindingStore";
@@ -291,6 +292,11 @@ function ChromeApp() {
             onSelect={handleSelectApp}
           />
         ),
+      },
+      {
+        id: "shortcuts",
+        label: "Shortcuts",
+        render: () => <KeybindingsSection />,
       },
       {
         id: "theme",
