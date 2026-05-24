@@ -21,6 +21,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useLayout } from "./hooks/useLayout";
 import { useHostLayout } from "./hooks/useHostLayout";
 import { useTabDrag } from "./hooks/useTabDrag";
+import { useAppLaunch } from "./hooks/useAppLaunch";
 import { Header } from "./components/Header";
 import { TabStripLayer } from "./components/TabStripLayer";
 import { SplitterHandleLayer } from "./components/SplitterHandleLayer";
@@ -252,6 +253,12 @@ function ChromeApp() {
     [openPanel]
   );
 
+  // Widget launch state machine — owns the app directory fetch, engine
+  // picker, and download confirmation. Picker/download dialogs are returned
+  // as ReactNodes and mounted at the root of the chrome so they survive
+  // sibling subtrees (e.g. drawer, header) being torn down mid-flow.
+  const launch = useAppLaunch({ onOpenTab: handleOpenTab });
+
   const handleClose = useCallback(
     (panelId: string) => {
       closePanel(panelId).catch(console.error);
@@ -266,7 +273,17 @@ function ChromeApp() {
       onPointerUp={handleTabPointerUp}
       onPointerCancel={handleTabPointerUp}
     >
-      <Header onOpenTab={handleOpenTab} dashboards={dashboards} />
+      <Header
+        apps={launch.apps}
+        enginesFor={launch.enginesFor}
+        onAppClick={launch.launchApp}
+        errorMessage={launch.errorMessage}
+        onClearError={launch.clearError}
+        dashboards={dashboards}
+      />
+
+      {launch.pickerNode}
+      {launch.downloadNode}
 
       {/* Per-panel headers — drag region + title + close button, painted in
           the top slice of every non-Stack leaf's rect. Stack members get
