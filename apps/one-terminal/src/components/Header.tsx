@@ -19,6 +19,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { AppRecord, EngineBinding } from "../types";
 import { DashboardSwitcher } from "./DashboardSwitcher";
 import type { UseDashboardsResult } from "../hooks/useDashboards";
+import { getTerminalConfig } from "../lib/terminalConfig";
 
 // ── FDC3 system channels ─────────────────────────────────────────────────────
 //
@@ -93,6 +94,8 @@ interface Props {
   onClearError: () => void;
   /** Dashboard state + actions from the parent's useDashboards() call. */
   dashboards: UseDashboardsResult;
+  /** Open / close the App Menu drawer (rendered by the parent). */
+  onMenuToggle: () => void;
 }
 
 export function Header({
@@ -102,13 +105,14 @@ export function Header({
   errorMessage,
   onClearError,
   dashboards,
+  onMenuToggle,
 }: Props) {
   const [channelId, setChannelId] = useState<string | null>(null);
   const [terminalTitle, setTerminalTitle] = useState<string>("OneTerminal");
 
   // Hydrate terminal title once for the brand label.
   useEffect(() => {
-    invoke<{ title?: string }>("wm_config")
+    getTerminalConfig()
       .then((c) => {
         if (c.title) setTerminalTitle(c.title);
       })
@@ -175,9 +179,19 @@ export function Header({
       onPointerDown={handleHeaderPointerDown}
       onDoubleClick={handleHeaderDoubleClick}
     >
-      <span className="wm-header__brand" data-tauri-drag-region>
-        {terminalTitle}
-      </span>
+      <button
+        type="button"
+        className="wm-header__brand-btn"
+        onClick={onMenuToggle}
+        title="Open menu"
+        aria-label="Open menu"
+        aria-haspopup="menu"
+      >
+        <span className="wm-header__brand-icon" aria-hidden>
+          ☰
+        </span>
+        <span className="wm-header__brand-label">{terminalTitle}</span>
+      </button>
 
       <DashboardSwitcher ds={dashboards} />
 

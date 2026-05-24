@@ -30,6 +30,8 @@ import { DropZoneLayer } from "./components/DropZoneLayer";
 import { PanelHeaderLayer } from "./components/PanelHeaderLayer";
 import { KeybindingsSettings } from "./components/KeybindingsSettings";
 import { OverlayApp } from "./components/OverlayApp";
+import { AppMenuSidebar, type SectionDef } from "./components/AppMenuSidebar";
+import { ThemeSection } from "./components/sections/ThemeSection";
 import { registerWidgetCommands, setActivePanelLabel } from "./commands/widgetCommands";
 import { initAppCommands } from "./commands/appCommands";
 import { applyKeybindingOverrides } from "./commands/keybindingStore";
@@ -103,11 +105,25 @@ export default function App() {
   return <ChromeApp />;
 }
 
+// App menu drawer sections. Module scope keeps the array identity stable so
+// AppMenuSidebar's section-tracking effects don't re-fire on every render.
+// 10-D/E/F/G will add Add Widget, Shortcuts, Dashboards, User Settings here.
+const MENU_SECTIONS: SectionDef[] = [
+  {
+    id: "theme",
+    label: "Theme",
+    render: () => <ThemeSection />,
+  },
+];
+
 function ChromeApp() {
   const { layout, openPanel, closePanel } = useLayout();
   const { host: hostLayout, removeTab } = useHostLayout();
   const tabDrag = useTabDrag();
   const dashboards = useDashboards();
+
+  // ── App menu drawer state ─────────────────────────────────────────────────
+  const [menuOpen, setMenuOpen] = useState(false);
 
   // ── Settings state ────────────────────────────────────────────────────────
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -280,6 +296,13 @@ function ChromeApp() {
         errorMessage={launch.errorMessage}
         onClearError={launch.clearError}
         dashboards={dashboards}
+        onMenuToggle={() => setMenuOpen((o) => !o)}
+      />
+
+      <AppMenuSidebar
+        open={menuOpen}
+        onClose={() => setMenuOpen(false)}
+        sections={MENU_SECTIONS}
       />
 
       {launch.pickerNode}
