@@ -31,9 +31,11 @@ import { PanelHeaderLayer } from "./components/PanelHeaderLayer";
 import { KeybindingsSettings } from "./components/KeybindingsSettings";
 import { OverlayApp } from "./components/OverlayApp";
 import { AppMenuSidebar, type SectionDef } from "./components/AppMenuSidebar";
+import { popPark, pushPark } from "./lib/parkPanels";
 import { ThemeSection } from "./components/sections/ThemeSection";
 import { AddWidgetSection } from "./components/sections/AddWidgetSection";
 import { KeybindingsSection } from "./components/sections/KeybindingsSection";
+import { DashboardsSection } from "./components/sections/DashboardsSection";
 import { registerWidgetCommands, setActivePanelLabel } from "./commands/widgetCommands";
 import { initAppCommands } from "./commands/appCommands";
 import { applyKeybindingOverrides } from "./commands/keybindingStore";
@@ -52,8 +54,8 @@ function TerminalCloseDialog() {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    const unlisten = listen("wm:confirm-close", async () => {
-      await invoke("wm_park_panels").catch(console.error);
+    const unlisten = listen("wm:confirm-close", () => {
+      pushPark();
       setVisible(true);
     });
     return () => {
@@ -64,11 +66,12 @@ function TerminalCloseDialog() {
   const handleConfirm = useCallback(() => {
     const label = getCurrentWindow().label;
     invoke("wm_close_terminal", { label }).catch(console.error);
+    popPark();
     setVisible(false);
   }, []);
 
   const handleCancel = useCallback(() => {
-    invoke("wm_unpark_panels").catch(console.error);
+    popPark();
     setVisible(false);
   }, []);
 
@@ -115,6 +118,26 @@ function ChromeApp() {
 
   // ── App menu drawer state ─────────────────────────────────────────────────
   const [menuOpen, setMenuOpen] = useState(false);
+  // `menuInitialSection` is non-null only when a deep link (e.g. "Manage…"
+  // on a dashboard pill) requested the drawer open at a specific section.
+  // Cleared on close so the next ordinary open uses the "remember last
+  // section" behaviour built into AppMenuSidebar.
+  const [menuInitialSection, setMenuInitialSection] = useState<string | undefined>(undefined);
+
+  const openMenuAt = useCallback((sectionId?: string) => {
+    setMenuInitialSection(sectionId);
+    setMenuOpen(true);
+  }, []);
+
+  const closeMenu = useCallback(() => {
+    setMenuOpen(false);
+    setMenuInitialSection(undefined);
+  }, []);
+
+  const toggleMenu = useCallback(() => {
+    if (menuOpen) closeMenu();
+    else openMenuAt();
+  }, [menuOpen, closeMenu, openMenuAt]);
 
   // ── Settings state ────────────────────────────────────────────────────────
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -128,15 +151,10 @@ function ChromeApp() {
   // chrome webview (below panel webviews in z-order) so panels must move out
   // of the way.  The command palette uses the overlay webview and does NOT
   // need panel parking.
-  const settingsParkedRef = useRef(false);
   useEffect(() => {
-    if (settingsOpen && !settingsParkedRef.current) {
-      settingsParkedRef.current = true;
-      invoke("wm_park_panels").catch(console.error);
-    } else if (!settingsOpen && settingsParkedRef.current) {
-      settingsParkedRef.current = false;
-      invoke("wm_unpark_panels").catch(console.error);
-    }
+    if (!settingsOpen) return;
+    pushPark();
+    return () => popPark();
   }, [settingsOpen]);
 
   // ── Command registry bootstrap (runs once per mount) ──────────────────────
@@ -294,6 +312,11 @@ function ChromeApp() {
         ),
       },
       {
+        id: "dashboards",
+        label: "Dashboards",
+        render: () => <DashboardsSection ds={dashboards} />,
+      },
+      {
         id: "shortcuts",
         label: "Shortcuts",
         render: () => <KeybindingsSection />,
@@ -304,7 +327,7 @@ function ChromeApp() {
         render: () => <ThemeSection />,
       },
     ],
-    [launch.apps, launch.enginesFor, handleSelectApp]
+    [launch.apps, launch.enginesFor, handleSelectApp, dashboards]
   );
 
   const handleClose = useCallback(
@@ -325,13 +348,15 @@ function ChromeApp() {
         errorMessage={launch.errorMessage}
         onClearError={launch.clearError}
         dashboards={dashboards}
-        onMenuToggle={() => setMenuOpen((o) => !o)}
+        onMenuToggle={toggleMenu}
+        onManageDashboards={() => openMenuAt("dashboards")}
       />
 
       <AppMenuSidebar
         open={menuOpen}
-        onClose={() => setMenuOpen(false)}
+        onClose={closeMenu}
         sections={menuSections}
+        defaultSectionId={menuInitialSection}
       />
 
       {launch.pickerNode}

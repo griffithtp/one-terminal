@@ -88,9 +88,17 @@ interface Props {
   dashboards: UseDashboardsResult;
   /** Open / close the App Menu drawer (rendered by the parent). */
   onMenuToggle: () => void;
+  /** Deep-link callback: open the drawer at the Dashboards section. */
+  onManageDashboards: () => void;
 }
 
-export function Header({ errorMessage, onClearError, dashboards, onMenuToggle }: Props) {
+export function Header({
+  errorMessage,
+  onClearError,
+  dashboards,
+  onMenuToggle,
+  onManageDashboards,
+}: Props) {
   const [channelId, setChannelId] = useState<string | null>(null);
   const [terminalTitle, setTerminalTitle] = useState<string>("OneTerminal");
 
@@ -177,7 +185,7 @@ export function Header({ errorMessage, onClearError, dashboards, onMenuToggle }:
         <span className="wm-header__brand-label">{terminalTitle}</span>
       </button>
 
-      <DashboardSwitcher ds={dashboards} />
+      <DashboardSwitcher ds={dashboards} onManageDashboards={onManageDashboards} />
 
       <ChannelSelector channelId={channelId} onPillClick={handleChannelPillClick} />
 

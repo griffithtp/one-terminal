@@ -1,24 +1,33 @@
 /**
  * DashboardSwitcher
  *
- * Horizontal pill strip rendered in the header. Lets the user switch between
- * named dashboards, create new ones, rename and delete them, and reorder via
- * drag-and-drop.
+ * Horizontal pill strip rendered in the header. Click a pill to switch.
+ * Right-click opens a "Manage…" entry that deep-links the App Menu drawer's
+ * Dashboards section, where full CRUD (rename, delete, reorder, auto-save
+ * toggle) lives. The header keeps a "+" for quick create and the unsaved-
+ * changes confirm dialog because both are triggered by header interactions.
  *
- * Dialogs (create, rename, unsaved-changes confirm) park panel webviews while
- * open so they're not occluded by content panels sitting above in z-order.
+ * Drag-to-reorder also lives in the drawer (↑ / ↓ buttons) — the header
+ * pill strip stays read-mostly so accidental drags don't reorder layouts
+ * while the user is just switching.
  */
 
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "react";
-import { invoke } from "@tauri-apps/api/core";
 import { registry } from "../commands/registry";
 import type { UseDashboardsResult, DashboardInfo } from "../hooks/useDashboards";
+import { popPark, pushPark } from "../lib/parkPanels";
 import "./DashboardSwitcher.css";
 
 // ── Props ─────────────────────────────────────────────────────────────────────
 
 interface Props {
   ds: UseDashboardsResult;
+  /**
+   * Deep-link into the App Menu drawer's Dashboards section. Called from
+   * the right-click context menu's "Manage…" item and from the
+   * `dashboard:rename` command palette entry.
+   */
+  onManageDashboards: () => void;
 }
 
 // ── Confirm dialog ─────────────────────────────────────────────────────────────
@@ -116,61 +125,6 @@ function CreateDialog({ onConfirm, onCancel }: CreateDialogProps) {
   );
 }
 
-// ── Rename dialog ─────────────────────────────────────────────────────────────
-
-interface RenameDialogProps {
-  currentName: string;
-  onConfirm: (newName: string) => void;
-  onCancel: () => void;
-}
-
-function RenameDialog({ currentName, onConfirm, onCancel }: RenameDialogProps) {
-  const [name, setName] = useState(currentName);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    inputRef.current?.select();
-  }, []);
-
-  const handleKeyDown = useCallback(
-    (e: KeyboardEvent<HTMLInputElement>) => {
-      if (e.key === "Enter" && name.trim() && name.trim() !== currentName) onConfirm(name.trim());
-      if (e.key === "Escape") onCancel();
-    },
-    [name, currentName, onConfirm, onCancel]
-  );
-
-  const canSubmit = name.trim().length > 0 && name.trim() !== currentName;
-
-  return (
-    <div className="wm-ds-dialog__backdrop" role="dialog" aria-modal="true">
-      <div className="wm-ds-dialog">
-        <div className="wm-ds-dialog__title">Rename Dashboard</div>
-        <input
-          ref={inputRef}
-          className="wm-ds-dialog__input"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          onKeyDown={handleKeyDown}
-        />
-        <div className="wm-ds-dialog__actions">
-          <button type="button" className="wm-ds-dialog__btn" onClick={onCancel}>
-            Cancel
-          </button>
-          <button
-            type="button"
-            className="wm-ds-dialog__btn wm-ds-dialog__btn--primary"
-            disabled={!canSubmit}
-            onClick={() => canSubmit && onConfirm(name.trim())}
-          >
-            Rename
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ── Context menu ──────────────────────────────────────────────────────────────
 
 interface CtxMenu {
@@ -181,36 +135,20 @@ interface CtxMenu {
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function DashboardSwitcher({ ds }: Props) {
-  const {
-    dashboards,
-    pendingSwitch,
-    switchTo,
-    confirmSave,
-    confirmDiscard,
-    cancelSwitch,
-    create,
-    rename,
-    remove,
-    reorder,
-  } = ds;
+export function DashboardSwitcher({ ds, onManageDashboards }: Props) {
+  const { dashboards, pendingSwitch, switchTo, confirmSave, confirmDiscard, cancelSwitch, create } =
+    ds;
 
   // ── Dialog visibility ─────────────────────────────────────────────────────
   const [creating, setCreating] = useState(false);
-  const [renaming, setRenaming] = useState<string | null>(null); // dashboard name being renamed
   const [ctxMenu, setCtxMenu] = useState<CtxMenu | null>(null);
 
-  // ── Park panels while any dialog is open ─────────────────────────────────
-  const dialogOpen = creating || renaming !== null || pendingSwitch !== null;
-  const parkedRef = useRef(false);
+  // ── Park panels while any dialog is open (refcounted via parkPanels) ─────
+  const dialogOpen = creating || pendingSwitch !== null;
   useEffect(() => {
-    if (dialogOpen && !parkedRef.current) {
-      parkedRef.current = true;
-      invoke("wm_park_panels").catch(console.error);
-    } else if (!dialogOpen && parkedRef.current) {
-      parkedRef.current = false;
-      invoke("wm_unpark_panels").catch(console.error);
-    }
+    if (!dialogOpen) return;
+    pushPark();
+    return () => popPark();
   }, [dialogOpen]);
 
   // ── Close context menu on outside click ───────────────────────────────────
@@ -220,45 +158,6 @@ export function DashboardSwitcher({ ds }: Props) {
     window.addEventListener("pointerdown", close, { capture: true });
     return () => window.removeEventListener("pointerdown", close, { capture: true });
   }, [ctxMenu]);
-
-  // ── Drag-to-reorder ───────────────────────────────────────────────────────
-  const dragSourceRef = useRef<string | null>(null);
-  const [dragOverName, setDragOverName] = useState<string | null>(null);
-
-  const handleDragStart = useCallback((name: string) => {
-    dragSourceRef.current = name;
-  }, []);
-
-  const handleDragOver = useCallback((e: React.DragEvent, name: string) => {
-    e.preventDefault();
-    if (dragSourceRef.current !== name) setDragOverName(name);
-  }, []);
-
-  const handleDrop = useCallback(
-    (e: React.DragEvent, targetName: string) => {
-      e.preventDefault();
-      setDragOverName(null);
-      const source = dragSourceRef.current;
-      dragSourceRef.current = null;
-      if (!source || source === targetName) return;
-
-      const names = dashboards.map((d) => d.name);
-      const fromIdx = names.indexOf(source);
-      const toIdx = names.indexOf(targetName);
-      if (fromIdx === -1 || toIdx === -1) return;
-
-      const next = [...names];
-      next.splice(fromIdx, 1);
-      next.splice(toIdx, 0, source);
-      reorder(next).catch(console.error);
-    },
-    [dashboards, reorder]
-  );
-
-  const handleDragEnd = useCallback(() => {
-    dragSourceRef.current = null;
-    setDragOverName(null);
-  }, []);
 
   // ── Context menu ──────────────────────────────────────────────────────────
   const handleContextMenu = useCallback((e: React.MouseEvent, name: string) => {
@@ -277,33 +176,13 @@ export function DashboardSwitcher({ ds }: Props) {
     [create, switchTo]
   );
 
-  // ── Rename ────────────────────────────────────────────────────────────────
-  const handleRename = useCallback(
-    (newName: string) => {
-      const old = renaming;
-      setRenaming(null);
-      if (!old) return;
-      rename(old, newName).catch(console.error);
-    },
-    [renaming, rename]
-  );
-
-  // ── Delete ────────────────────────────────────────────────────────────────
-  const handleDelete = useCallback(
-    (name: string) => {
-      setCtxMenu(null);
-      remove(name).catch(console.error);
-    },
-    [remove]
-  );
-
   // ── Command palette entries that need component state ─────────────────────
+  // `dashboard:rename` now deep-links the drawer's Dashboards section rather
+  // than opening an inline rename dialog — rename UI moved to DashboardsSection.
   const setCreatingRef = useRef(setCreating);
-  const setRenamingRef = useRef(setRenaming);
-  const dashboardsRef = useRef(dashboards);
+  const onManageRef = useRef(onManageDashboards);
   setCreatingRef.current = setCreating;
-  setRenamingRef.current = setRenaming;
-  dashboardsRef.current = dashboards;
+  onManageRef.current = onManageDashboards;
 
   useEffect(() => {
     registry.register({
@@ -316,13 +195,9 @@ export function DashboardSwitcher({ ds }: Props) {
     registry.register({
       id: "dashboard:rename",
       label: "Rename current dashboard",
-      keywords: ["rename", "dashboard"],
+      keywords: ["rename", "dashboard", "manage"],
       group: "navigation",
-      isAvailable: () => dashboardsRef.current.length > 0,
-      action: () => {
-        const active = dashboardsRef.current.find((d) => d.active);
-        if (active) setRenamingRef.current(active.name);
-      },
+      action: () => onManageRef.current(),
     });
     return () => {
       registry.unregister("dashboard:create");
@@ -346,14 +221,8 @@ export function DashboardSwitcher({ ds }: Props) {
               <Pill
                 key={d.name}
                 info={d}
-                dragOver={dragOverName === d.name}
                 onClick={() => switchTo(d.name).catch(console.error)}
-                onClose={() => handleDelete(d.name)}
                 onContextMenu={(e) => handleContextMenu(e, d.name)}
-                onDragStart={() => handleDragStart(d.name)}
-                onDragOver={(e) => handleDragOver(e, d.name)}
-                onDrop={(e) => handleDrop(e, d.name)}
-                onDragEnd={handleDragEnd}
               />
             ))
           )}
@@ -382,34 +251,19 @@ export function DashboardSwitcher({ ds }: Props) {
       {/* New dashboard dialog */}
       {creating && <CreateDialog onConfirm={handleCreate} onCancel={() => setCreating(false)} />}
 
-      {/* Rename dialog */}
-      {renaming !== null && (
-        <RenameDialog
-          currentName={renaming}
-          onConfirm={handleRename}
-          onCancel={() => setRenaming(null)}
-        />
-      )}
-
-      {/* Right-click context menu */}
+      {/* Right-click context menu — single "Manage…" item that deep-links
+          the drawer's Dashboards section for rename / delete / reorder. */}
       {ctxMenu && (
         <div className="wm-ds-ctx" style={{ top: ctxMenu.y, left: ctxMenu.x }}>
           <button
             type="button"
             className="wm-ds-ctx__item"
             onClick={() => {
-              setRenaming(ctxMenu.name);
               setCtxMenu(null);
+              onManageDashboards();
             }}
           >
-            Rename
-          </button>
-          <button
-            type="button"
-            className="wm-ds-ctx__item wm-ds-ctx__item--danger"
-            onClick={() => handleDelete(ctxMenu.name)}
-          >
-            Delete
+            Manage…
           </button>
         </div>
       )}
@@ -421,44 +275,19 @@ export function DashboardSwitcher({ ds }: Props) {
 
 interface PillProps {
   info: DashboardInfo;
-  dragOver: boolean;
   onClick: () => void;
-  onClose: () => void;
   onContextMenu: (e: React.MouseEvent) => void;
-  onDragStart: () => void;
-  onDragOver: (e: React.DragEvent) => void;
-  onDrop: (e: React.DragEvent) => void;
-  onDragEnd: () => void;
 }
 
-function Pill({
-  info,
-  dragOver,
-  onClick,
-  onClose,
-  onContextMenu,
-  onDragStart,
-  onDragOver,
-  onDrop,
-  onDragEnd,
-}: PillProps) {
-  const classes = [
-    "wm-ds__pill",
-    info.active ? "wm-ds__pill--active" : "",
-    dragOver ? "wm-ds__pill--drag-over" : "",
-  ]
+function Pill({ info, onClick, onContextMenu }: PillProps) {
+  const classes = ["wm-ds__pill", info.active ? "wm-ds__pill--active" : ""]
     .filter(Boolean)
     .join(" ");
 
   return (
     <span
       className={classes}
-      draggable
       onContextMenu={onContextMenu}
-      onDragStart={onDragStart}
-      onDragOver={onDragOver}
-      onDrop={onDrop}
-      onDragEnd={onDragEnd}
       title={info.dirty ? `${info.name} (unsaved changes)` : info.name}
     >
       {info.dirty && <span className="wm-ds__dirty" aria-label="unsaved changes" />}
@@ -469,17 +298,6 @@ function Pill({
         aria-current={info.active ? "page" : undefined}
       >
         {info.name}
-      </button>
-      <button
-        type="button"
-        className="wm-ds__pill-close"
-        aria-label={`Close ${info.name}`}
-        onClick={(e) => {
-          e.stopPropagation();
-          onClose();
-        }}
-      >
-        ✕
       </button>
     </span>
   );

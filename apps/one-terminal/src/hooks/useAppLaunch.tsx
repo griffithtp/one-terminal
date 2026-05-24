@@ -14,7 +14,7 @@
  * panel covers the dialog).
  */
 
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { AppRecord, EngineBinding, OsKey } from "../types";
@@ -24,6 +24,7 @@ import {
   type DownloadEvent,
 } from "../components/DownloadPromptDialog";
 import { getTerminalConfig } from "../lib/terminalConfig";
+import { popPark, pushPark } from "../lib/parkPanels";
 
 // ── Tauri-side EngineStatus payload ──────────────────────────────────────────
 //
@@ -109,15 +110,10 @@ export function useAppLaunch({ onOpenTab }: UseAppLaunchOpts): UseAppLaunchResul
 
   // ── Park panels while any picker / download dialog is open ──────────────
   const dialogOpen = pickerApp !== null || downloadPrompt !== null;
-  const lastParkedRef = useRef(false);
   useEffect(() => {
-    if (dialogOpen && !lastParkedRef.current) {
-      lastParkedRef.current = true;
-      invoke("wm_park_panels").catch(console.error);
-    } else if (!dialogOpen && lastParkedRef.current) {
-      lastParkedRef.current = false;
-      invoke("wm_unpark_panels").catch(console.error);
-    }
+    if (!dialogOpen) return;
+    pushPark();
+    return () => popPark();
   }, [dialogOpen]);
 
   // ── Listen for download progress while a download is in flight ───────────

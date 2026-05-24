@@ -16,8 +16,8 @@
  * lazily — sections that haven't been visited never mount.
  */
 
-import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import { invoke } from "@tauri-apps/api/core";
+import { type ReactNode, useCallback, useEffect, useState } from "react";
+import { popPark, pushPark } from "../lib/parkPanels";
 import "./AppMenuSidebar.css";
 
 export interface SectionDef {
@@ -61,16 +61,13 @@ export function AppMenuSidebar({ open, onClose, sections, defaultSectionId }: Pr
   // Park panels while the drawer is *mounted* (covers both entering and
   // exiting animations). The panel webviews sit above the chrome in z-order,
   // so without parking the user could click through the backdrop onto a
-  // widget while the drawer is sliding out.
-  const parkedRef = useRef(false);
+  // widget while the drawer is sliding out. Refcounted via parkPanels so the
+  // shared park state is correct when nested dialogs (e.g. unsaved-changes
+  // confirm) also call pushPark.
   useEffect(() => {
-    if (mounted && !parkedRef.current) {
-      parkedRef.current = true;
-      invoke("wm_park_panels").catch(console.error);
-    } else if (!mounted && parkedRef.current) {
-      parkedRef.current = false;
-      invoke("wm_unpark_panels").catch(console.error);
-    }
+    if (!mounted) return;
+    pushPark();
+    return () => popPark();
   }, [mounted]);
 
   // Escape to close
