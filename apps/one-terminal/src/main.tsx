@@ -3,6 +3,11 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import { initWidgetInstanceCommands } from "./commands/widgetInstanceCommands";
 import { initKeyboardListener, initGlobalShortcutListener } from "./commands/keyboardListener";
+import { applyTheme, loadTheme } from "./theme/themeStore";
+
+// Apply persisted theme before the first React render so the first paint
+// matches the user's choice (no flash from default → preferred).
+applyTheme(loadTheme());
 
 // In-process keyboard listener: fires when the chrome webview has focus.
 initKeyboardListener();
