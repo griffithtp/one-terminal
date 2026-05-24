@@ -57,9 +57,7 @@ export function ThemeSection() {
           const selected = choice === opt.value;
           return (
             <li key={opt.value}>
-              <label
-                className={`ot-theme-option${selected ? " ot-theme-option--selected" : ""}`}
-              >
+              <label className={`ot-theme-option${selected ? " ot-theme-option--selected" : ""}`}>
                 <input
                   type="radio"
                   name="ot-theme"

@@ -54,8 +54,14 @@ export function UserSettingsSection() {
     return () => clearInterval(t);
   }, []);
 
-  const previewDate = useMemo(() => formatDate(now, settings.dateFormat), [now, settings.dateFormat]);
-  const previewTime = useMemo(() => formatTime(now, settings.timeFormat), [now, settings.timeFormat]);
+  const previewDate = useMemo(
+    () => formatDate(now, settings.dateFormat),
+    [now, settings.dateFormat]
+  );
+  const previewTime = useMemo(
+    () => formatTime(now, settings.timeFormat),
+    [now, settings.timeFormat]
+  );
 
   return (
     <div className="ot-user-settings">

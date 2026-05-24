@@ -19,10 +19,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { AppRecord, EngineBinding, OsKey } from "../types";
 import { EnginePickerDialog } from "../components/EnginePickerDialog";
-import {
-  DownloadPromptDialog,
-  type DownloadEvent,
-} from "../components/DownloadPromptDialog";
+import { DownloadPromptDialog, type DownloadEvent } from "../components/DownloadPromptDialog";
 import { getTerminalConfig } from "../lib/terminalConfig";
 import { popPark, pushPark } from "../lib/parkPanels";
 

@@ -19,14 +19,7 @@
  * dialog rendered by `DashboardSwitcher` in the header.
  */
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type KeyboardEvent,
-} from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import type { UseDashboardsResult } from "../../hooks/useDashboards";
 import "./DashboardsSection.css";
 
@@ -231,11 +224,7 @@ export function DashboardsSection({ ds }: Props) {
                       >
                         Save
                       </button>
-                      <button
-                        type="button"
-                        className="ot-dashboards__btn"
-                        onClick={cancelRename}
-                      >
+                      <button type="button" className="ot-dashboards__btn" onClick={cancelRename}>
                         Cancel
                       </button>
                     </>

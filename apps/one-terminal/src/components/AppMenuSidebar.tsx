@@ -107,11 +107,7 @@ export function AppMenuSidebar({ open, onClose, sections, defaultSectionId }: Pr
 
   return (
     <>
-      <div
-        className={`ot-menu-backdrop${openClass}`}
-        onClick={handleBackdropClick}
-        aria-hidden
-      />
+      <div className={`ot-menu-backdrop${openClass}`} onClick={handleBackdropClick} aria-hidden />
       <aside
         className={`ot-menu-panel${openClass}`}
         role="dialog"
