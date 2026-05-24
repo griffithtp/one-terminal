@@ -1,0 +1,120 @@
+.ot-add-widget {
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  gap: 12px;
+  color: var(--ot-text-strong);
+}
+
+.ot-add-widget__head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ot-add-widget__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ot-text-strongest);
+  margin: 0;
+}
+
+.ot-add-widget__subtitle {
+  font-size: 12px;
+  color: var(--ot-text-secondary);
+  margin: 0;
+}
+
+.ot-add-widget__search {
+  width: 100%;
+  padding: 6px 10px;
+  background: var(--ot-bg-elevated);
+  border: 1px solid var(--ot-border-default);
+  border-radius: 4px;
+  color: var(--ot-text-strong);
+  font-size: 12px;
+  font-family: inherit;
+  outline: none;
+  margin-top: 4px;
+  transition: border-color 100ms;
+}
+.ot-add-widget__search:focus {
+  border-color: var(--ot-accent);
+}
+.ot-add-widget__search::placeholder {
+  color: var(--ot-text-muted);
+}
+.ot-add-widget__search::-webkit-search-cancel-button {
+  cursor: pointer;
+}
+
+.ot-add-widget__list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ot-add-widget__empty {
+  padding: 24px 8px;
+  font-size: 12px;
+  color: var(--ot-text-muted);
+  text-align: center;
+}
+
+.ot-add-widget__card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  padding: 10px 12px;
+  background: var(--ot-bg-elevated);
+  border: 1px solid var(--ot-border-default);
+  border-radius: 6px;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  transition:
+    background 100ms,
+    border-color 100ms;
+}
+.ot-add-widget__card:hover {
+  background: var(--ot-bg-elevated-hover);
+  border-color: var(--ot-border-strong);
+}
+.ot-add-widget__card:focus-visible {
+  outline: 2px solid var(--ot-accent);
+  outline-offset: 1px;
+}
+
+.ot-add-widget__card-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ot-add-widget__card-title {
+  flex: 1 1 auto;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ot-text-strong);
+}
+
+.ot-add-widget__card-badge {
+  flex: 0 0 auto;
+  font-size: 10px;
+  color: var(--ot-text-muted);
+}
+
+.ot-add-widget__card-desc {
+  font-size: 11px;
+  color: var(--ot-text-secondary);
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}

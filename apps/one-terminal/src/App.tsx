@@ -14,7 +14,7 @@
  * z-ordering naturally routes events to the correct webview.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -32,12 +32,13 @@ import { KeybindingsSettings } from "./components/KeybindingsSettings";
 import { OverlayApp } from "./components/OverlayApp";
 import { AppMenuSidebar, type SectionDef } from "./components/AppMenuSidebar";
 import { ThemeSection } from "./components/sections/ThemeSection";
+import { AddWidgetSection } from "./components/sections/AddWidgetSection";
 import { registerWidgetCommands, setActivePanelLabel } from "./commands/widgetCommands";
 import { initAppCommands } from "./commands/appCommands";
 import { applyKeybindingOverrides } from "./commands/keybindingStore";
 import { registry } from "./commands/registry";
 import { useDashboards } from "./hooks/useDashboards";
-import type { EngineBinding, StackHeader } from "./types";
+import type { AppRecord, EngineBinding, StackHeader } from "./types";
 import "./wm.css";
 
 // ── TerminalCloseDialog ───────────────────────────────────────────────────────
@@ -104,17 +105,6 @@ export default function App() {
   }
   return <ChromeApp />;
 }
-
-// App menu drawer sections. Module scope keeps the array identity stable so
-// AppMenuSidebar's section-tracking effects don't re-fire on every render.
-// 10-D/E/F/G will add Add Widget, Shortcuts, Dashboards, User Settings here.
-const MENU_SECTIONS: SectionDef[] = [
-  {
-    id: "theme",
-    label: "Theme",
-    render: () => <ThemeSection />,
-  },
-];
 
 function ChromeApp() {
   const { layout, openPanel, closePanel } = useLayout();
@@ -275,6 +265,42 @@ function ChromeApp() {
   // sibling subtrees (e.g. drawer, header) being torn down mid-flow.
   const launch = useAppLaunch({ onOpenTab: handleOpenTab });
 
+  // Picking an app from the drawer launches it AND closes the drawer so the
+  // new widget is immediately visible. Any picker / download dialog that
+  // useAppLaunch opens lives at the App root and survives drawer close.
+  const handleSelectApp = useCallback(
+    (app: AppRecord) => {
+      launch.launchApp(app);
+      setMenuOpen(false);
+    },
+    [launch]
+  );
+
+  // App menu drawer sections. Memoised so AppMenuSidebar's section-tracking
+  // effects only re-fire when something genuinely changes. 10-E/F/G add
+  // Shortcuts, Dashboards, User Settings.
+  const menuSections = useMemo<SectionDef[]>(
+    () => [
+      {
+        id: "add-widget",
+        label: "Add Widget",
+        render: () => (
+          <AddWidgetSection
+            apps={launch.apps}
+            enginesFor={launch.enginesFor}
+            onSelect={handleSelectApp}
+          />
+        ),
+      },
+      {
+        id: "theme",
+        label: "Theme",
+        render: () => <ThemeSection />,
+      },
+    ],
+    [launch.apps, launch.enginesFor, handleSelectApp]
+  );
+
   const handleClose = useCallback(
     (panelId: string) => {
       closePanel(panelId).catch(console.error);
@@ -290,9 +316,6 @@ function ChromeApp() {
       onPointerCancel={handleTabPointerUp}
     >
       <Header
-        apps={launch.apps}
-        enginesFor={launch.enginesFor}
-        onAppClick={launch.launchApp}
         errorMessage={launch.errorMessage}
         onClearError={launch.clearError}
         dashboards={dashboards}
@@ -302,7 +325,7 @@ function ChromeApp() {
       <AppMenuSidebar
         open={menuOpen}
         onClose={() => setMenuOpen(false)}
-        sections={MENU_SECTIONS}
+        sections={menuSections}
       />
 
       {launch.pickerNode}

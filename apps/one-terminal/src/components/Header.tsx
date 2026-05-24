@@ -3,20 +3,18 @@
  *
  * 40 px toolbar that sits at the top of the chrome webview.
  *
- * The widget launch flow (app directory fetch, engine picker, download
- * confirmation) is owned by `useAppLaunch` in the parent. Header receives
- * the resolved `apps` list plus `enginesFor` / `onAppClick` and just
- * renders the launch buttons — clicks delegate back to the hook.
- *
- * The error banner mirrors the hook's `errorMessage`; clearing dismisses
- * via `onClearError`.
+ * After Plan 10, the header is intentionally minimal: brand/menu button on
+ * the left, dashboard switcher, FDC3 channel pill, optional launch-error
+ * banner, then window controls on the right. Widget launching moved into
+ * the App Menu drawer's Add Widget section (see AppMenuSidebar). Launch
+ * errors still surface here via `errorMessage` / `onClearError` because
+ * the header is the always-visible status surface.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import type { AppRecord, EngineBinding } from "../types";
 import { DashboardSwitcher } from "./DashboardSwitcher";
 import type { UseDashboardsResult } from "../hooks/useDashboards";
 import { getTerminalConfig } from "../lib/terminalConfig";
@@ -82,12 +80,6 @@ function ChannelSelector({ channelId, onPillClick }: ChannelSelectorProps) {
 }
 
 interface Props {
-  /** Apps registered in the App Directory (resolved by useAppLaunch). */
-  apps: AppRecord[];
-  /** Engine bindings declared by an app for the current OS. */
-  enginesFor: (app: AppRecord) => EngineBinding[];
-  /** Launches the app — picker / download flow runs inside useAppLaunch. */
-  onAppClick: (app: AppRecord) => void;
   /** Most recent launch error from useAppLaunch (null when clean). */
   errorMessage: string | null;
   /** Dismiss the inline error banner. */
@@ -98,15 +90,7 @@ interface Props {
   onMenuToggle: () => void;
 }
 
-export function Header({
-  apps,
-  enginesFor,
-  onAppClick,
-  errorMessage,
-  onClearError,
-  dashboards,
-  onMenuToggle,
-}: Props) {
+export function Header({ errorMessage, onClearError, dashboards, onMenuToggle }: Props) {
   const [channelId, setChannelId] = useState<string | null>(null);
   const [terminalTitle, setTerminalTitle] = useState<string>("OneTerminal");
 
@@ -197,31 +181,9 @@ export function Header({
 
       <ChannelSelector channelId={channelId} onPillClick={handleChannelPillClick} />
 
-      <div className="wm-header__apps">
-        {apps.map((app) => {
-          const engineCount = enginesFor(app).length;
-          const baseTitle = app.description ?? "Open as tab";
-          const tooltip =
-            engineCount > 1
-              ? `${baseTitle} — choose browser engine (${engineCount} available)`
-              : baseTitle;
-          return (
-            <button
-              key={app.appId}
-              className="wm-header__app-btn"
-              title={tooltip}
-              onClick={() => onAppClick(app)}
-            >
-              {app.title ?? app.name}
-              {engineCount > 1 && (
-                <span className="wm-header__app-btn-badge" aria-hidden>
-                  ▾
-                </span>
-              )}
-            </button>
-          );
-        })}
-      </div>
+      {/* Spacer pushes window controls to the right and absorbs unused
+          horizontal space as a drag region. */}
+      <div className="wm-header__spacer" data-tauri-drag-region />
 
       {errorMessage && (
         <div className="wm-header__error" role="alert">

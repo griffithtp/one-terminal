@@ -234,6 +234,15 @@ body,
   gap: 4px;
 }
 
+/* Flex spacer between the channel selector and window controls. Absorbs
+   leftover horizontal space and serves as a drag region so the user can
+   grab the empty header area to move the window. */
+.wm-header__spacer {
+  flex: 1 1 auto;
+  align-self: stretch;
+  min-width: 0;
+}
+
 /* ── FDC3 channel selector pill (chrome webview) ────────────────────────── */
 
 .wm-channel-selector__pill {
