@@ -36,6 +36,7 @@ import { ThemeSection } from "./components/sections/ThemeSection";
 import { AddWidgetSection } from "./components/sections/AddWidgetSection";
 import { KeybindingsSection } from "./components/sections/KeybindingsSection";
 import { DashboardsSection } from "./components/sections/DashboardsSection";
+import { UserSettingsSection } from "./components/sections/UserSettingsSection";
 import { registerWidgetCommands, setActivePanelLabel } from "./commands/widgetCommands";
 import { initAppCommands } from "./commands/appCommands";
 import { applyKeybindingOverrides } from "./commands/keybindingStore";
@@ -325,6 +326,11 @@ function ChromeApp() {
         id: "theme",
         label: "Theme",
         render: () => <ThemeSection />,
+      },
+      {
+        id: "user-settings",
+        label: "User Settings",
+        render: () => <UserSettingsSection />,
       },
     ],
     [launch.apps, launch.enginesFor, handleSelectApp, dashboards]

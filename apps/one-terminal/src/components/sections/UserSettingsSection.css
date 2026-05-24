@@ -1,0 +1,103 @@
+.ot-user-settings {
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  gap: 12px;
+  color: var(--ot-text-strong);
+}
+
+.ot-user-settings__head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ot-user-settings__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ot-text-strongest);
+  margin: 0;
+}
+
+.ot-user-settings__subtitle {
+  font-size: 12px;
+  color: var(--ot-text-secondary);
+  margin: 0;
+  line-height: 1.4;
+}
+
+/* ── Labelled select field ─────────────────────────────────────────────────── */
+.ot-user-settings__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ot-user-settings__field-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ot-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.ot-user-settings__select {
+  width: 100%;
+  padding: 6px 10px;
+  background: var(--ot-bg-elevated);
+  border: 1px solid var(--ot-border-default);
+  border-radius: 4px;
+  color: var(--ot-text-strong);
+  font-size: 12px;
+  font-family: inherit;
+  outline: none;
+  cursor: pointer;
+  transition:
+    background 100ms,
+    border-color 100ms;
+  /* Use the platform select chevron so the field looks native; theme tokens
+     still control surface + border. */
+}
+.ot-user-settings__select:hover {
+  background: var(--ot-bg-elevated-hover);
+}
+.ot-user-settings__select:focus {
+  border-color: var(--ot-accent);
+}
+
+/* ── Live preview ──────────────────────────────────────────────────────────── */
+.ot-user-settings__preview {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+  padding: 12px;
+  background: var(--ot-bg-elevated);
+  border: 1px solid var(--ot-border-default);
+  border-radius: 6px;
+}
+
+.ot-user-settings__preview-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--ot-text-muted);
+}
+
+.ot-user-settings__preview-line {
+  font-size: 13px;
+  color: var(--ot-text-strong);
+}
+
+.ot-user-settings__preview-line strong {
+  font-family:
+    ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-weight: 600;
+  color: var(--ot-text-strongest);
+}
+
+.ot-user-settings__preview-line--muted {
+  font-size: 11px;
+  color: var(--ot-text-secondary);
+}
