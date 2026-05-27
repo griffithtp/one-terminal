@@ -14,7 +14,7 @@
  * z-ordering naturally routes events to the correct webview.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -30,13 +30,7 @@ import { DropZoneLayer } from "./components/DropZoneLayer";
 import { PanelHeaderLayer } from "./components/PanelHeaderLayer";
 import { KeybindingsSettings } from "./components/KeybindingsSettings";
 import { OverlayApp } from "./components/OverlayApp";
-import { AppMenuSidebar, type SectionDef } from "./components/AppMenuSidebar";
 import { popPark, pushPark } from "./lib/parkPanels";
-import { ThemeSection } from "./components/sections/ThemeSection";
-import { AddWidgetSection } from "./components/sections/AddWidgetSection";
-import { KeybindingsSection } from "./components/sections/KeybindingsSection";
-import { DashboardsSection } from "./components/sections/DashboardsSection";
-import { UserSettingsSection } from "./components/sections/UserSettingsSection";
 import { registerWidgetCommands, setActivePanelLabel } from "./commands/widgetCommands";
 import { initAppCommands } from "./commands/appCommands";
 import { applyKeybindingOverrides } from "./commands/keybindingStore";
@@ -118,27 +112,38 @@ function ChromeApp() {
   const dashboards = useDashboards();
 
   // ── App menu drawer state ─────────────────────────────────────────────────
+  // The drawer is rendered inside the overlay webview (above panels in
+  // z-order). Chrome only tracks whether it's open so the brand button can
+  // toggle correctly; opening invokes `wm_menu_open` which raises the
+  // overlay and emits `wm:menu-open` for OverlayMenu to listen to. Closing
+  // happens overlay-side via `wm_ctx_menu_close`; OverlayMenu emits
+  // `wm:menu-closed` so chrome syncs `menuOpen` back to false.
   const [menuOpen, setMenuOpen] = useState(false);
-  // `menuInitialSection` is non-null only when a deep link (e.g. "Manage…"
-  // on a dashboard pill) requested the drawer open at a specific section.
-  // Cleared on close so the next ordinary open uses the "remember last
-  // section" behaviour built into AppMenuSidebar.
-  const [menuInitialSection, setMenuInitialSection] = useState<string | undefined>(undefined);
 
   const openMenuAt = useCallback((sectionId?: string) => {
-    setMenuInitialSection(sectionId);
     setMenuOpen(true);
-  }, []);
-
-  const closeMenu = useCallback(() => {
-    setMenuOpen(false);
-    setMenuInitialSection(undefined);
+    invoke("wm_menu_open", { initialSectionId: sectionId }).catch(console.error);
   }, []);
 
   const toggleMenu = useCallback(() => {
-    if (menuOpen) closeMenu();
-    else openMenuAt();
-  }, [menuOpen, closeMenu, openMenuAt]);
+    if (menuOpen) {
+      // Overlay-side dismiss path is the source of truth; just trigger it.
+      invoke("wm_ctx_menu_close").catch(console.error);
+      setMenuOpen(false);
+    } else {
+      openMenuAt();
+    }
+  }, [menuOpen, openMenuAt]);
+
+  // Sync `menuOpen=false` when the overlay reports a dismiss (Escape /
+  // backdrop / close button / app-launch). Without this, the brand button
+  // would think the drawer is still open and try to close-then-reopen.
+  useEffect(() => {
+    const unlisten = listen("wm:menu-closed", () => setMenuOpen(false));
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, []);
 
   // ── Settings state ────────────────────────────────────────────────────────
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -285,56 +290,20 @@ function ChromeApp() {
   // sibling subtrees (e.g. drawer, header) being torn down mid-flow.
   const launch = useAppLaunch({ onOpenTab: handleOpenTab });
 
-  // Picking an app from the drawer launches it AND closes the drawer so the
-  // new widget is immediately visible. Any picker / download dialog that
-  // useAppLaunch opens lives at the App root and survives drawer close.
-  const handleSelectApp = useCallback(
-    (app: AppRecord) => {
-      launch.launchApp(app);
-      setMenuOpen(false);
-    },
-    [launch]
-  );
-
-  // App menu drawer sections. Memoised so AppMenuSidebar's section-tracking
-  // effects only re-fire when something genuinely changes. 10-E/F/G add
-  // Shortcuts, Dashboards, User Settings.
-  const menuSections = useMemo<SectionDef[]>(
-    () => [
-      {
-        id: "add-widget",
-        label: "Add Widget",
-        render: () => (
-          <AddWidgetSection
-            apps={launch.apps}
-            enginesFor={launch.enginesFor}
-            onSelect={handleSelectApp}
-          />
-        ),
-      },
-      {
-        id: "dashboards",
-        label: "Dashboards",
-        render: () => <DashboardsSection ds={dashboards} />,
-      },
-      {
-        id: "shortcuts",
-        label: "Shortcuts",
-        render: () => <KeybindingsSection />,
-      },
-      {
-        id: "theme",
-        label: "Theme",
-        render: () => <ThemeSection />,
-      },
-      {
-        id: "user-settings",
-        label: "User Settings",
-        render: () => <UserSettingsSection />,
-      },
-    ],
-    [launch.apps, launch.enginesFor, handleSelectApp, dashboards]
-  );
+  // Bridge for app launches initiated from the overlay drawer. The drawer
+  // emits `wm:launch-app-from-menu` with the full AppRecord; chrome runs
+  // the launch through useAppLaunch so the picker / download dialogs
+  // render in chrome (parked correctly via existing chrome parking).
+  const launchAppRef = useRef(launch.launchApp);
+  launchAppRef.current = launch.launchApp;
+  useEffect(() => {
+    const unlisten = listen<{ app: AppRecord }>("wm:launch-app-from-menu", (e) => {
+      launchAppRef.current(e.payload.app);
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, []);
 
   const handleClose = useCallback(
     (panelId: string) => {
@@ -358,12 +327,7 @@ function ChromeApp() {
         onManageDashboards={() => openMenuAt("dashboards")}
       />
 
-      <AppMenuSidebar
-        open={menuOpen}
-        onClose={closeMenu}
-        sections={menuSections}
-        defaultSectionId={menuInitialSection}
-      />
+      {/* Drawer renders inside the overlay webview — see OverlayMenu. */}
 
       {launch.pickerNode}
       {launch.downloadNode}

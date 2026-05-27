@@ -676,6 +676,32 @@ async fn wm_overflow_menu_open(
         .map_err(|e| e.to_string())
 }
 
+/// Open the App Menu drawer in the overlay webview. Uses the same
+/// overlay_raise mechanism as the palette / context menu so the drawer
+/// sits above all panel webviews — widgets stay visible underneath.
+///
+/// `initial_section_id` is forwarded as the event payload so callers can
+/// deep-link a specific section (e.g. "dashboards" for the pill right-click
+/// "Manage…" item). The overlay's React side ignores it when omitted.
+#[tauri::command]
+async fn wm_menu_open(
+    initial_section_id: Option<String>,
+    window: Window,
+    manager: State<'_, TerminalManager>,
+    app: AppHandle,
+) -> Result<(), String> {
+    let terminal = get_terminal!(manager, window);
+    overlay_raise(Arc::clone(&terminal.overlay), window.label(), &app).await?;
+    let overlay = format!("{}-overlay", window.label());
+    app.get_webview(&overlay)
+        .ok_or("overlay not found".to_string())?
+        .emit(
+            "wm:menu-open",
+            serde_json::json!({ "initialSectionId": initial_section_id }),
+        )
+        .map_err(|e| e.to_string())
+}
+
 // ── Dashboard commands (need OverlayState access) ─────────────────────────────
 
 /// Switch the active dashboard to `name`, performing the full webview
@@ -1192,6 +1218,7 @@ pub fn run() {
             wm_ctx_menu_close,
             wm_palette_open,
             wm_overflow_menu_open,
+            wm_menu_open,
             wm_request_rename,
             wm_list_dashboards,
             wm_switch_dashboard,

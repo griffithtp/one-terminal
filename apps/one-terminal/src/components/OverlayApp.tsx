@@ -3,6 +3,7 @@ import { listen, emit } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { ctxMenuItemsFor, type CtxMenuContext } from "./contextMenuItems";
 import { PanelHighlightLayer } from "./CommandPalette";
+import { OverlayMenu } from "./OverlayMenu";
 import { bigramScore } from "../commands/registry";
 import type { SerializableCommand } from "../commands/registry";
 import type { LayoutSnapshot, HostLayout, OverflowMenuPayload } from "../types";
@@ -276,6 +277,11 @@ export function OverlayApp() {
 
   return (
     <>
+      {/* App Menu drawer — mounted here so it sits above panel webviews in
+          z-order. Listens for wm:menu-open from chrome; dismisses via
+          wm_ctx_menu_close (parks the overlay offscreen). */}
+      <OverlayMenu />
+
       {/* Palette widget highlight ring — shown whenever a palette result with a
           widgetLabel is selected, regardless of whether the palette is visible. */}
       <PanelHighlightLayer

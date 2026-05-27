@@ -4,20 +4,24 @@
  * Left-side drawer that hosts the Terminal app menu. Two-pane layout:
  * section list on the left rail, active section body on the right.
  *
+ * Rendered inside the OVERLAY webview — `overlay_raise()` (Rust) re-attaches
+ * the overlay as the topmost child whenever the drawer is opened, so panel
+ * webviews stay visible underneath the dimming backdrop. No panel parking
+ * is needed at the drawer level; chrome-resident modals (engine picker,
+ * download prompt, kb settings, terminal-close confirm) still park as
+ * before via parkPanels.
+ *
  * Lifecycle:
  *   - Mounts on first open; stays mounted between opens so the slide-out
  *     animation can play on close.
- *   - Parks panel webviews while open (chrome z-order is below panel
- *     webviews — without parking, clicks fall through to whichever panel
- *     covers the drawer).
- *   - Escape and backdrop click both close.
+ *   - Escape and backdrop click both close (the host should also call
+ *     wm_ctx_menu_close to park the overlay offscreen).
  *
  * Section list is provided by the parent. Each section's `render()` runs
  * lazily — sections that haven't been visited never mount.
  */
 
 import { type ReactNode, useCallback, useEffect, useState } from "react";
-import { popPark, pushPark } from "../lib/parkPanels";
 import "./AppMenuSidebar.css";
 
 export interface SectionDef {
@@ -57,18 +61,6 @@ export function AppMenuSidebar({ open, onClose, sections, defaultSectionId }: Pr
       return () => clearTimeout(t);
     }
   }, [open]);
-
-  // Park panels while the drawer is *mounted* (covers both entering and
-  // exiting animations). The panel webviews sit above the chrome in z-order,
-  // so without parking the user could click through the backdrop onto a
-  // widget while the drawer is sliding out. Refcounted via parkPanels so the
-  // shared park state is correct when nested dialogs (e.g. unsaved-changes
-  // confirm) also call pushPark.
-  useEffect(() => {
-    if (!mounted) return;
-    pushPark();
-    return () => popPark();
-  }, [mounted]);
 
   // Escape to close
   useEffect(() => {

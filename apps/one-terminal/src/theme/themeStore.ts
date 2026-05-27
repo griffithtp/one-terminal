@@ -11,7 +11,10 @@
  * so the first paint matches the persisted choice (no flash).
  */
 
+import { emit } from "@tauri-apps/api/event";
+
 const STORAGE_KEY = "one-terminal:theme";
+const THEME_EVENT = "wm:theme-changed";
 
 export type ThemeChoice = "light" | "dark" | "system";
 export type EffectiveTheme = "light" | "dark";
@@ -37,7 +40,17 @@ export function saveTheme(choice: ThemeChoice): void {
   } catch {
     /* localStorage may be unavailable in private browsing — ignore */
   }
+  // Broadcast so the other webview (chrome ↔ overlay) re-applies in lockstep.
+  // Each listener calls applyTheme; the receiving webview won't re-emit
+  // because saveTheme is only called from the section UI on direct user input.
+  emit(THEME_EVENT, { choice }).catch(() => {});
 }
+
+export interface ThemeChangedPayload {
+  choice: ThemeChoice;
+}
+
+export const THEME_CHANGED_EVENT = THEME_EVENT;
 
 function resolveEffective(choice: ThemeChoice): EffectiveTheme {
   if (choice === "light" || choice === "dark") return choice;
