@@ -702,6 +702,51 @@ async fn wm_menu_open(
         .map_err(|e| e.to_string())
 }
 
+/// Open the "New dashboard" prompt in the overlay webview. The header's
+/// "+" button and the `dashboard:create` palette command both call this;
+/// the dialog sits above panels so widgets stay visible behind it.
+#[tauri::command]
+async fn wm_dashboard_create_open(
+    window: Window,
+    manager: State<'_, TerminalManager>,
+    app: AppHandle,
+) -> Result<(), String> {
+    let terminal = get_terminal!(manager, window);
+    overlay_raise(Arc::clone(&terminal.overlay), window.label(), &app).await?;
+    let overlay = format!("{}-overlay", window.label());
+    app.get_webview(&overlay)
+        .ok_or("overlay not found".to_string())?
+        .emit("wm:dashboard-create-open", serde_json::json!({}))
+        .map_err(|e| e.to_string())
+}
+
+/// Show the unsaved-changes confirm dialog in the overlay webview.
+/// Triggered by useDashboards.switchTo when wm_switch_dashboard returns
+/// NeedsConfirm. The overlay renders a Save / Discard / Cancel dialog
+/// above panels (widgets stay visible underneath).
+#[tauri::command]
+async fn wm_dashboard_confirm_open(
+    active_name: String,
+    pending_name: String,
+    window: Window,
+    manager: State<'_, TerminalManager>,
+    app: AppHandle,
+) -> Result<(), String> {
+    let terminal = get_terminal!(manager, window);
+    overlay_raise(Arc::clone(&terminal.overlay), window.label(), &app).await?;
+    let overlay = format!("{}-overlay", window.label());
+    app.get_webview(&overlay)
+        .ok_or("overlay not found".to_string())?
+        .emit(
+            "wm:dashboard-confirm-switch",
+            serde_json::json!({
+                "activeName": active_name,
+                "pendingName": pending_name,
+            }),
+        )
+        .map_err(|e| e.to_string())
+}
+
 // ── Dashboard commands (need OverlayState access) ─────────────────────────────
 
 /// Switch the active dashboard to `name`, performing the full webview
@@ -1219,6 +1264,8 @@ pub fn run() {
             wm_palette_open,
             wm_overflow_menu_open,
             wm_menu_open,
+            wm_dashboard_create_open,
+            wm_dashboard_confirm_open,
             wm_request_rename,
             wm_list_dashboards,
             wm_switch_dashboard,

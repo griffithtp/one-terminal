@@ -34,14 +34,13 @@ export interface DashboardInfo {
 export interface UseDashboardsResult {
   dashboards: DashboardInfo[];
   autoSave: boolean;
-  /** Non-null when a switch was blocked by NeedsConfirm — render a dialog */
-  pendingSwitch: string | null;
+  /**
+   * Try to switch to `name`. On NeedsConfirm (auto-save off + dirty active
+   * layout) the hook invokes `wm_dashboard_confirm_open` so the overlay
+   * shows the Save / Discard / Cancel dialog. The dialog completes the
+   * switch itself; no chrome-side confirm state is needed.
+   */
   switchTo: (name: string) => Promise<void>;
-  /** Save the live layout then complete the pending switch */
-  confirmSave: () => Promise<void>;
-  /** Discard live changes then complete the pending switch */
-  confirmDiscard: () => Promise<void>;
-  cancelSwitch: () => void;
   create: (name: string) => Promise<void>;
   save: () => Promise<void>;
   discard: () => Promise<void>;
@@ -55,7 +54,6 @@ export interface UseDashboardsResult {
 
 export function useDashboards(): UseDashboardsResult {
   const [payload, setPayload] = useState<DashboardsPayload | null>(null);
-  const [pendingSwitch, setPendingSwitch] = useState<string | null>(null);
 
   // ── Initial fetch + live subscription ────────────────────────────────────
   useEffect(() => {
@@ -77,43 +75,26 @@ export function useDashboards(): UseDashboardsResult {
   }, [payload]);
 
   // ── Actions ───────────────────────────────────────────────────────────────
+  // Keep a ref to the latest active name so switchTo can pass it to the
+  // overlay's confirm dialog without rebinding the callback on every update.
+  const payloadRef = useRef(payload);
+  payloadRef.current = payload;
+
   const switchTo = useCallback(async (name: string) => {
     try {
       await invoke("wm_switch_dashboard", { name });
     } catch (e) {
       if (isNeedsConfirm(e)) {
-        setPendingSwitch(name);
+        const activeName = payloadRef.current?.active ?? "";
+        invoke("wm_dashboard_confirm_open", {
+          activeName,
+          pendingName: name,
+        }).catch(console.error);
       } else {
         console.error("[dashboards] switch:", e);
       }
     }
   }, []);
-
-  const confirmSave = useCallback(async () => {
-    const target = pendingSwitch;
-    if (!target) return;
-    setPendingSwitch(null);
-    try {
-      await invoke("wm_save_dashboard");
-      await invoke("wm_switch_dashboard", { name: target });
-    } catch (e) {
-      console.error("[dashboards] confirmSave:", e);
-    }
-  }, [pendingSwitch]);
-
-  const confirmDiscard = useCallback(async () => {
-    const target = pendingSwitch;
-    if (!target) return;
-    setPendingSwitch(null);
-    try {
-      await invoke("wm_discard_dashboard");
-      await invoke("wm_switch_dashboard", { name: target });
-    } catch (e) {
-      console.error("[dashboards] confirmDiscard:", e);
-    }
-  }, [pendingSwitch]);
-
-  const cancelSwitch = useCallback(() => setPendingSwitch(null), []);
 
   const create = useCallback(async (name: string) => {
     await invoke("wm_create_dashboard", { name });
@@ -147,12 +128,10 @@ export function useDashboards(): UseDashboardsResult {
   const saveRef = useRef(save);
   const discardRef = useRef(discard);
   const setAutoSaveRef = useRef(setAutoSave);
-  const payloadRef = useRef(payload);
 
   saveRef.current = save;
   discardRef.current = discard;
   setAutoSaveRef.current = setAutoSave;
-  payloadRef.current = payload;
 
   useEffect(() => {
     registry.register({
@@ -222,11 +201,7 @@ export function useDashboards(): UseDashboardsResult {
   return {
     dashboards,
     autoSave: payload?.autoSave ?? true,
-    pendingSwitch,
     switchTo,
-    confirmSave,
-    confirmDiscard,
-    cancelSwitch,
     create,
     save,
     discard,

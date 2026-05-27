@@ -28,7 +28,6 @@ import { SplitterHandleLayer } from "./components/SplitterHandleLayer";
 import { GhostLayer } from "./components/GhostLayer";
 import { DropZoneLayer } from "./components/DropZoneLayer";
 import { PanelHeaderLayer } from "./components/PanelHeaderLayer";
-import { KeybindingsSettings } from "./components/KeybindingsSettings";
 import { OverlayApp } from "./components/OverlayApp";
 import { popPark, pushPark } from "./lib/parkPanels";
 import { registerWidgetCommands, setActivePanelLabel } from "./commands/widgetCommands";
@@ -122,6 +121,8 @@ function ChromeApp() {
 
   const openMenuAt = useCallback((sectionId?: string) => {
     setMenuOpen(true);
+    // The Shortcuts section requests its own snapshot on mount via
+    // wm:keybindings-request — see KeybindingsSection.
     invoke("wm_menu_open", { initialSectionId: sectionId }).catch(console.error);
   }, []);
 
@@ -145,30 +146,20 @@ function ChromeApp() {
     };
   }, []);
 
-  // ── Settings state ────────────────────────────────────────────────────────
-  const [settingsOpen, setSettingsOpen] = useState(false);
-
-  // Stable ref so the registry action always calls the live setter without
-  // requiring re-registration on state changes.
-  const openSettingsRef = useRef<() => void>(() => {});
-  openSettingsRef.current = () => setSettingsOpen(true);
-
-  // Park panels while settings are open — the settings panel renders in the
-  // chrome webview (below panel webviews in z-order) so panels must move out
-  // of the way.  The command palette uses the overlay webview and does NOT
-  // need panel parking.
-  useEffect(() => {
-    if (!settingsOpen) return;
-    pushPark();
-    return () => popPark();
-  }, [settingsOpen]);
-
   // ── Command registry bootstrap (runs once per mount) ──────────────────────
+  //
+  // The `settings.keybindings` command opens the App Menu drawer at the
+  // Shortcuts section (overlay-hosted editor). A ref keeps the action
+  // pointing at the live setter without requiring re-registration when
+  // openMenuAt's identity changes.
+  const openMenuAtRef = useRef(openMenuAt);
+  openMenuAtRef.current = openMenuAt;
+
   const commandsRegistered = useRef(false);
   useEffect(() => {
     if (commandsRegistered.current) return;
     commandsRegistered.current = true;
-    registerWidgetCommands(() => openSettingsRef.current());
+    registerWidgetCommands(() => openMenuAtRef.current("shortcuts"));
     applyKeybindingOverrides();
     initAppCommands((appId, url, title) =>
       openPanel(appId, url, title, null).catch(console.error)
@@ -352,8 +343,6 @@ function ChromeApp() {
       {/* Tab-drag overlays — drop indicator + cursor-following ghost */}
       <DropZoneLayer target={tabDrag.state?.target ?? null} />
       <GhostLayer drag={tabDrag.state} />
-
-      {settingsOpen && <KeybindingsSettings onClose={() => setSettingsOpen(false)} />}
 
       <TerminalCloseDialog />
 

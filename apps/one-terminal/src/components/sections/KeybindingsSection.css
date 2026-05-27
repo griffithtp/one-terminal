@@ -41,31 +41,9 @@
   border-top: 1px solid var(--ot-border-subtle);
 }
 
-.ot-shortcuts__launch {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.ot-shortcuts__loading {
   padding: 20px 16px;
-}
-
-.ot-shortcuts__launch-btn {
-  align-self: flex-start;
-  padding: 8px 16px;
-  background: var(--ot-primary);
-  color: var(--ot-accent-on);
-  border: 1px solid var(--ot-primary-border);
-  border-radius: 4px;
   font-size: 12px;
-  font-family: inherit;
-  cursor: pointer;
-  transition: background 100ms;
-}
-.ot-shortcuts__launch-btn:hover {
-  background: var(--ot-primary-hover);
-}
-
-.ot-shortcuts__launch-hint {
-  font-size: 11px;
   color: var(--ot-text-muted);
-  margin: 0;
+  text-align: center;
 }

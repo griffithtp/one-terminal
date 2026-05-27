@@ -1,23 +1,18 @@
 /**
  * KeybindingsEditor
  *
- * Self-contained editor for remappable command keybindings. Renders a
- * toolbar with "Reset all" + a table of every command in REMAPPABLE_GROUPS
- * with inline capture / assign / reset row controls.
+ * Self-contained editor for remappable command keybindings. Props-driven:
+ * consumer supplies the commands snapshot + defaults map and receives
+ * onAssign / onReset / onResetAll callbacks.
  *
- * Pure body — no modal backdrop, no own close button, no panel parking.
- * Use `KeybindingsSettings` for the modal version (palette deep-link) or
- * `KeybindingsSection` to embed inside the App Menu drawer.
+ * This indirection lets the editor render inside the overlay webview (where
+ * the local command registry is empty) by sourcing data from a snapshot
+ * broadcast by the chrome webview — see `commands/keybindingsBridge.ts` for
+ * the chrome side and `OverlayMenu`'s Shortcuts section for the consumer.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { registry } from "../commands/registry";
-import type { Command } from "../commands/registry";
-import {
-  getDefaultKeybinding,
-  loadKeybindings,
-  saveKeybindings,
-} from "../commands/keybindingStore";
+import type { SerializableCommand } from "../commands/registry";
 import { normaliseCombo } from "../commands/keyboardListener";
 import "./KeybindingsSettings.css";
 
@@ -46,6 +41,10 @@ function formatKeybinding(kb: string): string {
     })
     .join(isMac ? "" : "+");
 }
+
+// Only show remappable static command groups — instance and app commands are
+// dynamic and don't benefit from persistent keybinding overrides.
+const REMAPPABLE_GROUPS = new Set(["widgets", "navigation", "settings"]);
 
 // ── Capture cell ──────────────────────────────────────────────────────────────
 
@@ -97,35 +96,50 @@ function CaptureCell({ pendingCombo, conflict, onKeyDown, onAssign, onCancel }: 
 
 function BindingDisplay({ keybinding }: { keybinding: string | undefined }) {
   if (!keybinding) return <span className="kb-binding--none">—</span>;
-  const parts = formatKeybinding(keybinding);
   return (
     <span className="kb-binding">
-      <kbd className="kb-binding__key">{parts}</kbd>
+      <kbd className="kb-binding__key">{formatKeybinding(keybinding)}</kbd>
     </span>
   );
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-// Only show remappable static command groups — instance and app commands are
-// dynamic and don't benefit from persistent keybinding overrides.
-const REMAPPABLE_GROUPS = new Set(["widgets", "navigation", "settings"]);
+interface Props {
+  /** Snapshot of all commands from the chrome-side registry. */
+  commands: SerializableCommand[];
+  /** Default keybinding per command id (undefined / null when no default). */
+  defaults: Record<string, string | null>;
+  onAssign: (id: string, combo: string) => void;
+  onReset: (id: string) => void;
+  onResetAll: () => void;
+}
 
-export function KeybindingsEditor() {
-  const [commands, setCommands] = useState<Command[]>([]);
+export function KeybindingsEditor({ commands, defaults, onAssign, onReset, onResetAll }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [pendingCombo, setPendingCombo] = useState("");
   const [conflict, setConflict] = useState<string | null>(null);
 
-  const refresh = useCallback(() => {
-    setCommands(registry.getAll().filter((c) => REMAPPABLE_GROUPS.has(c.group)));
-  }, []);
+  // Filter to remappable groups. Memoise-free is fine — list is small (~20).
+  const filtered = commands.filter((c) => REMAPPABLE_GROUPS.has(c.group));
 
+  // Snapshot might refresh while editing (e.g. chrome re-emits after an
+  // assign). If the row we're editing is gone, drop edit state.
   useEffect(() => {
-    refresh();
-  }, [refresh]);
+    if (editingId && !commands.find((c) => c.id === editingId)) {
+      setEditingId(null);
+      setPendingCombo("");
+      setConflict(null);
+    }
+  }, [commands, editingId]);
 
-  // ── Capture keydown ─────────────────────────────────────────────────────
+  const commitAssign = useCallback(() => {
+    if (!editingId || !pendingCombo) return;
+    onAssign(editingId, pendingCombo);
+    setEditingId(null);
+    setPendingCombo("");
+    setConflict(null);
+  }, [editingId, pendingCombo, onAssign]);
 
   const handleCaptureKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -134,89 +148,30 @@ export function KeybindingsEditor() {
 
       if (e.key === "Escape") {
         setEditingId(null);
+        setPendingCombo("");
+        setConflict(null);
         return;
       }
       if (e.key === "Enter" && pendingCombo) {
         commitAssign();
         return;
       }
-      // Ignore modifier-only presses — wait for a non-modifier key.
       if (MODIFIER_KEYS.has(e.key)) return;
 
       const combo = normaliseCombo(e);
       setPendingCombo(combo);
 
-      const existing = registry.findByKeybinding(combo);
-      setConflict(existing && existing.id !== editingId ? existing.label : null);
+      // Conflict detection: search the snapshot for an existing assignment.
+      const existing = commands.find((c) => c.keybinding === combo && c.id !== editingId);
+      setConflict(existing ? existing.label : null);
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [editingId, pendingCombo]
+    [editingId, pendingCombo, commands, commitAssign]
   );
-
-  // ── Assign ──────────────────────────────────────────────────────────────
-
-  function commitAssign() {
-    if (!editingId || !pendingCombo) return;
-
-    // If a conflict exists, unassign the other command's keybinding first.
-    const conflicting = registry.findByKeybinding(pendingCombo);
-    if (conflicting && conflicting.id !== editingId) {
-      registry.register({ ...conflicting, keybinding: undefined });
-      const overrides = loadKeybindings();
-      if (getDefaultKeybinding(conflicting.id) === undefined) {
-        delete overrides[conflicting.id];
-      } else {
-        // Mark it as explicitly unbound so applyOverrides doesn't restore it.
-        overrides[conflicting.id] = "";
-      }
-      saveKeybindings(overrides);
-    }
-
-    // Register the new keybinding.
-    const cmd = registry.getAll().find((c) => c.id === editingId);
-    if (cmd) registry.register({ ...cmd, keybinding: pendingCombo });
-
-    const overrides = loadKeybindings();
-    overrides[editingId] = pendingCombo;
-    saveKeybindings(overrides);
-
-    setEditingId(null);
-    refresh();
-  }
-
-  // ── Reset single ────────────────────────────────────────────────────────
-
-  function resetOne(id: string) {
-    const defaultKb = getDefaultKeybinding(id);
-    const cmd = registry.getAll().find((c) => c.id === id);
-    if (cmd) registry.register({ ...cmd, keybinding: defaultKb });
-
-    const overrides = loadKeybindings();
-    delete overrides[id];
-    saveKeybindings(overrides);
-
-    refresh();
-  }
-
-  // ── Reset all ───────────────────────────────────────────────────────────
-
-  function resetAll() {
-    for (const cmd of registry.getAll()) {
-      if (!REMAPPABLE_GROUPS.has(cmd.group)) continue;
-      const defaultKb = getDefaultKeybinding(cmd.id);
-      registry.register({ ...cmd, keybinding: defaultKb });
-    }
-    saveKeybindings({});
-    setEditingId(null);
-    refresh();
-  }
-
-  // ── Render ──────────────────────────────────────────────────────────────
 
   return (
     <div className="kb-editor">
       <div className="kb-editor__toolbar">
-        <button type="button" className="kb-header__reset-all" onClick={resetAll}>
+        <button type="button" className="kb-header__reset-all" onClick={onResetAll}>
           Reset all
         </button>
       </div>
@@ -232,9 +187,9 @@ export function KeybindingsEditor() {
             </tr>
           </thead>
           <tbody>
-            {commands.map((cmd) => {
+            {filtered.map((cmd) => {
               const isEditing = editingId === cmd.id;
-              const defaultKb = getDefaultKeybinding(cmd.id);
+              const defaultKb = defaults[cmd.id] ?? undefined;
               const isModified = cmd.keybinding !== defaultKb;
 
               return (
@@ -248,7 +203,11 @@ export function KeybindingsEditor() {
                         conflict={conflict}
                         onKeyDown={handleCaptureKeyDown}
                         onAssign={commitAssign}
-                        onCancel={() => setEditingId(null)}
+                        onCancel={() => {
+                          setEditingId(null);
+                          setPendingCombo("");
+                          setConflict(null);
+                        }}
                       />
                     ) : (
                       <BindingDisplay keybinding={cmd.keybinding} />
@@ -270,7 +229,7 @@ export function KeybindingsEditor() {
                         {isModified && (
                           <button
                             className="kb-btn kb-btn--danger"
-                            onClick={() => resetOne(cmd.id)}
+                            onClick={() => onReset(cmd.id)}
                             title={`Restore default: ${defaultKb ?? "none"}`}
                           >
                             Reset

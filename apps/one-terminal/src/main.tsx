@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import App from "./App";
 import { initWidgetInstanceCommands } from "./commands/widgetInstanceCommands";
 import { initKeyboardListener, initGlobalShortcutListener } from "./commands/keyboardListener";
+import { initKeybindingsBridge } from "./commands/keybindingsBridge";
 import {
   THEME_CHANGED_EVENT,
   type ThemeChangedPayload,
@@ -22,13 +23,22 @@ listen<ThemeChangedPayload>(THEME_CHANGED_EVENT, (e) => {
   applyTheme(e.payload.choice);
 }).catch(console.error);
 
-// In-process keyboard listener: fires when the chrome webview has focus.
-initKeyboardListener();
+// Chrome-only initialisers — the overlay webview shares this bundle so we
+// gate per-webview bootstrap on the URL hash.
+const isChrome = window.location.hash !== "#overlay";
+if (isChrome) {
+  // In-process keyboard listener: fires when the chrome webview has focus.
+  initKeyboardListener();
 
-// Widget-instance commands and global shortcut listener are async — kick them
-// off before the first render so they're ready as soon as possible.
-initWidgetInstanceCommands().catch(console.error);
-initGlobalShortcutListener().catch(console.error);
+  // Widget-instance commands and global shortcut listener are async — kick
+  // them off before the first render so they're ready as soon as possible.
+  initWidgetInstanceCommands().catch(console.error);
+  initGlobalShortcutListener().catch(console.error);
+
+  // Bridge for the overlay-hosted keybindings editor — publishes the
+  // registry snapshot and processes edit events from the overlay.
+  initKeybindingsBridge();
+}
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

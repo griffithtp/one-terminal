@@ -4,6 +4,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { ctxMenuItemsFor, type CtxMenuContext } from "./contextMenuItems";
 import { PanelHighlightLayer } from "./CommandPalette";
 import { OverlayMenu } from "./OverlayMenu";
+import { OverlayConfirmDashboardSwitch } from "./OverlayConfirmDashboardSwitch";
+import { OverlayCreateDashboard } from "./OverlayCreateDashboard";
 import { bigramScore } from "../commands/registry";
 import type { SerializableCommand } from "../commands/registry";
 import type { LayoutSnapshot, HostLayout, OverflowMenuPayload } from "../types";
@@ -281,6 +283,15 @@ export function OverlayApp() {
           z-order. Listens for wm:menu-open from chrome; dismisses via
           wm_ctx_menu_close (parks the overlay offscreen). */}
       <OverlayMenu />
+
+      {/* Unsaved-changes confirm dialog — fires when useDashboards.switchTo
+          gets NeedsConfirm. Renders here (overlay) so widgets stay visible. */}
+      <OverlayConfirmDashboardSwitch />
+
+      {/* "New dashboard" prompt — fired by the header "+" button and the
+          dashboard:create palette command. Renders here so widgets stay
+          visible behind the small modal. */}
+      <OverlayCreateDashboard />
 
       {/* Palette widget highlight ring — shown whenever a palette result with a
           widgetLabel is selected, regardless of whether the palette is visible. */}
