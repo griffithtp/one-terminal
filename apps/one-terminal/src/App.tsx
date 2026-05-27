@@ -21,20 +21,21 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useLayout } from "./hooks/useLayout";
 import { useHostLayout } from "./hooks/useHostLayout";
 import { useTabDrag } from "./hooks/useTabDrag";
+import { useAppLaunch } from "./hooks/useAppLaunch";
 import { Header } from "./components/Header";
 import { TabStripLayer } from "./components/TabStripLayer";
 import { SplitterHandleLayer } from "./components/SplitterHandleLayer";
 import { GhostLayer } from "./components/GhostLayer";
 import { DropZoneLayer } from "./components/DropZoneLayer";
 import { PanelHeaderLayer } from "./components/PanelHeaderLayer";
-import { KeybindingsSettings } from "./components/KeybindingsSettings";
 import { OverlayApp } from "./components/OverlayApp";
+import { popPark, pushPark } from "./lib/parkPanels";
 import { registerWidgetCommands, setActivePanelLabel } from "./commands/widgetCommands";
 import { initAppCommands } from "./commands/appCommands";
 import { applyKeybindingOverrides } from "./commands/keybindingStore";
 import { registry } from "./commands/registry";
 import { useDashboards } from "./hooks/useDashboards";
-import type { EngineBinding, StackHeader } from "./types";
+import type { AppRecord, EngineBinding, StackHeader } from "./types";
 import "./wm.css";
 
 // ── TerminalCloseDialog ───────────────────────────────────────────────────────
@@ -47,8 +48,8 @@ function TerminalCloseDialog() {
   const [visible, setVisible] = useState(false);
 
   useEffect(() => {
-    const unlisten = listen("wm:confirm-close", async () => {
-      await invoke("wm_park_panels").catch(console.error);
+    const unlisten = listen("wm:confirm-close", () => {
+      pushPark();
       setVisible(true);
     });
     return () => {
@@ -59,11 +60,12 @@ function TerminalCloseDialog() {
   const handleConfirm = useCallback(() => {
     const label = getCurrentWindow().label;
     invoke("wm_close_terminal", { label }).catch(console.error);
+    popPark();
     setVisible(false);
   }, []);
 
   const handleCancel = useCallback(() => {
-    invoke("wm_unpark_panels").catch(console.error);
+    popPark();
     setVisible(false);
   }, []);
 
@@ -108,35 +110,56 @@ function ChromeApp() {
   const tabDrag = useTabDrag();
   const dashboards = useDashboards();
 
-  // ── Settings state ────────────────────────────────────────────────────────
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  // ── App menu drawer state ─────────────────────────────────────────────────
+  // The drawer is rendered inside the overlay webview (above panels in
+  // z-order). Chrome only tracks whether it's open so the brand button can
+  // toggle correctly; opening invokes `wm_menu_open` which raises the
+  // overlay and emits `wm:menu-open` for OverlayMenu to listen to. Closing
+  // happens overlay-side via `wm_ctx_menu_close`; OverlayMenu emits
+  // `wm:menu-closed` so chrome syncs `menuOpen` back to false.
+  const [menuOpen, setMenuOpen] = useState(false);
 
-  // Stable ref so the registry action always calls the live setter without
-  // requiring re-registration on state changes.
-  const openSettingsRef = useRef<() => void>(() => {});
-  openSettingsRef.current = () => setSettingsOpen(true);
+  const openMenuAt = useCallback((sectionId?: string) => {
+    setMenuOpen(true);
+    // The Shortcuts section requests its own snapshot on mount via
+    // wm:keybindings-request — see KeybindingsSection.
+    invoke("wm_menu_open", { initialSectionId: sectionId }).catch(console.error);
+  }, []);
 
-  // Park panels while settings are open — the settings panel renders in the
-  // chrome webview (below panel webviews in z-order) so panels must move out
-  // of the way.  The command palette uses the overlay webview and does NOT
-  // need panel parking.
-  const settingsParkedRef = useRef(false);
-  useEffect(() => {
-    if (settingsOpen && !settingsParkedRef.current) {
-      settingsParkedRef.current = true;
-      invoke("wm_park_panels").catch(console.error);
-    } else if (!settingsOpen && settingsParkedRef.current) {
-      settingsParkedRef.current = false;
-      invoke("wm_unpark_panels").catch(console.error);
+  const toggleMenu = useCallback(() => {
+    if (menuOpen) {
+      // Overlay-side dismiss path is the source of truth; just trigger it.
+      invoke("wm_ctx_menu_close").catch(console.error);
+      setMenuOpen(false);
+    } else {
+      openMenuAt();
     }
-  }, [settingsOpen]);
+  }, [menuOpen, openMenuAt]);
+
+  // Sync `menuOpen=false` when the overlay reports a dismiss (Escape /
+  // backdrop / close button / app-launch). Without this, the brand button
+  // would think the drawer is still open and try to close-then-reopen.
+  useEffect(() => {
+    const unlisten = listen("wm:menu-closed", () => setMenuOpen(false));
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, []);
 
   // ── Command registry bootstrap (runs once per mount) ──────────────────────
+  //
+  // The `settings.keybindings` command opens the App Menu drawer at the
+  // Shortcuts section (overlay-hosted editor). A ref keeps the action
+  // pointing at the live setter without requiring re-registration when
+  // openMenuAt's identity changes.
+  const openMenuAtRef = useRef(openMenuAt);
+  openMenuAtRef.current = openMenuAt;
+
   const commandsRegistered = useRef(false);
   useEffect(() => {
     if (commandsRegistered.current) return;
     commandsRegistered.current = true;
-    registerWidgetCommands(() => openSettingsRef.current());
+    registerWidgetCommands(() => openMenuAtRef.current("shortcuts"));
     applyKeybindingOverrides();
     initAppCommands((appId, url, title) =>
       openPanel(appId, url, title, null).catch(console.error)
@@ -252,6 +275,27 @@ function ChromeApp() {
     [openPanel]
   );
 
+  // Widget launch state machine — owns the app directory fetch, engine
+  // picker, and download confirmation. Picker/download dialogs are returned
+  // as ReactNodes and mounted at the root of the chrome so they survive
+  // sibling subtrees (e.g. drawer, header) being torn down mid-flow.
+  const launch = useAppLaunch({ onOpenTab: handleOpenTab });
+
+  // Bridge for app launches initiated from the overlay drawer. The drawer
+  // emits `wm:launch-app-from-menu` with the full AppRecord; chrome runs
+  // the launch through useAppLaunch so the picker / download dialogs
+  // render in chrome (parked correctly via existing chrome parking).
+  const launchAppRef = useRef(launch.launchApp);
+  launchAppRef.current = launch.launchApp;
+  useEffect(() => {
+    const unlisten = listen<{ app: AppRecord }>("wm:launch-app-from-menu", (e) => {
+      launchAppRef.current(e.payload.app);
+    });
+    return () => {
+      unlisten.then((fn) => fn());
+    };
+  }, []);
+
   const handleClose = useCallback(
     (panelId: string) => {
       closePanel(panelId).catch(console.error);
@@ -266,7 +310,18 @@ function ChromeApp() {
       onPointerUp={handleTabPointerUp}
       onPointerCancel={handleTabPointerUp}
     >
-      <Header onOpenTab={handleOpenTab} dashboards={dashboards} />
+      <Header
+        errorMessage={launch.errorMessage}
+        onClearError={launch.clearError}
+        dashboards={dashboards}
+        onMenuToggle={toggleMenu}
+        onManageDashboards={() => openMenuAt("dashboards")}
+      />
+
+      {/* Drawer renders inside the overlay webview — see OverlayMenu. */}
+
+      {launch.pickerNode}
+      {launch.downloadNode}
 
       {/* Per-panel headers — drag region + title + close button, painted in
           the top slice of every non-Stack leaf's rect. Stack members get
@@ -288,8 +343,6 @@ function ChromeApp() {
       {/* Tab-drag overlays — drop indicator + cursor-following ghost */}
       <DropZoneLayer target={tabDrag.state?.target ?? null} />
       <GhostLayer drag={tabDrag.state} />
-
-      {settingsOpen && <KeybindingsSettings onClose={() => setSettingsOpen(false)} />}
 
       <TerminalCloseDialog />
 

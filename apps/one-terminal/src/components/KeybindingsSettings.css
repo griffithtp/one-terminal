@@ -2,7 +2,7 @@
 .kb-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(2, 6, 23, 0.55);
+  background: var(--ot-backdrop);
   z-index: 400;
   pointer-events: auto;
   display: flex;
@@ -15,10 +15,10 @@
 .kb-panel {
   width: 640px;
   max-height: 72vh;
-  background: #0f172a;
-  border: 1px solid #334155;
+  background: var(--ot-bg-surface);
+  border: 1px solid var(--ot-border-default);
   border-radius: 8px;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+  box-shadow: var(--ot-elev-dialog);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -31,22 +31,22 @@
   align-items: center;
   gap: 8px;
   padding: 12px 16px;
-  border-bottom: 1px solid #1e293b;
+  border-bottom: 1px solid var(--ot-border-subtle);
 }
 
 .kb-header__title {
   flex: 1 1 auto;
   font-size: 13px;
   font-weight: 600;
-  color: #e2e8f0;
+  color: var(--ot-text-strong);
 }
 
 .kb-header__reset-all {
   padding: 4px 10px;
   background: transparent;
-  border: 1px solid #334155;
+  border: 1px solid var(--ot-border-default);
   border-radius: 4px;
-  color: #94a3b8;
+  color: var(--ot-text-secondary);
   font-size: 11px;
   cursor: pointer;
   transition:
@@ -54,8 +54,8 @@
     color 100ms;
 }
 .kb-header__reset-all:hover {
-  background: #1e293b;
-  color: #e2e8f0;
+  background: var(--ot-bg-elevated);
+  color: var(--ot-text-strong);
 }
 
 .kb-header__close {
@@ -67,7 +67,7 @@
   background: transparent;
   border: none;
   border-radius: 3px;
-  color: #64748b;
+  color: var(--ot-text-muted);
   font-size: 14px;
   cursor: pointer;
   transition:
@@ -75,20 +75,37 @@
     color 100ms;
 }
 .kb-header__close:hover {
-  background: #7f1d1d;
-  color: #fca5a5;
+  background: var(--ot-danger-bg);
+  color: var(--ot-danger-text);
+}
+
+/* ── Editor (no-shell variant — used by both the modal and the drawer) ────── */
+.kb-editor {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
+.kb-editor__toolbar {
+  flex: 0 0 auto;
+  display: flex;
+  justify-content: flex-end;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--ot-border-subtle);
 }
 
 /* ── Table ────────────────────────────────────────────────────────────────── */
 .kb-table-wrap {
   flex: 1 1 auto;
+  overflow-x: auto;
   overflow-y: auto;
 }
 .kb-table-wrap::-webkit-scrollbar {
   width: 4px;
 }
 .kb-table-wrap::-webkit-scrollbar-thumb {
-  background: #334155;
+  background: var(--ot-border-default);
   border-radius: 2px;
 }
 
@@ -107,26 +124,26 @@
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: #475569;
-  background: #0f172a;
-  border-bottom: 1px solid #1e293b;
+  color: var(--ot-text-muted);
+  background: var(--ot-bg-surface);
+  border-bottom: 1px solid var(--ot-border-subtle);
 }
 
 .kb-table tbody tr {
-  border-bottom: 1px solid #0f172a;
+  border-bottom: 1px solid var(--ot-bg-surface);
   transition: background 80ms;
 }
 .kb-table tbody tr:hover {
-  background: #111827;
+  background: var(--ot-bg-row-hover);
 }
 .kb-table tbody tr.kb-row--editing {
-  background: #111827;
+  background: var(--ot-bg-row-hover);
 }
 
 .kb-table td {
   padding: 7px 12px;
   vertical-align: middle;
-  color: #cbd5e1;
+  color: var(--ot-text-primary);
 }
 
 .kb-col-label {
@@ -134,7 +151,7 @@
 }
 .kb-col-group {
   width: 110px;
-  color: #475569;
+  color: var(--ot-text-muted);
   font-size: 11px;
 }
 .kb-col-binding {
@@ -154,17 +171,17 @@
 .kb-binding__key {
   display: inline-block;
   padding: 1px 5px;
-  background: #1e293b;
-  border: 1px solid #334155;
+  background: var(--ot-bg-elevated);
+  border: 1px solid var(--ot-border-default);
   border-radius: 3px;
   font-size: 11px;
   font-family: inherit;
-  color: #94a3b8;
+  color: var(--ot-text-secondary);
   white-space: nowrap;
 }
 
 .kb-binding--none {
-  color: #334155;
+  color: var(--ot-border-default);
   font-size: 11px;
 }
 
@@ -177,9 +194,9 @@
 .kb-btn {
   padding: 3px 8px;
   background: transparent;
-  border: 1px solid #334155;
+  border: 1px solid var(--ot-border-default);
   border-radius: 3px;
-  color: #94a3b8;
+  color: var(--ot-text-secondary);
   font-size: 11px;
   cursor: pointer;
   white-space: nowrap;
@@ -189,21 +206,21 @@
     border-color 100ms;
 }
 .kb-btn:hover {
-  background: #1e293b;
-  color: #e2e8f0;
+  background: var(--ot-bg-elevated);
+  color: var(--ot-text-strong);
 }
 .kb-btn--primary {
-  border-color: #3b82f6;
-  color: #93c5fd;
+  border-color: var(--ot-accent);
+  color: var(--ot-info-text);
 }
 .kb-btn--primary:hover {
-  background: #1e3a5f;
-  color: #bfdbfe;
+  background: var(--ot-bg-active);
+  color: var(--ot-info-text);
 }
 .kb-btn--danger:hover {
-  background: #7f1d1d;
-  color: #fca5a5;
-  border-color: #7f1d1d;
+  background: var(--ot-danger-bg);
+  color: var(--ot-danger-text);
+  border-color: var(--ot-danger-bg);
 }
 
 /* ── Capture cell ─────────────────────────────────────────────────────────── */
@@ -222,10 +239,10 @@
 .kb-capture__field {
   flex: 1 1 auto;
   padding: 3px 7px;
-  background: #1e293b;
-  border: 1px solid #3b82f6;
+  background: var(--ot-bg-elevated);
+  border: 1px solid var(--ot-accent);
   border-radius: 3px;
-  color: #e2e8f0;
+  color: var(--ot-text-strong);
   font-size: 11px;
   font-family: inherit;
   outline: none;
@@ -236,15 +253,15 @@
   text-overflow: ellipsis;
 }
 .kb-capture__field:focus {
-  border-color: #60a5fa;
+  border-color: var(--ot-accent-strong);
 }
 .kb-capture__field--placeholder {
-  color: #475569;
+  color: var(--ot-text-muted);
   font-style: italic;
 }
 
 .kb-capture__conflict {
   font-size: 10px;
-  color: #fb923c;
+  color: var(--ot-warning);
   padding: 0 2px;
 }
