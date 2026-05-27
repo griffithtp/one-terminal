@@ -62,9 +62,7 @@ export function KeybindingsSection() {
           <KeybindingsEditor
             commands={snapshot.commands as never}
             defaults={snapshot.defaults}
-            onAssign={(id, combo) =>
-              emit(KEYBINDING_SET_EVENT, { id, combo }).catch(console.error)
-            }
+            onAssign={(id, combo) => emit(KEYBINDING_SET_EVENT, { id, combo }).catch(console.error)}
             onReset={(id) => emit(KEYBINDING_RESET_EVENT, { id }).catch(console.error)}
             onResetAll={() => emit(KEYBINDING_RESET_ALL_EVENT).catch(console.error)}
           />

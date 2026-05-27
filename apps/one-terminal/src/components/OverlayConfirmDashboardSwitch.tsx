@@ -69,8 +69,7 @@ export function OverlayConfirmDashboardSwitch() {
         <div className="wm-ds-dialog__title">Unsaved Changes</div>
         <p className="wm-ds-dialog__body">
           <strong>&ldquo;{payload.activeName}&rdquo;</strong> has unsaved layout changes. Save
-          before switching to <strong>&ldquo;{payload.pendingName}&rdquo;</strong> or discard
-          them?
+          before switching to <strong>&ldquo;{payload.pendingName}&rdquo;</strong> or discard them?
         </p>
         <div className="wm-ds-dialog__actions">
           <button type="button" className="wm-ds-dialog__btn" onClick={dismiss}>
