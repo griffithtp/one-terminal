@@ -1,10 +1,142 @@
 # OneTerminal
 
-A reusable desktop container framework built on [Tauri 2](https://tauri.app) that hosts browser-based applications in native windows, connected via an [FDC3 2.2](https://fdc3.finos.org) desktop agent.
+> An open-source desktop container for building **interoperable trading and capital-markets applications** — powered by [Tauri 2](https://tauri.app) and [FDC3 2.2](https://fdc3.finos.org).
+
+OneTerminal lets you compose a workspace of independent browser apps — tickers, charts, blotters, news, OMS panels, dashboards — that share context through an FDC3 desktop agent and run inside lightweight native windows. Bring your own apps, your own engine (WebView2, WKWebView, Electron, or a custom plugin), and your own theme. We handle window management, channels, intents, dashboards, and engine lifecycle.
+
+![OneTerminal — Terminal with dashboards](docs/images/terminal-dashboards.png)
+
+<p align="center">
+  <a href="#-quick-start"><strong>Quick Start →</strong></a> &nbsp;·&nbsp;
+  <a href="#-features"><strong>Features</strong></a> &nbsp;·&nbsp;
+  <a href="#-architecture"><strong>Architecture</strong></a> &nbsp;·&nbsp;
+  <a href="CONTRIBUTING.md"><strong>Contributing</strong></a> &nbsp;·&nbsp;
+  <a href="docs/plans/README.md"><strong>Roadmap</strong></a>
+</p>
 
 ---
 
-## Architecture
+## Why OneTerminal?
+
+Buy-side and sell-side desks have spent the last decade stitching together browser apps inside heavyweight containers. OneTerminal is a lightweight, fully open-source alternative — built on modern Tauri 2, FINOS FDC3 2.2, and a Rust core — so you can:
+
+- **Ship a branded trading workspace in days, not quarters** — scaffold a workspace with `create-one-terminal`, wire your apps to the App Directory, done.
+- **Run your existing browser apps unchanged** — drop in any HTTP(S) URL; FDC3 channels and intents work via a small `fdc3-plugin.js` script.
+- **Choose the right engine per app** — system WebView for native footprint, Electron for compatibility, or a custom engine via the plugin system.
+- **Stay in control** — everything is open source, runs locally, has no telemetry, and is built on a tiny Rust + TypeScript codebase you can read in an afternoon.
+
+---
+
+## ✨ Features
+
+### Workspace & UX
+
+- **Tiled dashboards with tabs** — drag, split, stack, and rename tabs. Persist multiple dashboards per Terminal and switch between them with one click.
+- **Multiple Terminal instances** — each with its own dashboard list, theme, and configuration.
+- **App Menu drawer** — discover and launch apps registered in the FDC3 App Directory directly from the Terminal.
+- **Customisable per-app UI** — register custom widget headers and tab context-menu items per `appId` ([see widget extension points](#widget-ui-extension-points)).
+- **Hotkey-driven** — Command Palette ([Epic 06](docs/plans/06-command-palette-hotkeys.md)) is on the roadmap; keybindings configurable today.
+
+### Interoperability (FDC3 2.2)
+
+- **User channels, app channels, private channels** — full FDC3 2.2 channel semantics.
+- **Intents and intent resolution** — `raiseIntent`, `addIntentListener`, intent picker UI included.
+- **Context broadcasting** — typed contexts (`fdc3.instrument`, `fdc3.contact`, custom types) routed through the desktop agent.
+- **FINOS DACP** — Desktop Agent Communication Protocol bridge for multi-instance interop.
+
+### Engines
+
+- **Four engine families, one app shape** — `wkwebview` (macOS), `webview2` (Windows), `electron`, and **custom** engines via plugin manifests.
+- **Per-app engine pinning** — pick the engine and version in the App Directory record. The Desktop Agent downloads and caches runtimes on demand.
+- **Webview pre-warm pool** — `OT_WEBVIEW_POOL_SIZE` keeps spawn latency low for first-tab opens.
+
+### Platform & Extensibility
+
+- **App Directory** — embedded FDC3 AppD REST API + React management UI with auth provider plugin support.
+- **Framework plugin system** ([Epic 08](docs/plans/08-plugin-system.md)) — Node.js sidecars that extend the Desktop Agent, App Directory, and browser API surface (`window.OT.plugins`).
+- **Engine plugin manifests** — register new engine families (CEF, Servo, …) via a `manifest.json` — no recompile.
+- **Scaffolder** — `npx create-one-terminal` generates a new workspace; `upgrade` migrates it to newer framework versions in place.
+
+### Developer experience
+
+- **Rust workspace + npm workspace, side by side** — `cargo check --workspace`, `npm run build:all`.
+- **Hot-reload dev loops** — App Directory and sample apps reload on save; Tauri apps rebuild incrementally.
+- **Sample apps included** — `sample-ticker` (port 3010) and `sample-chart` (port 3011) show channel broadcast + intent handling.
+- **Typed FDC3 client** — `@one-terminal/fdc3-client` ships full FDC3 2.2 TypeScript definitions.
+
+---
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+| Tool                          | Version                               |
+| ----------------------------- | ------------------------------------- |
+| [Rust](https://rustup.rs)     | stable ≥ 1.77                         |
+| [Node.js](https://nodejs.org) | ≥ 20 LTS                              |
+| Xcode Command Line Tools      | macOS only — `xcode-select --install` |
+
+### Option A — Scaffold a new workspace
+
+The fastest way to evaluate OneTerminal for your team:
+
+```sh
+npx create-one-terminal my-terminal
+cd my-terminal
+npm install
+npm run dev:app-directory      # http://localhost:3005
+npm run dev:desktop-agent      # separate terminal
+npm run dev:terminal           # separate terminal — launches the window
+```
+
+The scaffolded workspace ships with the App Directory, Desktop Agent, Terminal, and two sample apps already wired up. Edit `apps/app-directory/src/data.ts` to add your own apps.
+
+### Option B — Hack on the framework
+
+Clone this repo and run the same dev loop:
+
+```sh
+git clone https://github.com/OneTerminal/one-terminal.git
+cd one-terminal
+npm install
+
+npm run dev:app-directory      # http://localhost:3005
+npm run dev:sample-ticker      # http://localhost:3010   (optional)
+npm run dev:sample-chart       # http://localhost:3011   (optional)
+npm run dev:desktop-agent      # separate terminal
+npm run dev:terminal           # separate terminal
+```
+
+> The first `cargo` build takes 1–2 minutes. Subsequent incremental builds are seconds.
+
+### Build for production
+
+```sh
+npm run build:terminal         # OneTerminal window manager
+npm run build:desktop-agent    # Desktop Agent
+npm run build:all              # All Tauri apps in sequence
+```
+
+### Your first FDC3 app — 10 lines
+
+Drop this into any HTML page served from a URL you register in the App Directory:
+
+```html
+<script type="module">
+  import { DesktopAgentClient } from "/fdc3-plugin.js";
+  const fdc3 = await DesktopAgentClient.connect("my-app-id");
+  await fdc3.joinUserChannel("Green");
+  await fdc3.addContextListener("fdc3.instrument", (ctx) => {
+    document.title = `Watching ${ctx.id.ticker}`;
+  });
+</script>
+```
+
+Open it inside OneTerminal alongside the sample ticker — switch both to the Green channel — and watch context flow.
+
+---
+
+## 🧱 Architecture
 
 ```
 ┌─────────────────────────────────────────────────────┐
@@ -15,7 +147,7 @@ A reusable desktop container framework built on [Tauri 2](https://tauri.app) tha
                  │ TCP 7890
 ┌────────────────▼────────────────────────────────────┐
 │  Desktop Agent  (apps/desktop-agent)                │
-│  FDC3 2.2 broker — channels, intents, DACP         │
+│  FDC3 2.2 broker — channels, intents, DACP          │
 │  Manages engine runtime downloads + launches        │
 │  ┌─────────────────────────────────────────────┐    │
 │  │  Engine Cache  <app_data>/engines/          │    │
@@ -30,7 +162,7 @@ A reusable desktop container framework built on [Tauri 2](https://tauri.app) tha
         └───────────────┘  └───────────────┘
 ```
 
-**Packages:**
+### Packages
 
 | Path                      | Purpose                                                                 |
 | ------------------------- | ----------------------------------------------------------------------- |
@@ -38,12 +170,13 @@ A reusable desktop container framework built on [Tauri 2](https://tauri.app) tha
 | `apps/desktop-agent`      | FDC3 desktop agent + engine launcher                                    |
 | `apps/tauri-webview-host` | Thin Tauri shell spawned for pinned WebView2/WKWebView apps             |
 | `apps/electron-host`      | Thin Electron shell spawned for Electron-engine apps                    |
-| `apps/app-directory`      | Express server serving FDC3 AppD REST API                               |
+| `apps/app-directory`      | Express server serving FDC3 AppD REST API + management UI               |
 | `packages/ot-core`        | Tauri-agnostic shared Rust crate (engine abstraction, plugin manifests) |
+| `packages/ot-fdc3`        | Tauri plugin: FDC3 2.2 TCP spoke client                                 |
 | `packages/fdc3-plugin`    | Browser-side FDC3 2.2 client (`DesktopAgentClient`)                     |
 | `packages/fdc3-client`    | TypeScript FDC3 type definitions                                        |
 
-**Sample apps** (development / demo):
+### Sample apps
 
 | Path                 | Port | Description                                                                      |
 | -------------------- | ---- | -------------------------------------------------------------------------------- |
@@ -52,55 +185,12 @@ A reusable desktop container framework built on [Tauri 2](https://tauri.app) tha
 
 ---
 
-## Quick Start
-
-### Prerequisites
-
-| Tool                          | Version                               |
-| ----------------------------- | ------------------------------------- |
-| [Rust](https://rustup.rs)     | stable ≥ 1.77                         |
-| [Node.js](https://nodejs.org) | ≥ 20 LTS                              |
-| Xcode Command Line Tools      | macOS only — `xcode-select --install` |
-
-### Run in development
-
-```sh
-# 1. Install all JS dependencies
-npm install
-
-# 2. App Directory (FDC3 AppD REST API + management UI)
-npm run dev:app-directory        # http://localhost:3005
-
-# 3. Sample apps (optional)
-npm run dev:sample-ticker          # http://localhost:3010
-npm run dev:sample-chart           # http://localhost:3011
-
-# 4. Desktop Agent (separate terminal)
-npm run dev:desktop-agent
-
-# 5. OneTerminal window manager (separate terminal)
-npm run dev:terminal
-```
-
-> The first `cargo` build takes 1–2 minutes. Subsequent incremental builds are much faster.
-
-### Build for production
-
-```sh
-npm run build:terminal         # OneTerminal window manager
-npm run build:desktop-agent    # Desktop Agent
-npm run build:all              # All Tauri apps in sequence
-```
-
----
-
-## Configuration
+## ⚙️ Configuration
 
 The Desktop Agent reads `agent.config.json` (bundled as a resource) and applies environment variable overrides on top.
 
-### `agent.config.json`
-
-Located at `apps/desktop-agent/src-tauri/resources/agent.config.json`:
+<details>
+<summary><strong>agent.config.json (default)</strong></summary>
 
 ```json
 {
@@ -125,6 +215,8 @@ Located at `apps/desktop-agent/src-tauri/resources/agent.config.json`:
 }
 ```
 
+</details>
+
 ### Environment variable overrides
 
 | Variable           | Overrides          |
@@ -136,9 +228,11 @@ Located at `apps/desktop-agent/src-tauri/resources/agent.config.json`:
 | `OT_FDC3_BUS_PORT` | `ports.fdc3Bus`    |
 | `OT_DACP_PORT`     | `ports.dacpBridge` |
 
+For the full list (App Directory auth, native-app allowlists, webview pool, engine cache root), see [CLAUDE.md → Environment variables](CLAUDE.md#environment-variables-expanded).
+
 ---
 
-## Browser Engine Support
+## 🖥️ Browser Engine Support
 
 OneTerminal supports four engine families:
 
@@ -214,17 +308,15 @@ Drop a `manifest.json` into `<engine-cache>/plugins/<family>/` to register a new
 | `{{app_id}}`       | FDC3 `appId`                                   |
 | `{{runtime_path}}` | Absolute path to the downloaded engine runtime |
 
-A sample CEF manifest is shipped at `apps/desktop-agent/src-tauri/resources/plugins/cef/manifest.json`.
+A sample CEF manifest ships at `apps/desktop-agent/src-tauri/resources/plugins/cef/manifest.json`.
 
 ---
 
-## Managing the App Directory
+## 📒 Managing the App Directory
 
-The App Directory (`apps/app-directory`) serves the FDC3 AppD REST API and ships a management UI. There are three ways to add, edit, or remove apps.
+The App Directory (`apps/app-directory`) serves the FDC3 AppD REST API and ships a management UI. Three ways to add, edit, or remove apps:
 
 ### Option 1 — Management UI (recommended for quick changes)
-
-Start the server and open the UI in a browser:
 
 ```sh
 npm run dev:app-directory    # http://localhost:3005
@@ -234,7 +326,7 @@ npm run dev:app-directory    # http://localhost:3005
 - **Edit** — click the pencil icon on any listed app.
 - **Delete** — click the trash icon.
 
-> **Note:** The server stores apps in memory. Changes made through the UI (or the REST API) are lost when the server restarts. To persist them, copy the updated records into `apps/app-directory/src/data.ts` (see Option 2).
+> **Note:** The server stores apps in memory. Changes made through the UI (or the REST API) are lost when the server restarts. To persist them, copy the updated records into `apps/app-directory/src/data.ts` (Option 2).
 
 ### Option 2 — Edit `data.ts` (persistent)
 
@@ -250,8 +342,6 @@ Edit `apps/app-directory/src/data.ts` and add or update entries in the `_apps` a
   version: "1.0.0",
 }
 ```
-
-To pin a specific browser engine, add a `hostManifests.oneTerminal.engine` block (see [Browser Engine Support](#browser-engine-support)).
 
 After editing, rebuild the static dist so the changes are bundled into the production binary:
 
@@ -274,25 +364,16 @@ The server exposes a standard FDC3 AppD CRUD API while it is running:
 | `DELETE` | `/v2/apps/:appId` | Remove an app                        |
 
 ```sh
-# Add an app
 curl -X POST http://localhost:3005/v2/apps \
   -H "Content-Type: application/json" \
   -d '{"appId":"my-app","name":"My App","type":"web","details":{"url":"http://localhost:4000"}}'
-
-# Edit an app
-curl -X PUT http://localhost:3005/v2/apps/my-app \
-  -H "Content-Type: application/json" \
-  -d '{"appId":"my-app","name":"My App","type":"web","details":{"url":"http://localhost:4001"}}'
-
-# Delete an app
-curl -X DELETE http://localhost:3005/v2/apps/my-app
 ```
 
 Same in-memory caveat applies — persist changes to `data.ts` to survive a restart.
 
 ---
 
-## FDC3 Integration (Browser Apps)
+## 🔌 FDC3 Integration (Browser Apps)
 
 Browser apps use `fdc3-plugin.js` as the FDC3 desktop agent proxy over WebSocket.
 
@@ -330,51 +411,87 @@ Browser apps use `fdc3-plugin.js` as the FDC3 desktop agent proxy over WebSocket
 The plugin connects to `ws://localhost:7891/fdc3` by default. Override via:
 
 ```html
-<!-- HTML meta tag -->
 <meta name="ot-fdc3-bus-url" content="ws://myhost:7891/fdc3" />
 ```
 
 ```js
-// Or global before the module loads
 window.OT_FDC3_BUS_URL = "ws://myhost:7891/fdc3";
 ```
 
 ---
 
-## Development Notes
+## 🧩 Widget UI Extension Points
 
-### Dev overrides
+Two static registries in `apps/one-terminal/src/components/` let developers customise per-app UI without touching the shell layout.
 
-```sh
-# Skip engine download — use a local runtime directory
-OT_ENGINE_RUNTIME_OVERRIDE=/path/to/runtime npm run dev:desktop-agent
+- **Custom widget headers** — `panelHeaders.tsx` — render badges, status indicators, or controls inside each tab's title bar, keyed by `appId`.
+- **Tab context-menu items** — `contextMenuItems.ts` — add per-app actions to the right-click menu (`"*"` targets all apps).
 
-# Use a local electron-host checkout
-OT_ELECTRON_HOST_OVERRIDE=$PWD/apps/electron-host npm run dev:terminal
-```
-
-### Rust workspace
-
-```sh
-cargo check --workspace
-cargo test -p desktop-agent engines::router
-```
-
-### Shared crate: `ot-core`
-
-`packages/ot-core` contains:
-
-| Module                   | Contents                                                               |
-| ------------------------ | ---------------------------------------------------------------------- |
-| `ot_core::engine`        | `EngineFamily`, `EngineBinding`, cache-path helpers, install sentinel  |
-| `ot_core::plugin`        | `EngineManifest`, `LaunchMode`, template expansion, plugin-dir scanner |
-| `ot_core::electron_host` | Electron binary/shell resolution, spawn helpers                        |
-
-Both `desktop-agent` and `one-terminal` depend on it via `{ workspace = true }`.
+Full API docs in [CLAUDE.md → Widget UI extension points](CLAUDE.md#widget-ui-extension-points). These will be superseded by `window.OT.plugins.get("contextMenu")` once the dynamic plugin system ([Epic 08](docs/plans/08-plugin-system.md)) lands — static entries will continue to work unchanged.
 
 ---
 
-## Repository Structure
+## 🛣️ Roadmap
+
+Detailed implementation plans for the next development phase are in [`docs/plans/`](docs/plans/).
+
+| Plan                        | File                                                                                                 | Milestone |
+| --------------------------- | ---------------------------------------------------------------------------------------------------- | --------- |
+| 01 — Widget Headers         | [docs/plans/01-customisable-widget-headers.md](docs/plans/01-customisable-widget-headers.md)         | Phase 1   |
+| 02 — Faster Loading         | [docs/plans/02-faster-widget-loading.md](docs/plans/02-faster-widget-loading.md)                     | Phase 3   |
+| 03 — App Directory Auth     | [docs/plans/03-app-directory-roles-permissions.md](docs/plans/03-app-directory-roles-permissions.md) | Phase 1   |
+| 04 — Native App Launch      | [docs/plans/04-native-app-launch.md](docs/plans/04-native-app-launch.md)                             | Phase 3   |
+| 05 — Ticker View Chart      | [docs/plans/05-ticker-view-chart-enhancement.md](docs/plans/05-ticker-view-chart-enhancement.md)     | Phase 2   |
+| 06 — Command Palette        | [docs/plans/06-command-palette-hotkeys.md](docs/plans/06-command-palette-hotkeys.md)                 | Phase 2   |
+| 07 — Deployment             | [docs/plans/07-deployment-and-hosting.md](docs/plans/07-deployment-and-hosting.md)                   | Phase 4   |
+| 08 — Plugin System          | [docs/plans/08-plugin-system.md](docs/plans/08-plugin-system.md)                                     | Phase 5   |
+| 09 — Dashboards & Terminals | [docs/dashboards/README.md](docs/dashboards/README.md)                                               | Phase 2–5 |
+| 10 — Terminal App Menu      | [docs/plans/10-terminal-app-menu.md](docs/plans/10-terminal-app-menu.md)                             | Phase 2   |
+
+See [docs/plans/README.md](docs/plans/README.md) for execution order and effort estimates.
+
+---
+
+## 🤝 Contributing
+
+We welcome contributions of all sizes — bug reports, docs improvements, sample apps, engine plugins, framework plugins, and core changes.
+
+- **First time?** Read [CONTRIBUTING.md](CONTRIBUTING.md) — it walks through the development setup, scaffolder workflow, and PR conventions.
+- **Picking something up?** Browse [open issues](../../issues) or the [roadmap plans](docs/plans/) — many are scoped as discrete contributor-friendly tasks.
+- **Building a sample trading app?** We'd love to feature it. Open a PR adding it under `apps/` or link it from the docs.
+- **Reporting security issues?** Please email the maintainers privately rather than opening a public issue.
+
+### Quick commands for contributors
+
+```sh
+cargo check --workspace                  # type-check Rust
+cargo test --workspace                   # run Rust tests
+cargo test -p desktop-agent engines::router
+
+npm run build:app-directory              # rebuild AppD static dist
+npm run build:samples                    # production builds of sample apps
+npm run build:all                        # all Tauri apps
+
+npm run create-migration                 # author a framework migration
+npm run build:scaffolder                 # rebuild create-one-terminal
+```
+
+---
+
+## 📦 Scaffolder
+
+OneTerminal ships a `create-one-terminal` package that generates and upgrades workspaces:
+
+```sh
+npx create-one-terminal my-terminal           # scaffold a new workspace
+npx create-one-terminal upgrade               # upgrade an existing workspace in place
+```
+
+Templates live at `packages/create-one-terminal/templates/` and are regenerated from the live apps via `npm run create-migration`. See [SCAFFOLDING.md](SCAFFOLDING.md) and [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow.
+
+---
+
+## 📁 Repository Structure
 
 ```
 one-terminal/
@@ -388,8 +505,25 @@ one-terminal/
 │   └── sample-chart/          Sample: candlestick chart viewer browser app (port 3011)
 ├── packages/
 │   ├── ot-core/               Shared Rust crate (engine abstraction, plugin manifests)
+│   ├── ot-fdc3/               Tauri plugin: FDC3 2.2 TCP spoke client
 │   ├── fdc3-plugin/           Browser FDC3 client (WebSocket transport)
-│   └── fdc3-client/           TypeScript FDC3 types
+│   ├── fdc3-client/           TypeScript FDC3 types + Fdc3Agent
+│   └── create-one-terminal/   Scaffolder + upgrade tool
+├── docs/
+│   ├── dashboards/            Dashboards & multi-terminal planning docs
+│   └── plans/                 Roadmap and implementation plans
 ├── Cargo.toml                 Rust workspace
 └── package.json               npm workspace root
 ```
+
+---
+
+## 📄 License
+
+OneTerminal is released under the [MIT License](LICENSE).
+
+---
+
+<p align="center">
+  Built with ❤️ on <a href="https://tauri.app">Tauri 2</a> and <a href="https://fdc3.finos.org">FINOS FDC3 2.2</a>.
+</p>
