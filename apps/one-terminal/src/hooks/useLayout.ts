@@ -51,10 +51,5 @@ export function useLayout() {
     []
   );
 
-  const closePanel = useCallback(
-    (panelId: string) => invoke<LayoutSnapshot | null>("wm_close", { panelId }),
-    []
-  );
-
-  return { layout, openPanel, closePanel };
+  return { layout, openPanel };
 }

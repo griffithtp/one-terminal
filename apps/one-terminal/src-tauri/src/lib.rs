@@ -577,6 +577,18 @@ async fn overlay_raise(
 
 /// Show the context menu overlay at window position (`x`, `y`) for the Stack
 /// at `stack_path` containing `n_tabs` tabs.
+///
+/// `kind` selects which item set the overlay renders:
+///   - `"tab"` (default when omitted) — per-widget kebab + per-tab right-click.
+///     Renders Add Widget, Duplicate, Rename, Reset name, Zoom, Reset zoom,
+///     custom items, Close tab. Requires `tab_label` + `app_id`.
+///   - `"stack-kebab"` — group kebab + strip-background right-click. Renders
+///     Add Widget, Maximise/Restore group, Close all widgets. `tab_label` /
+///     `app_id` may still be set (the active tab's, used as the `target` for
+///     "Add Widget") but the menu shape is determined by `kind`.
+///
+/// `maximized` is forwarded so the group-kebab menu can label the toggle
+/// "Maximise group" vs "Restore group" without an extra IPC round-trip.
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
 async fn wm_ctx_menu_open(
@@ -588,6 +600,8 @@ async fn wm_ctx_menu_open(
     app_id: Option<String>,
     display_name: Option<String>,
     zoom_factor: Option<f64>,
+    kind: Option<String>,
+    maximized: Option<bool>,
     window: Window,
     manager: State<'_, TerminalManager>,
     app: AppHandle,
@@ -608,6 +622,8 @@ async fn wm_ctx_menu_open(
                 "appId": app_id,
                 "displayName": display_name,
                 "zoomFactor": zoom_factor,
+                "kind": kind.unwrap_or_else(|| "tab".to_string()),
+                "maximized": maximized.unwrap_or(false),
             }),
         )
         .map_err(|e| e.to_string())
@@ -686,6 +702,7 @@ async fn wm_overflow_menu_open(
 #[tauri::command]
 async fn wm_menu_open(
     initial_section_id: Option<String>,
+    target_label: Option<String>,
     window: Window,
     manager: State<'_, TerminalManager>,
     app: AppHandle,
@@ -697,7 +714,10 @@ async fn wm_menu_open(
         .ok_or("overlay not found".to_string())?
         .emit(
             "wm:menu-open",
-            serde_json::json!({ "initialSectionId": initial_section_id }),
+            serde_json::json!({
+                "initialSectionId": initial_section_id,
+                "targetLabel": target_label,
+            }),
         )
         .map_err(|e| e.to_string())
 }

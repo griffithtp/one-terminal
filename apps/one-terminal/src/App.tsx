@@ -29,6 +29,7 @@ import { GhostLayer } from "./components/GhostLayer";
 import { DropZoneLayer } from "./components/DropZoneLayer";
 import { PanelHeaderLayer } from "./components/PanelHeaderLayer";
 import { OverlayApp } from "./components/OverlayApp";
+import { EmptyDashboardPicker } from "./components/EmptyDashboardPicker";
 import { popPark, pushPark } from "./lib/parkPanels";
 import { registerWidgetCommands, setActivePanelLabel } from "./commands/widgetCommands";
 import { initAppCommands } from "./commands/appCommands";
@@ -105,8 +106,8 @@ export default function App() {
 }
 
 function ChromeApp() {
-  const { layout, openPanel, closePanel } = useLayout();
-  const { host: hostLayout, removeTab } = useHostLayout();
+  const { layout, openPanel } = useLayout();
+  const { host: hostLayout } = useHostLayout();
   const tabDrag = useTabDrag();
   const dashboards = useDashboards();
 
@@ -250,27 +251,22 @@ function ChromeApp() {
     [tabDrag, hostLayout]
   );
 
-  const handleTabClose = useCallback(
-    (stack: StackHeader, tabIndex: number) => {
-      const tab = stack.tabs[tabIndex];
-      if (!tab) return;
-      // Optimistic: drop the tab from local state immediately so it disappears
-      // on the same frame as the click. Rust's next `wm:host-layout` emit
-      // (after close_tab → reflow → emit_host) overwrites this with the truth.
-      removeTab(tab.label);
-      invoke("close_tab", { label: tab.label }).catch(console.error);
-    },
-    [removeTab]
-  );
-
   const handleOpenTab = useCallback(
-    (appId: string, url: string, title: string, engineBinding: EngineBinding | null) => {
-      // New panel joins the active panel's Stack (auto-wrapping the active
-      // leaf into a Stack on first grouping). Creating splits happens only
+    (
+      appId: string,
+      url: string,
+      title: string,
+      engineBinding: EngineBinding | null,
+      target?: string | null
+    ) => {
+      // New panel joins `target`'s Stack when set (used by per-widget /
+      // group kebab "Add Widget" + "Duplicate"), otherwise the active
+      // panel's Stack (drawer / palette / empty-dashboard picker). Stack
+      // auto-wraps the leaf on first grouping. Creating splits happens only
       // via tab drag-and-drop. When the user picks an engine that doesn't
       // match this WM's engine, Rust pops the launch out as a stand-alone
       // window and the tab list stays the same.
-      openPanel(appId, url, title, engineBinding).catch(console.error);
+      openPanel(appId, url, title, engineBinding, target ?? undefined).catch(console.error);
     },
     [openPanel]
   );
@@ -281,27 +277,40 @@ function ChromeApp() {
   // sibling subtrees (e.g. drawer, header) being torn down mid-flow.
   const launch = useAppLaunch({ onOpenTab: handleOpenTab });
 
-  // Bridge for app launches initiated from the overlay drawer. The drawer
-  // emits `wm:launch-app-from-menu` with the full AppRecord; chrome runs
-  // the launch through useAppLaunch so the picker / download dialogs
-  // render in chrome (parked correctly via existing chrome parking).
+  // Bridge for app launches initiated from the overlay drawer or kebab
+  // menus. The overlay emits `wm:launch-app-from-menu` with the full
+  // AppRecord (+ optional target label so per-widget / group kebab
+  // "Add Widget" lands inside the source's Stack). Chrome runs the
+  // launch through useAppLaunch so the picker / download dialogs render
+  // in chrome (parked correctly via existing chrome parking).
   const launchAppRef = useRef(launch.launchApp);
   launchAppRef.current = launch.launchApp;
+  // Duplicate fires from the per-widget kebab — the overlay only knows
+  // the source's appId + label, so chrome resolves the AppRecord from
+  // `launch.apps` and reuses the standard launch flow (fresh session,
+  // engine picker re-prompt when multi-engine).
+  const launchAppsRef = useRef(launch.apps);
+  launchAppsRef.current = launch.apps;
   useEffect(() => {
-    const unlisten = listen<{ app: AppRecord }>("wm:launch-app-from-menu", (e) => {
-      launchAppRef.current(e.payload.app);
-    });
+    const unlistenLaunch = listen<{ app: AppRecord; target?: string | null }>(
+      "wm:launch-app-from-menu",
+      (e) => {
+        launchAppRef.current(e.payload.app, e.payload.target ?? null);
+      }
+    );
+    const unlistenDuplicate = listen<{ appId: string; target: string }>(
+      "wm:duplicate-from-menu",
+      (e) => {
+        const app = launchAppsRef.current.find((a) => a.appId === e.payload.appId);
+        if (!app) return;
+        launchAppRef.current(app, e.payload.target);
+      }
+    );
     return () => {
-      unlisten.then((fn) => fn());
+      unlistenLaunch.then((fn) => fn());
+      unlistenDuplicate.then((fn) => fn());
     };
   }, []);
-
-  const handleClose = useCallback(
-    (panelId: string) => {
-      closePanel(panelId).catch(console.error);
-    },
-    [closePanel]
-  );
 
   return (
     <div
@@ -326,16 +335,12 @@ function ChromeApp() {
       {/* Per-panel headers — drag region + title + close button, painted in
           the top slice of every non-Stack leaf's rect. Stack members get
           their headers from the tab strip instead. */}
-      {layout && <PanelHeaderLayer panels={layout.panels} onClose={handleClose} />}
+      {layout && <PanelHeaderLayer panels={layout.panels} />}
 
       {/* Host shell — tab strips + splitter handles driven by the N-ary tree */}
       {hostLayout && (
         <>
-          <TabStripLayer
-            stacks={hostLayout.stacks}
-            onTabPointerDown={handleTabPointerDown}
-            onTabClose={handleTabClose}
-          />
+          <TabStripLayer stacks={hostLayout.stacks} onTabPointerDown={handleTabPointerDown} />
           <SplitterHandleLayer splitters={hostLayout.splitters} />
         </>
       )}
@@ -346,17 +351,22 @@ function ChromeApp() {
 
       <TerminalCloseDialog />
 
-      {/* Empty-state hint: different message depending on whether dashboards exist */}
+      {/* Empty-state surfaces: no dashboards yet → CTA copy; empty
+          dashboard → inline app picker so the first widget can be added
+          without opening the drawer. */}
       {(!layout || layout.panels.length === 0) &&
-        (!hostLayout || hostLayout.stacks.length === 0) && (
+        (!hostLayout || hostLayout.stacks.length === 0) &&
+        (dashboards.dashboards.length === 0 ? (
           <div className="wm-empty">
-            <p>
-              {dashboards.dashboards.length === 0
-                ? "Create a dashboard to get started."
-                : "No panels open — launch an app from the header."}
-            </p>
+            <p>Create a dashboard to get started.</p>
           </div>
-        )}
+        ) : (
+          <EmptyDashboardPicker
+            apps={launch.apps}
+            enginesFor={launch.enginesFor}
+            onSelect={launch.launchApp}
+          />
+        ))}
 
       {/* Electron auto-install status banner */}
       {electronStatus === "installing" && (

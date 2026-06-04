@@ -9,37 +9,34 @@ export const PANEL_HEADER_HEIGHT = 28;
 
 interface Props {
   panels: PanelBounds[];
-  onClose: (panelId: string) => void;
 }
 
 /**
  * Renders one header per open panel in the top `PANEL_HEADER_HEIGHT` slice of
  * each panel's rect. The chrome webview covers the full window, so pointer
  * `clientX/Y` already speak window-local coordinates — no translation needed.
+ *
+ * The per-panel `×` close button has been replaced by a `⋮` kebab that opens
+ * the unified ctx menu in the overlay (Add Widget · Duplicate · Rename ·
+ * Zoom · Close tab). Right-clicking the header still opens the same menu.
  */
-export function PanelHeaderLayer({ panels, onClose }: Props) {
+export function PanelHeaderLayer({ panels }: Props) {
   return (
     <>
       {panels.map((p) => (
-        <PanelHeader key={p.id} panel={p} onClose={onClose} />
+        <PanelHeader key={p.id} panel={p} />
       ))}
     </>
   );
 }
 
-function PanelHeader({
-  panel,
-  onClose,
-}: {
-  panel: PanelBounds;
-  onClose: (panelId: string) => void;
-}) {
+function PanelHeader({ panel }: { panel: PanelBounds }) {
   const dragging = useRef(false);
 
   const handlePointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
-    // Close button handles its own pointerdown — don't start a drag.
-    if ((e.target as HTMLElement).closest("[data-panel-close]")) return;
+    // Kebab handles its own pointerdown — don't start a drag.
+    if ((e.target as HTMLElement).closest("[data-panel-menu]")) return;
     (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     dragging.current = true;
     e.preventDefault();
@@ -65,6 +62,28 @@ function PanelHeader({
     } catch {}
   }, []);
 
+  // Open the per-widget ctx menu anchored under the kebab. Standalone panels
+  // aren't members of a Stack, so `stackPath` is empty + `nTabs` is 1. The
+  // overlay only uses these for the "Close group" footer (suppressed for
+  // standalone panels by kind === "tab" + empty stackPath path).
+  const openMenu = useCallback(
+    (anchorRect: DOMRect) => {
+      invoke("wm_ctx_menu_open", {
+        x: anchorRect.right,
+        y: anchorRect.bottom,
+        stackPath: [],
+        nTabs: 1,
+        tabLabel: panel.id,
+        appId: panel.appId,
+        displayName: null,
+        zoomFactor: null,
+        kind: "tab",
+        maximized: false,
+      }).catch(console.error);
+    },
+    [panel.id, panel.appId]
+  );
+
   const Content = useMemo(() => headerContentFor(panel.appId), [panel.appId]);
 
   return (
@@ -82,20 +101,36 @@ function PanelHeader({
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
       onPointerCancel={handlePointerUp}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        invoke("wm_ctx_menu_open", {
+          x: e.clientX,
+          y: e.clientY,
+          stackPath: [],
+          nTabs: 1,
+          tabLabel: panel.id,
+          appId: panel.appId,
+          displayName: null,
+          zoomFactor: null,
+          kind: "tab",
+          maximized: false,
+        }).catch(console.error);
+      }}
     >
       <Content appId={panel.appId} title={panel.title} />
       <button
         type="button"
-        data-panel-close
-        className="wm-panel-header__close"
-        aria-label={`Close ${panel.title}`}
+        data-panel-menu
+        className="wm-panel-header__menu"
+        aria-label={`${panel.title} menu`}
+        title="More actions"
         onPointerDown={(e) => e.stopPropagation()}
         onClick={(e) => {
           e.stopPropagation();
-          onClose(panel.id);
+          openMenu(e.currentTarget.getBoundingClientRect());
         }}
       >
-        ×
+        ⋮
       </button>
     </div>
   );

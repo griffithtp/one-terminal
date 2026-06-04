@@ -48,6 +48,8 @@ function detectCurrentOs(): OsKey {
 interface PendingLaunch {
   app: AppRecord;
   binding: EngineBinding;
+  /** When set, the new tab joins this label's Stack. */
+  target?: string | null;
 }
 
 interface DownloadPrompt {
@@ -66,7 +68,8 @@ export interface UseAppLaunchOpts {
     appId: string,
     url: string,
     title: string,
-    engineBinding: EngineBinding | null
+    engineBinding: EngineBinding | null,
+    target?: string | null
   ) => void;
 }
 
@@ -77,8 +80,13 @@ export interface UseAppLaunchResult {
   /**
    * Entry point: resolves engine (picker if multiple, auto if 0/1), prompts
    * download if needed, then opens the tab. Safe to call from any UI.
+   *
+   * `target` — when set, the new tab joins this panel label's Stack
+   * (auto-wrapping it into a new Stack if needed). Used by the per-widget
+   * and group kebab menus so "Add Widget" / "Duplicate" land alongside
+   * the source widget rather than at the active panel.
    */
-  launchApp: (app: AppRecord) => void;
+  launchApp: (app: AppRecord, target?: string | null) => void;
   /** Engine picker dialog node, or null when not shown. Mount once in App. */
   pickerNode: ReactNode | null;
   /** Download confirm/progress dialog node, or null when not shown. */
@@ -131,8 +139,8 @@ export function useAppLaunch({ onOpenTab }: UseAppLaunchOpts): UseAppLaunchResul
   );
 
   const doOpenTab = useCallback(
-    (app: AppRecord, engineBinding: EngineBinding | null) => {
-      onOpenTab(app.appId, app.details?.url ?? "", app.title ?? app.name, engineBinding);
+    (app: AppRecord, engineBinding: EngineBinding | null, target?: string | null) => {
+      onOpenTab(app.appId, app.details?.url ?? "", app.title ?? app.name, engineBinding, target);
     },
     [onOpenTab]
   );
@@ -146,7 +154,7 @@ export function useAppLaunch({ onOpenTab }: UseAppLaunchOpts): UseAppLaunchResul
           binding: pending.binding,
         });
         if (status.status === "ready") {
-          doOpenTab(pending.app, pending.binding);
+          doOpenTab(pending.app, pending.binding, pending.target);
         } else if (status.status === "needs-download") {
           setDownloadPrompt({
             pending,
@@ -163,19 +171,23 @@ export function useAppLaunch({ onOpenTab }: UseAppLaunchOpts): UseAppLaunchResul
     [doOpenTab]
   );
 
+  // Target for the in-flight launch survives the engine picker round-trip.
+  const [pickerTarget, setPickerTarget] = useState<string | null | undefined>(undefined);
+
   const launchApp = useCallback(
-    (app: AppRecord) => {
+    (app: AppRecord, target?: string | null) => {
       setErrorMessage(null);
       const engines = enginesFor(app);
       if (engines.length === 0) {
         // No engine constraint — let the WM use its own pinned engine.
-        doOpenTab(app, null);
+        doOpenTab(app, null, target);
         return;
       }
       if (engines.length === 1) {
-        proceedLaunch({ app, binding: engines[0] }).catch(console.error);
+        proceedLaunch({ app, binding: engines[0], target }).catch(console.error);
         return;
       }
+      setPickerTarget(target);
       setPickerApp(app);
     },
     [enginesFor, doOpenTab, proceedLaunch]
@@ -184,11 +196,13 @@ export function useAppLaunch({ onOpenTab }: UseAppLaunchOpts): UseAppLaunchResul
   const handlePickerPick = useCallback(
     (binding: EngineBinding) => {
       const app = pickerApp;
+      const target = pickerTarget;
       setPickerApp(null);
+      setPickerTarget(undefined);
       if (!app) return;
-      proceedLaunch({ app, binding }).catch(console.error);
+      proceedLaunch({ app, binding, target }).catch(console.error);
     },
-    [pickerApp, proceedLaunch]
+    [pickerApp, pickerTarget, proceedLaunch]
   );
 
   const handleDownloadConfirm = useCallback(async () => {
@@ -200,11 +214,11 @@ export function useAppLaunch({ onOpenTab }: UseAppLaunchOpts): UseAppLaunchResul
     try {
       await invoke("wm_engine_install", { binding: prompt.pending.binding });
       // Sentinel is now in place; launch the app.
-      const { app, binding } = prompt.pending;
+      const { app, binding, target } = prompt.pending;
       setDownloading(false);
       setDownloadPrompt(null);
       setDownloadProgress(null);
-      doOpenTab(app, binding);
+      doOpenTab(app, binding, target);
     } catch (e) {
       setDownloading(false);
       setErrorMessage(e instanceof Error ? e.message : String(e));
@@ -216,6 +230,7 @@ export function useAppLaunch({ onOpenTab }: UseAppLaunchOpts): UseAppLaunchResul
     setDownloadPrompt(null);
     setDownloadProgress(null);
     setErrorMessage(null);
+    setPickerTarget(undefined);
   }, [downloading]);
 
   const clearError = useCallback(() => setErrorMessage(null), []);

@@ -12,16 +12,18 @@ interface TabStripLayerProps {
     stack: StackHeader,
     tabIndex: number
   ) => void;
-  /** Close-button click — caller destroys the leaf and its webview. */
-  onTabClose?: (stack: StackHeader, tabIndex: number) => void;
 }
 
 /**
  * Renders one tab strip per `Stack` at `tab_strip_height` flush against the
  * top of the stack rect. Overflow handling lives in the per-stack
  * `TabStrip` child so each strip has its own ResizeObserver + menu state.
+ *
+ * Per-tab `×` and the right-cluster maximise/close buttons have been
+ * replaced by `⋮` kebabs that route to the unified ctx menu in the overlay
+ * — see [docs/Terminal Menu.md](../../../../docs/Terminal Menu.md).
  */
-export function TabStripLayer({ stacks, onTabPointerDown, onTabClose }: TabStripLayerProps) {
+export function TabStripLayer({ stacks, onTabPointerDown }: TabStripLayerProps) {
   return (
     <>
       {stacks.map((s) => (
@@ -29,7 +31,6 @@ export function TabStripLayer({ stacks, onTabPointerDown, onTabClose }: TabStrip
           key={`stack-${s.path.join("-")}`}
           stack={s}
           onTabPointerDown={onTabPointerDown}
-          onTabClose={onTabClose}
         />
       ))}
     </>
@@ -41,10 +42,9 @@ export function TabStripLayer({ stacks, onTabPointerDown, onTabClose }: TabStrip
 const MIN_TAB_WIDTH = 80;
 /** Width reserved for the overflow button when any tabs are hidden. */
 const OVERFLOW_BTN_WIDTH = 28;
-/** Combined width reserved for the always-visible right-cluster buttons
- *  (maximize/restore + close-group). Matches the two 24px buttons defined
- *  in `.wm-tabstrip__maximize` and `.wm-tabstrip__close-group`. */
-const RIGHT_CLUSTER_WIDTH = 48;
+/** Width reserved for the always-visible right-cluster kebab button.
+ *  Matches `.wm-tabstrip__group-menu` width in wm.css. */
+const RIGHT_CLUSTER_WIDTH = 24;
 
 interface TabStripProps {
   stack: StackHeader;
@@ -53,7 +53,6 @@ interface TabStripProps {
     stack: StackHeader,
     tabIndex: number
   ) => void;
-  onTabClose?: (stack: StackHeader, tabIndex: number) => void;
 }
 
 /**
@@ -66,7 +65,8 @@ interface TabStripProps {
  * so it stays on-screen — losing sight of the current tab is worse than a
  * minor ordering surprise.
  */
-function TabStrip({ stack, onTabPointerDown, onTabClose }: TabStripProps) {
+function TabStrip({ stack, onTabPointerDown }: TabStripProps) {
+  const groupMenuBtnRef = useRef<HTMLButtonElement>(null);
   const stripRef = useRef<HTMLDivElement>(null);
   const btnRef = useRef<HTMLButtonElement>(null);
   const [stripWidth, setStripWidth] = useState(0);
@@ -100,13 +100,27 @@ function TabStrip({ stack, onTabPointerDown, onTabClose }: TabStripProps) {
     };
   }, [stack.tabs]);
 
-  const closeGroup = useCallback(() => {
-    invoke("wm_close_stack", { path: stack.path }).catch(console.error);
-  }, [stack.path]);
-
-  const toggleMaximize = useCallback(() => {
-    invoke("wm_toggle_maximize_stack", { path: stack.path }).catch(console.error);
-  }, [stack.path]);
+  // Open the group kebab menu in the overlay, anchored under the kebab.
+  // `targetLabel = stack.tabs[stack.active]` so "Add Widget" lands inside
+  // this Stack rather than wherever the global active panel happens to be.
+  const openGroupMenu = useCallback(
+    (anchorRect: DOMRect) => {
+      const activeTab = stack.tabs[stack.active];
+      invoke("wm_ctx_menu_open", {
+        x: anchorRect.right,
+        y: anchorRect.bottom,
+        stackPath: stack.path,
+        nTabs: stack.tabs.length,
+        tabLabel: activeTab?.label ?? null,
+        appId: activeTab?.appId ?? null,
+        displayName: null,
+        zoomFactor: null,
+        kind: "stack-kebab",
+        maximized: stack.maximized,
+      }).catch(console.error);
+    },
+    [stack.path, stack.tabs, stack.active, stack.maximized]
+  );
 
   const n = stack.tabs.length;
   const tabAreaWidth = Math.max(0, stripWidth - RIGHT_CLUSTER_WIDTH);
@@ -137,16 +151,20 @@ function TabStrip({ stack, onTabPointerDown, onTabClose }: TabStripProps) {
       className="wm-tabstrip"
       data-stack-path={stack.path.join(".")}
       onContextMenu={(e) => {
-        // Strip-level right-click (not on a tab): show close-group only.
+        // Strip-level right-click — same menu as the group kebab.
         e.preventDefault();
+        const activeTab = stack.tabs[stack.active];
         invoke("wm_ctx_menu_open", {
           x: e.clientX,
           y: e.clientY,
           stackPath: stack.path,
           nTabs: stack.tabs.length,
-          tabLabel: null,
+          tabLabel: activeTab?.label ?? null,
+          appId: activeTab?.appId ?? null,
           displayName: null,
           zoomFactor: null,
+          kind: "stack-kebab",
+          maximized: stack.maximized,
         }).catch(console.error);
       }}
       style={{
@@ -187,6 +205,8 @@ function TabStrip({ stack, onTabPointerDown, onTabClose }: TabStripProps) {
                 appId: tab.appId,
                 displayName: tab.displayName ?? null,
                 zoomFactor: tab.zoomFactor,
+                kind: "tab",
+                maximized: stack.maximized,
               }).catch(console.error);
             }}
             style={{ touchAction: "none" }}
@@ -224,18 +244,31 @@ function TabStrip({ stack, onTabPointerDown, onTabClose }: TabStripProps) {
                 {headerContentFor(tab.appId)({ appId: tab.appId, title: displayLabel })}
               </span>
             )}
-            {onTabClose && !isEditing && (
+            {!isEditing && (
               <button
                 type="button"
-                className="wm-tab__close"
-                aria-label={`Close ${displayLabel}`}
+                className="wm-tab__menu"
+                aria-label={`${displayLabel} menu`}
+                title="More actions"
                 onPointerDown={(e) => e.stopPropagation()}
                 onClick={(e) => {
                   e.stopPropagation();
-                  onTabClose(stack, i);
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  invoke("wm_ctx_menu_open", {
+                    x: rect.right,
+                    y: rect.bottom,
+                    stackPath: stack.path,
+                    nTabs: stack.tabs.length,
+                    tabLabel: tab.label,
+                    appId: tab.appId,
+                    displayName: tab.displayName ?? null,
+                    zoomFactor: tab.zoomFactor,
+                    kind: "tab",
+                    maximized: stack.maximized,
+                  }).catch(console.error);
                 }}
               >
-                ×
+                ⋮
               </button>
             )}
           </div>
@@ -272,30 +305,18 @@ function TabStrip({ stack, onTabPointerDown, onTabClose }: TabStripProps) {
           </button>
         )}
         <button
+          ref={groupMenuBtnRef}
           type="button"
-          className="wm-tabstrip__maximize"
-          aria-label={stack.maximized ? "Restore group" : "Maximize group"}
-          title={stack.maximized ? "Restore group" : "Maximize group"}
+          className="wm-tabstrip__group-menu"
+          aria-label={`Group actions (${n} ${n === 1 ? "tab" : "tabs"})`}
+          title="Group actions"
           onPointerDown={(e) => e.stopPropagation()}
           onClick={(e) => {
             e.stopPropagation();
-            toggleMaximize();
+            openGroupMenu(e.currentTarget.getBoundingClientRect());
           }}
         >
-          {stack.maximized ? "⧉" : "▢"}
-        </button>
-        <button
-          type="button"
-          className="wm-tabstrip__close-group"
-          aria-label={`Close group (${n} ${n === 1 ? "tab" : "tabs"})`}
-          title={`Close group (${n} ${n === 1 ? "tab" : "tabs"})`}
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={(e) => {
-            e.stopPropagation();
-            closeGroup();
-          }}
-        >
-          ×
+          ⋮
         </button>
       </div>
     </div>
