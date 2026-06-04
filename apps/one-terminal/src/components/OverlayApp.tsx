@@ -6,9 +6,11 @@ import { PanelHighlightLayer } from "./CommandPalette";
 import { OverlayMenu } from "./OverlayMenu";
 import { OverlayConfirmDashboardSwitch } from "./OverlayConfirmDashboardSwitch";
 import { OverlayCreateDashboard } from "./OverlayCreateDashboard";
+import { WidgetCatalog } from "./WidgetCatalog";
+import { useAppDirectory } from "../hooks/useAppDirectory";
 import { bigramScore } from "../commands/registry";
 import type { SerializableCommand } from "../commands/registry";
-import type { LayoutSnapshot, HostLayout, OverflowMenuPayload } from "../types";
+import type { AppRecord, HostLayout, LayoutSnapshot, OverflowMenuPayload } from "../types";
 
 // ── FDC3 channel picker types ─────────────────────────────────────────────────
 
@@ -127,6 +129,21 @@ export function OverlayApp() {
   // ── Context menu state ───────────────────────────────────────────────────
   const [menu, setMenu] = useState<CtxMenuPayload | null>(null);
   const [zoomOpen, setZoomOpen] = useState(false);
+  /** "Add Widget" submenu — when open, the ctx menu shows an app list and a
+   *  "View all widgets" footer beneath that item. Mutually exclusive with
+   *  the Zoom submenu so opening one closes the other. */
+  const [addWidgetOpen, setAddWidgetOpen] = useState(false);
+
+  /** Set when the user picks "View all widgets" from the submenu. Stores
+   *  the target panel label so the launch lands in that widget's Stack.
+   *  Null means the modal is closed. */
+  const [allWidgets, setAllWidgets] = useState<{ target: string | null } | null>(null);
+
+  // App Directory for the kebab's Add Widget submenu + View all widgets
+  // modal. Same source as `OverlayMenu` / `AddWidgetSection`; the actual
+  // launch always happens in chrome (`useAppLaunch.launchApp`) via the
+  // `wm:launch-app-from-menu` bridge.
+  const { apps, enginesFor } = useAppDirectory();
 
   // ── Overflow menu state ──────────────────────────────────────────────────
   const [overflowMenu, setOverflowMenu] = useState<OverflowMenuPayload | null>(null);
@@ -159,6 +176,7 @@ export function OverlayApp() {
           listen<CtxMenuPayload>("wm:ctx-menu", (e) => {
             setMenu(e.payload);
             setZoomOpen(false);
+            setAddWidgetOpen(false);
             setOverflowMenu(null);
             setChannelPicker(null);
           }),
@@ -273,7 +291,31 @@ export function OverlayApp() {
   function dismiss() {
     setMenu(null);
     setZoomOpen(false);
+    setAddWidgetOpen(false);
     invoke("wm_ctx_menu_close").catch(console.error);
+  }
+
+  // Close the ctx menu (and submenus) without parking the overlay — used
+  // when transitioning to another overlay surface (View all widgets modal,
+  // App Menu drawer). Parking would race with the next overlay_raise.
+  function dismissForOverlaySwap() {
+    setMenu(null);
+    setZoomOpen(false);
+    setAddWidgetOpen(false);
+  }
+
+  // ── View all widgets modal actions ───────────────────────────────────────
+  function dismissAllWidgets() {
+    setAllWidgets(null);
+    invoke("wm_ctx_menu_close").catch(console.error);
+  }
+
+  // Bridge an app launch from the kebab submenu or the View all widgets
+  // modal back to chrome. Chrome resolves the engine picker / download
+  // dialog in its own webview (parked correctly), so the overlay can park
+  // immediately after emitting.
+  function launchFromKebab(app: AppRecord, target: string | null) {
+    emit("wm:launch-app-from-menu", { app, target }).catch(console.error);
   }
 
   useEffect(() => {
@@ -284,6 +326,15 @@ export function OverlayApp() {
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [menu]);
+
+  useEffect(() => {
+    if (!allWidgets) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") dismissAllWidgets();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [allWidgets]);
 
   // ── Render ───────────────────────────────────────────────────────────────
 
@@ -465,22 +516,21 @@ export function OverlayApp() {
             nTabs: menu.nTabs,
           };
 
-          // "Add Widget" opens the App Menu drawer scoped to this widget's
-          // Stack. `targetLabel` is forwarded through OverlayMenu →
-          // AddWidgetSection → wm:launch-app-from-menu so the new tab joins
-          // the source's Stack.
-          //
-          // We clear the ctx menu's React state but do NOT call
-          // `wm_ctx_menu_close` — that would park the overlay offscreen
-          // and race the upcoming `wm_menu_open` overlay_raise. The
-          // overlay stays raised; only the rendered surface swaps.
-          const addWidget = () => {
-            setMenu(null);
-            setZoomOpen(false);
-            invoke("wm_menu_open", {
-              initialSectionId: "add-widget",
-              targetLabel: menu.tabLabel ?? null,
-            }).catch(console.error);
+          // "Add Widget" expands into an inline submenu listing every app in
+          // the App Directory. Clicking an app emits `wm:launch-app-from-menu`
+          // with the source's `tabLabel` as target so the new tab joins this
+          // widget's Stack. The footer "View all widgets" opens a larger
+          // modal (still overlay-resident) for users with many apps.
+          const target = menu.tabLabel ?? null;
+          const handleAddWidgetPick = (app: AppRecord) => {
+            launchFromKebab(app, target);
+            dismiss();
+          };
+          const handleViewAllWidgets = () => {
+            // Keep the overlay raised — the modal mounts in the same
+            // webview. Parking would race the modal mount.
+            dismissForOverlaySwap();
+            setAllWidgets({ target });
           };
 
           // Duplicate: chrome listens on `wm:duplicate-from-menu`, looks up
@@ -505,16 +555,76 @@ export function OverlayApp() {
                 onPointerDown={(e) => e.stopPropagation()}
                 onContextMenu={(e) => e.preventDefault()}
               >
-                {kind === "stack-kebab" ? (
+                {(() => {
+                  // Inline "Add Widget" submenu — same shape in both
+                  // tab-kind and stack-kind menus. Lists every app from the
+                  // App Directory; bottom-of-list "View all widgets" opens
+                  // the larger overlay modal for users with many apps.
+                  const addWidgetItem = (
+                    <div className="wm-tab-ctx-menu__submenu-wrap">
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="wm-tab-ctx-menu__item wm-tab-ctx-menu__item--submenu"
+                        aria-haspopup="true"
+                        aria-expanded={addWidgetOpen}
+                        onClick={() => {
+                          setAddWidgetOpen((o) => !o);
+                          setZoomOpen(false);
+                        }}
+                      >
+                        Add Widget
+                        <span className="wm-tab-ctx-menu__submenu-arrow">›</span>
+                      </button>
+                      {addWidgetOpen && (
+                        <div
+                          className="wm-tab-ctx-menu__submenu wm-tab-ctx-menu__submenu--apps"
+                          role="menu"
+                        >
+                          {apps.length === 0 ? (
+                            <div className="wm-tab-ctx-menu__item wm-tab-ctx-menu__item--disabled">
+                              Loading apps…
+                            </div>
+                          ) : (
+                            apps.map((app) => {
+                              const engineCount = enginesFor(app).length;
+                              const cardTitle = app.title ?? app.name;
+                              return (
+                                <button
+                                  key={app.appId}
+                                  type="button"
+                                  role="menuitem"
+                                  className="wm-tab-ctx-menu__item"
+                                  onClick={() => handleAddWidgetPick(app)}
+                                  title={app.description ?? cardTitle}
+                                >
+                                  <span className="wm-tab-ctx-menu__app-title">{cardTitle}</span>
+                                  {engineCount > 1 && (
+                                    <span className="wm-tab-ctx-menu__app-badge" aria-hidden>
+                                      ▾
+                                    </span>
+                                  )}
+                                </button>
+                              );
+                            })
+                          )}
+                          <div className="wm-tab-ctx-menu__separator" role="separator" />
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className="wm-tab-ctx-menu__item"
+                            onClick={handleViewAllWidgets}
+                          >
+                            View all widgets…
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+
+                  return kind === "stack-kebab" ? (
                   <>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className="wm-tab-ctx-menu__item"
-                      onClick={addWidget}
-                    >
-                      Add Widget
-                    </button>
+                    {addWidgetItem}
                     <button
                       type="button"
                       role="menuitem"
@@ -544,14 +654,7 @@ export function OverlayApp() {
                 ) : (
                   hasTab && (
                     <>
-                      <button
-                        type="button"
-                        role="menuitem"
-                        className="wm-tab-ctx-menu__item"
-                        onClick={addWidget}
-                      >
-                        Add Widget
-                      </button>
+                      {addWidgetItem}
                       <button
                         type="button"
                         role="menuitem"
@@ -696,11 +799,54 @@ export function OverlayApp() {
                       )}
                     </>
                   )
-                )}
+                );
+                })()}
               </div>
             </>
           );
         })()}
+
+      {/* ── View all widgets modal ──
+          Opened from the kebab's "Add Widget › View all widgets…" footer.
+          Renders the same WidgetCatalog as the empty-dashboard picker. The
+          launch flows back to chrome through `wm:launch-app-from-menu`. */}
+      {allWidgets && (
+        <>
+          <div
+            className="wm-all-widgets-backdrop"
+            onPointerDown={dismissAllWidgets}
+            aria-hidden
+          />
+          <div
+            className="wm-all-widgets-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="All widgets"
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            <header className="wm-all-widgets-modal__header">
+              <h2 className="wm-all-widgets-modal__title">Add widget to this group</h2>
+              <button
+                type="button"
+                className="wm-all-widgets-modal__close"
+                onClick={dismissAllWidgets}
+                aria-label="Close all widgets"
+              >
+                ✕
+              </button>
+            </header>
+            <WidgetCatalog
+              apps={apps}
+              enginesFor={enginesFor}
+              onSelect={(app) => {
+                launchFromKebab(app, allWidgets.target);
+                dismissAllWidgets();
+              }}
+              variant="all-widgets-modal"
+            />
+          </div>
+        </>
+      )}
     </>
   );
 }
