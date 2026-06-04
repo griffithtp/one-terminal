@@ -27,11 +27,7 @@ export function TabStripLayer({ stacks, onTabPointerDown }: TabStripLayerProps) 
   return (
     <>
       {stacks.map((s) => (
-        <TabStrip
-          key={`stack-${s.path.join("-")}`}
-          stack={s}
-          onTabPointerDown={onTabPointerDown}
-        />
+        <TabStrip key={`stack-${s.path.join("-")}`} stack={s} onTabPointerDown={onTabPointerDown} />
       ))}
     </>
   );

@@ -646,183 +646,185 @@ export function OverlayApp() {
                   );
 
                   return kind === "stack-kebab" ? (
-                  <>
-                    {addWidgetItem}
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className="wm-tab-ctx-menu__item"
-                      onClick={() => {
-                        invoke("wm_toggle_maximize_stack", { path: menu.stackPath }).catch(
-                          console.error
-                        );
-                        dismiss();
-                      }}
-                    >
-                      {menu.maximized ? "Restore group" : "Maximise group"}
-                    </button>
-                    <div className="wm-tab-ctx-menu__separator" role="separator" />
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className="wm-tab-ctx-menu__item wm-tab-ctx-menu__item--danger"
-                      onClick={() => {
-                        invoke("wm_close_stack", { path: menu.stackPath }).catch(console.error);
-                        dismiss();
-                      }}
-                    >
-                      Close all widgets ({menu.nTabs} {menu.nTabs === 1 ? "tab" : "tabs"})
-                    </button>
-                  </>
-                ) : (
-                  hasTab && (
                     <>
                       {addWidgetItem}
                       <button
                         type="button"
                         role="menuitem"
                         className="wm-tab-ctx-menu__item"
-                        onClick={duplicate}
-                      >
-                        Duplicate
-                      </button>
-
-                      <div className="wm-tab-ctx-menu__separator" role="separator" />
-
-                      <button
-                        type="button"
-                        role="menuitem"
-                        className="wm-tab-ctx-menu__item"
                         onClick={() => {
-                          invoke("wm_request_rename", { label: menu.tabLabel }).catch(
+                          invoke("wm_toggle_maximize_stack", { path: menu.stackPath }).catch(
                             console.error
                           );
                           dismiss();
                         }}
                       >
-                        Rename
+                        {menu.maximized ? "Restore group" : "Maximise group"}
                       </button>
-                      <button
-                        type="button"
-                        role="menuitem"
-                        className="wm-tab-ctx-menu__item"
-                        onClick={() => {
-                          invoke("wm_rename_panel", {
-                            label: menu.tabLabel,
-                            displayName: null,
-                          }).catch(console.error);
-                          dismiss();
-                        }}
-                      >
-                        Reset name
-                      </button>
-
                       <div className="wm-tab-ctx-menu__separator" role="separator" />
-
-                      <div className="wm-tab-ctx-menu__submenu-wrap">
-                        <button
-                          type="button"
-                          role="menuitem"
-                          className="wm-tab-ctx-menu__item wm-tab-ctx-menu__item--submenu"
-                          aria-haspopup="true"
-                          aria-expanded={zoomOpen}
-                          onClick={() => setZoomOpen((o) => !o)}
-                        >
-                          Zoom
-                          <span className="wm-tab-ctx-menu__submenu-arrow">›</span>
-                        </button>
-                        {zoomOpen && (
-                          <div className="wm-tab-ctx-menu__submenu" role="menu">
-                            {ZOOM_LEVELS.map((level) => {
-                              const active = Math.abs(currentZoom - level) < 0.01;
-                              return (
-                                <button
-                                  key={level}
-                                  type="button"
-                                  role="menuitemradio"
-                                  aria-checked={active}
-                                  className={`wm-tab-ctx-menu__item wm-tab-ctx-menu__item--zoom${active ? " wm-tab-ctx-menu__item--zoom-active" : ""}`}
-                                  onClick={() => {
-                                    invoke("wm_set_zoom", {
-                                      label: menu.tabLabel,
-                                      zoomFactor: level,
-                                    }).catch(console.error);
-                                    dismiss();
-                                  }}
-                                >
-                                  <span className="wm-tab-ctx-menu__zoom-check">
-                                    {active ? "✓" : ""}
-                                  </span>
-                                  {ZOOM_LABEL[level]}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        )}
-                      </div>
-
-                      <button
-                        type="button"
-                        role="menuitem"
-                        className="wm-tab-ctx-menu__item"
-                        onClick={() => {
-                          invoke("wm_set_zoom", {
-                            label: menu.tabLabel,
-                            zoomFactor: 1.0,
-                          }).catch(console.error);
-                          dismiss();
-                        }}
-                      >
-                        Reset zoom
-                      </button>
-
-                      {customItems.length > 0 && (
-                        <>
-                          <div className="wm-tab-ctx-menu__separator" role="separator" />
-                          {customItems.map((item, i) => (
-                            <button
-                              key={i}
-                              type="button"
-                              role="menuitem"
-                              className={`wm-tab-ctx-menu__item${item.danger ? " wm-tab-ctx-menu__item--danger" : ""}`}
-                              onClick={() => item.onClick(customCtx, dismiss)}
-                            >
-                              {item.label}
-                            </button>
-                          ))}
-                        </>
-                      )}
-
-                      <div className="wm-tab-ctx-menu__separator" role="separator" />
-
                       <button
                         type="button"
                         role="menuitem"
                         className="wm-tab-ctx-menu__item wm-tab-ctx-menu__item--danger"
                         onClick={() => {
-                          invoke("close_tab", { label: menu.tabLabel }).catch(console.error);
+                          invoke("wm_close_stack", { path: menu.stackPath }).catch(console.error);
                           dismiss();
                         }}
                       >
-                        Close tab
+                        Close all widgets ({menu.nTabs} {menu.nTabs === 1 ? "tab" : "tabs"})
                       </button>
+                    </>
+                  ) : (
+                    hasTab && (
+                      <>
+                        {addWidgetItem}
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="wm-tab-ctx-menu__item"
+                          onClick={duplicate}
+                        >
+                          Duplicate
+                        </button>
 
-                      {!isStandalone && (
+                        <div className="wm-tab-ctx-menu__separator" role="separator" />
+
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="wm-tab-ctx-menu__item"
+                          onClick={() => {
+                            invoke("wm_request_rename", { label: menu.tabLabel }).catch(
+                              console.error
+                            );
+                            dismiss();
+                          }}
+                        >
+                          Rename
+                        </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="wm-tab-ctx-menu__item"
+                          onClick={() => {
+                            invoke("wm_rename_panel", {
+                              label: menu.tabLabel,
+                              displayName: null,
+                            }).catch(console.error);
+                            dismiss();
+                          }}
+                        >
+                          Reset name
+                        </button>
+
+                        <div className="wm-tab-ctx-menu__separator" role="separator" />
+
+                        <div className="wm-tab-ctx-menu__submenu-wrap">
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className="wm-tab-ctx-menu__item wm-tab-ctx-menu__item--submenu"
+                            aria-haspopup="true"
+                            aria-expanded={zoomOpen}
+                            onClick={() => setZoomOpen((o) => !o)}
+                          >
+                            Zoom
+                            <span className="wm-tab-ctx-menu__submenu-arrow">›</span>
+                          </button>
+                          {zoomOpen && (
+                            <div className="wm-tab-ctx-menu__submenu" role="menu">
+                              {ZOOM_LEVELS.map((level) => {
+                                const active = Math.abs(currentZoom - level) < 0.01;
+                                return (
+                                  <button
+                                    key={level}
+                                    type="button"
+                                    role="menuitemradio"
+                                    aria-checked={active}
+                                    className={`wm-tab-ctx-menu__item wm-tab-ctx-menu__item--zoom${active ? " wm-tab-ctx-menu__item--zoom-active" : ""}`}
+                                    onClick={() => {
+                                      invoke("wm_set_zoom", {
+                                        label: menu.tabLabel,
+                                        zoomFactor: level,
+                                      }).catch(console.error);
+                                      dismiss();
+                                    }}
+                                  >
+                                    <span className="wm-tab-ctx-menu__zoom-check">
+                                      {active ? "✓" : ""}
+                                    </span>
+                                    {ZOOM_LABEL[level]}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="wm-tab-ctx-menu__item"
+                          onClick={() => {
+                            invoke("wm_set_zoom", {
+                              label: menu.tabLabel,
+                              zoomFactor: 1.0,
+                            }).catch(console.error);
+                            dismiss();
+                          }}
+                        >
+                          Reset zoom
+                        </button>
+
+                        {customItems.length > 0 && (
+                          <>
+                            <div className="wm-tab-ctx-menu__separator" role="separator" />
+                            {customItems.map((item, i) => (
+                              <button
+                                key={i}
+                                type="button"
+                                role="menuitem"
+                                className={`wm-tab-ctx-menu__item${item.danger ? " wm-tab-ctx-menu__item--danger" : ""}`}
+                                onClick={() => item.onClick(customCtx, dismiss)}
+                              >
+                                {item.label}
+                              </button>
+                            ))}
+                          </>
+                        )}
+
+                        <div className="wm-tab-ctx-menu__separator" role="separator" />
+
                         <button
                           type="button"
                           role="menuitem"
                           className="wm-tab-ctx-menu__item wm-tab-ctx-menu__item--danger"
                           onClick={() => {
-                            invoke("wm_close_stack", { path: menu.stackPath }).catch(console.error);
+                            invoke("close_tab", { label: menu.tabLabel }).catch(console.error);
                             dismiss();
                           }}
                         >
-                          Close group ({menu.nTabs} {menu.nTabs === 1 ? "tab" : "tabs"})
+                          Close tab
                         </button>
-                      )}
-                    </>
-                  )
-                );
+
+                        {!isStandalone && (
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className="wm-tab-ctx-menu__item wm-tab-ctx-menu__item--danger"
+                            onClick={() => {
+                              invoke("wm_close_stack", { path: menu.stackPath }).catch(
+                                console.error
+                              );
+                              dismiss();
+                            }}
+                          >
+                            Close group ({menu.nTabs} {menu.nTabs === 1 ? "tab" : "tabs"})
+                          </button>
+                        )}
+                      </>
+                    )
+                  );
                 })()}
               </div>
             </>
@@ -835,11 +837,7 @@ export function OverlayApp() {
           launch flows back to chrome through `wm:launch-app-from-menu`. */}
       {allWidgets && (
         <>
-          <div
-            className="wm-all-widgets-backdrop"
-            onPointerDown={dismissAllWidgets}
-            aria-hidden
-          />
+          <div className="wm-all-widgets-backdrop" onPointerDown={dismissAllWidgets} aria-hidden />
           <div
             className="wm-all-widgets-modal"
             role="dialog"
