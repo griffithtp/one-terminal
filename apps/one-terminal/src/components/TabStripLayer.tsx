@@ -103,6 +103,9 @@ function TabStrip({ stack, onTabPointerDown }: TabStripProps) {
   // Open the group kebab menu in the overlay, anchored under the kebab.
   // `targetLabel = stack.tabs[stack.active]` so "Add Widget" lands inside
   // this Stack rather than wherever the global active panel happens to be.
+  // Anchor the menu's RIGHT edge at the kebab's right edge so the menu
+  // drops down-left from the trigger. Items inside the menu remain
+  // left-aligned (LTR text); only the box position differs.
   const openGroupMenu = useCallback(
     (anchorRect: DOMRect) => {
       const activeTab = stack.tabs[stack.active];
@@ -117,6 +120,7 @@ function TabStrip({ stack, onTabPointerDown }: TabStripProps) {
         zoomFactor: null,
         kind: "stack-kebab",
         maximized: stack.maximized,
+        anchor: "right",
       }).catch(console.error);
     },
     [stack.path, stack.tabs, stack.active, stack.maximized]
@@ -265,6 +269,7 @@ function TabStrip({ stack, onTabPointerDown }: TabStripProps) {
                     zoomFactor: tab.zoomFactor,
                     kind: "tab",
                     maximized: stack.maximized,
+                    anchor: "right",
                   }).catch(console.error);
                 }}
               >

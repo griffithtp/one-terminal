@@ -60,6 +60,16 @@ interface CtxMenuPayload {
   /** Whether the source stack is currently maximised — toggles the
    *  Maximise/Restore label in the `"stack-kebab"` menu. */
   maximized?: boolean;
+  /**
+   * Horizontal anchor for the menu (left-to-right reading is preserved
+   * regardless — this only controls which menu edge sits at `x`):
+   *   - `"left"` (default) — menu's LEFT edge sits at `x`. Used by
+   *     right-click handlers where `x` is the cursor position.
+   *   - `"right"` — menu's RIGHT edge sits at `x`. Used by kebab buttons
+   *     where `x` is the button's right edge; the menu drops down-left
+   *     from the kebab so the menu's right edge tracks the kebab.
+   */
+  anchor?: "left" | "right";
 }
 
 const ZOOM_LEVELS = [0.75, 0.9, 1.0, 1.1, 1.25, 1.5, 2.0];
@@ -500,7 +510,20 @@ export function OverlayApp() {
       {/* ── Tab / group context menu ── */}
       {menu &&
         (() => {
-          const left = Math.min(menu.x, window.innerWidth - menuW - 8);
+          const anchor = menu.anchor ?? "left";
+          // Anchor controls which edge of the menu sits at `menu.x`. Items
+          // inside the menu are always left-aligned (LTR text); only the
+          // box's outer position differs.
+          //   - anchor="right" (kebab): menu's RIGHT edge sits at menu.x.
+          //     `Math.max(8, ...)` keeps the menu from poking off the LEFT
+          //     of the viewport when the kebab is unexpectedly close to it.
+          //   - anchor="left" (right-click): menu's LEFT edge sits at menu.x.
+          //     `Math.min(..., viewportW - menuW - 8)` keeps the menu from
+          //     overflowing the RIGHT of the viewport.
+          const left =
+            anchor === "right"
+              ? Math.max(8, menu.x - menuW)
+              : Math.min(menu.x, window.innerWidth - menuW - 8);
           const top = Math.min(menu.y, window.innerHeight - 8);
           const currentZoom = menu.zoomFactor ?? 1.0;
           const hasTab = !!menu.tabLabel;
@@ -549,7 +572,7 @@ export function OverlayApp() {
             <>
               <div style={{ position: "fixed", inset: 0 }} onPointerDown={dismiss} />
               <div
-                className="wm-tab-ctx-menu"
+                className={`wm-tab-ctx-menu${anchor === "right" ? " wm-tab-ctx-menu--anchor-right" : ""}`}
                 role="menu"
                 style={{ position: "fixed", left, top }}
                 onPointerDown={(e) => e.stopPropagation()}

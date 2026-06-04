@@ -602,6 +602,7 @@ async fn wm_ctx_menu_open(
     zoom_factor: Option<f64>,
     kind: Option<String>,
     maximized: Option<bool>,
+    anchor: Option<String>,
     window: Window,
     manager: State<'_, TerminalManager>,
     app: AppHandle,
@@ -624,6 +625,7 @@ async fn wm_ctx_menu_open(
                 "zoomFactor": zoom_factor,
                 "kind": kind.unwrap_or_else(|| "tab".to_string()),
                 "maximized": maximized.unwrap_or(false),
+                "anchor": anchor.unwrap_or_else(|| "left".to_string()),
             }),
         )
         .map_err(|e| e.to_string())

@@ -66,6 +66,9 @@ function PanelHeader({ panel }: { panel: PanelBounds }) {
   // aren't members of a Stack, so `stackPath` is empty + `nTabs` is 1. The
   // overlay only uses these for the "Close group" footer (suppressed for
   // standalone panels by kind === "tab" + empty stackPath path).
+  // Anchor the menu's RIGHT edge at the kebab's right edge so the menu
+  // drops down-left from the trigger. Items inside the menu remain
+  // left-aligned (LTR text); only the box position differs.
   const openMenu = useCallback(
     (anchorRect: DOMRect) => {
       invoke("wm_ctx_menu_open", {
@@ -79,6 +82,7 @@ function PanelHeader({ panel }: { panel: PanelBounds }) {
         zoomFactor: null,
         kind: "tab",
         maximized: false,
+        anchor: "right",
       }).catch(console.error);
     },
     [panel.id, panel.appId]

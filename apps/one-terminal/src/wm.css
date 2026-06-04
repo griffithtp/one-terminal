@@ -975,6 +975,13 @@ body,
   gap: 1px;
   z-index: 31;
 }
+/* When the parent menu is right-anchored (kebab-driven, menu's right edge
+ * sits at the kebab), flip submenus to expand leftward — otherwise the
+ * apps submenu would extend off-screen past the kebab. */
+.wm-tab-ctx-menu--anchor-right .wm-tab-ctx-menu__submenu {
+  left: auto;
+  right: 100%;
+}
 .wm-tab-ctx-menu__item--zoom {
   display: flex;
   align-items: center;
