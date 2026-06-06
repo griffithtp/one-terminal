@@ -7,10 +7,17 @@ import { OverlayMenu } from "./OverlayMenu";
 import { OverlayConfirmDashboardSwitch } from "./OverlayConfirmDashboardSwitch";
 import { OverlayCreateDashboard } from "./OverlayCreateDashboard";
 import { WidgetCatalog } from "./WidgetCatalog";
+import { EnginePickerDialog } from "./EnginePickerDialog";
 import { useAppDirectory } from "../hooks/useAppDirectory";
 import { bigramScore } from "../commands/registry";
 import type { SerializableCommand } from "../commands/registry";
-import type { AppRecord, HostLayout, LayoutSnapshot, OverflowMenuPayload } from "../types";
+import type {
+  AppRecord,
+  EngineBinding,
+  HostLayout,
+  LayoutSnapshot,
+  OverflowMenuPayload,
+} from "../types";
 
 // ── FDC3 channel picker types ─────────────────────────────────────────────────
 
@@ -149,6 +156,16 @@ export function OverlayApp() {
    *  Null means the modal is closed. */
   const [allWidgets, setAllWidgets] = useState<{ target: string | null } | null>(null);
 
+  /** Engine picker dialog — fired by chrome via `wm_engine_picker_open`
+   *  when a multi-engine app is launched. Rendering it here (overlay)
+   *  keeps widgets visible behind the modal and ensures clicks land on
+   *  the dialog rather than fall through chrome's `pointer-events: none`. */
+  const [enginePicker, setEnginePicker] = useState<{
+    app: AppRecord;
+    engines: EngineBinding[];
+    target: string | null;
+  } | null>(null);
+
   // App Directory for the kebab's Add Widget submenu + View all widgets
   // modal. Same source as `OverlayMenu` / `AddWidgetSection`; the actual
   // launch always happens in chrome (`useAppLaunch.launchApp`) via the
@@ -181,44 +198,76 @@ export function OverlayApp() {
     let cancelled = false;
 
     (async () => {
-      const [unCtxMenu, unPalette, unLayout, unHostLayout, unOverflow, unChannelPicker] =
-        await Promise.all([
-          listen<CtxMenuPayload>("wm:ctx-menu", (e) => {
-            setMenu(e.payload);
-            setZoomOpen(false);
-            setAddWidgetOpen(false);
-            setOverflowMenu(null);
-            setChannelPicker(null);
-          }),
-          listen<SerializableCommand[]>("wm:palette-open", (e) => {
-            setPaletteCommands(e.payload);
-            setPaletteQuery("");
-            setPaletteSelectedIdx(0);
-            setOverflowMenu(null);
-            setChannelPicker(null);
-            requestAnimationFrame(() => paletteInputRef.current?.focus());
-          }),
-          listen<LayoutSnapshot>("wm:layout", (e) => setLayout(e.payload)),
-          listen<HostLayout>("wm:host-layout", (e) => setHostLayout(e.payload)),
-          listen<OverflowMenuPayload>("wm:overflow-menu", (e) => {
-            setOverflowMenu(e.payload);
+      const [
+        unCtxMenu,
+        unPalette,
+        unLayout,
+        unHostLayout,
+        unOverflow,
+        unChannelPicker,
+        unEnginePicker,
+      ] = await Promise.all([
+        listen<CtxMenuPayload>("wm:ctx-menu", (e) => {
+          setMenu(e.payload);
+          setZoomOpen(false);
+          setAddWidgetOpen(false);
+          setOverflowMenu(null);
+          setChannelPicker(null);
+        }),
+        listen<SerializableCommand[]>("wm:palette-open", (e) => {
+          setPaletteCommands(e.payload);
+          setPaletteQuery("");
+          setPaletteSelectedIdx(0);
+          setOverflowMenu(null);
+          setChannelPicker(null);
+          requestAnimationFrame(() => paletteInputRef.current?.focus());
+        }),
+        listen<LayoutSnapshot>("wm:layout", (e) => setLayout(e.payload)),
+        listen<HostLayout>("wm:host-layout", (e) => setHostLayout(e.payload)),
+        listen<OverflowMenuPayload>("wm:overflow-menu", (e) => {
+          setOverflowMenu(e.payload);
+          setMenu(null);
+          setChannelPicker(null);
+        }),
+        listen<ChannelPickerPayload>("wm:channel-picker", (e) => {
+          setChannelPicker(e.payload);
+          setMenu(null);
+          setOverflowMenu(null);
+        }),
+        listen<{ app: AppRecord; engines: EngineBinding[]; target: string | null }>(
+          "wm:engine-picker-open",
+          (e) => {
+            setEnginePicker(e.payload);
             setMenu(null);
-            setChannelPicker(null);
-          }),
-          listen<ChannelPickerPayload>("wm:channel-picker", (e) => {
-            setChannelPicker(e.payload);
-            setMenu(null);
             setOverflowMenu(null);
-          }),
-        ]);
+            setChannelPicker(null);
+            setPaletteCommands(null);
+            setAllWidgets(null);
+          }
+        ),
+      ]);
 
       if (cancelled) {
-        [unCtxMenu, unPalette, unLayout, unHostLayout, unOverflow, unChannelPicker].forEach((fn) =>
-          fn()
-        );
+        [
+          unCtxMenu,
+          unPalette,
+          unLayout,
+          unHostLayout,
+          unOverflow,
+          unChannelPicker,
+          unEnginePicker,
+        ].forEach((fn) => fn());
         return;
       }
-      unlisteners = [unCtxMenu, unPalette, unLayout, unHostLayout, unOverflow, unChannelPicker];
+      unlisteners = [
+        unCtxMenu,
+        unPalette,
+        unLayout,
+        unHostLayout,
+        unOverflow,
+        unChannelPicker,
+        unEnginePicker,
+      ];
       invoke("wm_overlay_ready").catch(console.error);
     })();
 
@@ -320,10 +369,32 @@ export function OverlayApp() {
     invoke("wm_ctx_menu_close").catch(console.error);
   }
 
+  // ── Engine picker actions (overlay-resident) ─────────────────────────────
+  function dismissEnginePicker() {
+    setEnginePicker(null);
+    invoke("wm_ctx_menu_close").catch(console.error);
+  }
+
+  function handleEnginePick(binding: EngineBinding) {
+    const p = enginePicker;
+    if (!p) return;
+    emit("wm:engine-picker-pick", {
+      appId: p.app.appId,
+      binding,
+      target: p.target,
+    }).catch(console.error);
+    dismissEnginePicker();
+  }
+
+  function handleEngineCancel() {
+    emit("wm:engine-picker-cancel").catch(console.error);
+    dismissEnginePicker();
+  }
+
   // Bridge an app launch from the kebab submenu or the View all widgets
   // modal back to chrome. Chrome resolves the engine picker / download
-  // dialog in its own webview (parked correctly), so the overlay can park
-  // immediately after emitting.
+  // dialog flow; multi-engine apps re-enter this overlay via
+  // `wm_engine_picker_open` so the picker stays visible above widgets.
   function launchFromKebab(app: AppRecord, target: string | null) {
     emit("wm:launch-app-from-menu", { app, target }).catch(console.error);
   }
@@ -345,6 +416,15 @@ export function OverlayApp() {
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [allWidgets]);
+
+  useEffect(() => {
+    if (!enginePicker) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") handleEngineCancel();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [enginePicker]);
 
   // ── Render ───────────────────────────────────────────────────────────────
 
@@ -881,6 +961,21 @@ export function OverlayApp() {
             />
           </div>
         </>
+      )}
+
+      {/* ── Engine picker (overlay-resident) ──
+          Fired by chrome via `wm_engine_picker_open` when a multi-engine
+          app is launched. Renders here so widgets stay visible behind the
+          modal and clicks land on the dialog. User pick / cancel are
+          bridged back to chrome via `wm:engine-picker-pick` /
+          `wm:engine-picker-cancel`. */}
+      {enginePicker && (
+        <EnginePickerDialog
+          app={enginePicker.app}
+          engines={enginePicker.engines}
+          onPick={handleEnginePick}
+          onCancel={handleEngineCancel}
+        />
       )}
     </>
   );

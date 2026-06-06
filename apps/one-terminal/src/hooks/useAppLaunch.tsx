@@ -14,11 +14,10 @@
  * panel covers the dialog).
  */
 
-import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { AppRecord, EngineBinding, OsKey } from "../types";
-import { EnginePickerDialog } from "../components/EnginePickerDialog";
 import { DownloadPromptDialog, type DownloadEvent } from "../components/DownloadPromptDialog";
 import { getTerminalConfig } from "../lib/terminalConfig";
 import { popPark, pushPark } from "../lib/parkPanels";
@@ -87,8 +86,6 @@ export interface UseAppLaunchResult {
    * the source widget rather than at the active panel.
    */
   launchApp: (app: AppRecord, target?: string | null) => void;
-  /** Engine picker dialog node, or null when not shown. Mount once in App. */
-  pickerNode: ReactNode | null;
   /** Download confirm/progress dialog node, or null when not shown. */
   downloadNode: ReactNode | null;
   errorMessage: string | null;
@@ -97,7 +94,6 @@ export interface UseAppLaunchResult {
 
 export function useAppLaunch({ onOpenTab }: UseAppLaunchOpts): UseAppLaunchResult {
   const [apps, setApps] = useState<AppRecord[]>([]);
-  const [pickerApp, setPickerApp] = useState<AppRecord | null>(null);
   const [downloadPrompt, setDownloadPrompt] = useState<DownloadPrompt | null>(null);
   const [downloading, setDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState<DownloadEvent | null>(null);
@@ -113,8 +109,12 @@ export function useAppLaunch({ onOpenTab }: UseAppLaunchOpts): UseAppLaunchResul
       .catch(() => {});
   }, []);
 
-  // ── Park panels while any picker / download dialog is open ──────────────
-  const dialogOpen = pickerApp !== null || downloadPrompt !== null;
+  // ── Park panels while the download dialog is open ───────────────────────
+  // The engine picker is overlay-resident now (see `wm_engine_picker_open`)
+  // so panels are not parked while it's visible — widgets stay rendered
+  // behind the picker. The download prompt still renders in chrome because
+  // it carries long-running progress UI; parking is acceptable there.
+  const dialogOpen = downloadPrompt !== null;
   useEffect(() => {
     if (!dialogOpen) return;
     pushPark();
@@ -171,9 +171,6 @@ export function useAppLaunch({ onOpenTab }: UseAppLaunchOpts): UseAppLaunchResul
     [doOpenTab]
   );
 
-  // Target for the in-flight launch survives the engine picker round-trip.
-  const [pickerTarget, setPickerTarget] = useState<string | null | undefined>(undefined);
-
   const launchApp = useCallback(
     (app: AppRecord, target?: string | null) => {
       setErrorMessage(null);
@@ -187,23 +184,43 @@ export function useAppLaunch({ onOpenTab }: UseAppLaunchOpts): UseAppLaunchResul
         proceedLaunch({ app, binding: engines[0], target }).catch(console.error);
         return;
       }
-      setPickerTarget(target);
-      setPickerApp(app);
+      // Multi-engine: render the picker in the overlay so widgets stay
+      // visible and clicks land on the dialog. The overlay sends back the
+      // chosen binding via `wm:engine-picker-pick` (or `…-cancel`).
+      invoke("wm_engine_picker_open", {
+        payload: { app, engines, target: target ?? null },
+      }).catch(console.error);
     },
     [enginesFor, doOpenTab, proceedLaunch]
   );
 
-  const handlePickerPick = useCallback(
-    (binding: EngineBinding) => {
-      const app = pickerApp;
-      const target = pickerTarget;
-      setPickerApp(null);
-      setPickerTarget(undefined);
-      if (!app) return;
-      proceedLaunch({ app, binding, target }).catch(console.error);
-    },
-    [pickerApp, pickerTarget, proceedLaunch]
-  );
+  // Listen for the overlay's engine-picker responses and resume the launch
+  // flow. `appsRef` shields the listener from stale closures over the apps
+  // list — App Directory loads asynchronously after mount.
+  const appsRef = useRef(apps);
+  appsRef.current = apps;
+  useEffect(() => {
+    const subs = [
+      listen<{ appId: string; binding: EngineBinding; target: string | null }>(
+        "wm:engine-picker-pick",
+        (e) => {
+          const app = appsRef.current.find((a) => a.appId === e.payload.appId);
+          if (!app) return;
+          proceedLaunch({
+            app,
+            binding: e.payload.binding,
+            target: e.payload.target,
+          }).catch(console.error);
+        }
+      ),
+      listen("wm:engine-picker-cancel", () => {
+        // User cancelled — nothing to clean up; chrome held no picker state.
+      }),
+    ];
+    return () => {
+      subs.forEach((p) => p.then((fn) => fn()).catch(() => {}));
+    };
+  }, [proceedLaunch]);
 
   const handleDownloadConfirm = useCallback(async () => {
     const prompt = downloadPrompt;
@@ -230,19 +247,9 @@ export function useAppLaunch({ onOpenTab }: UseAppLaunchOpts): UseAppLaunchResul
     setDownloadPrompt(null);
     setDownloadProgress(null);
     setErrorMessage(null);
-    setPickerTarget(undefined);
   }, [downloading]);
 
   const clearError = useCallback(() => setErrorMessage(null), []);
-
-  const pickerNode: ReactNode = pickerApp ? (
-    <EnginePickerDialog
-      app={pickerApp}
-      engines={enginesFor(pickerApp)}
-      onCancel={() => setPickerApp(null)}
-      onPick={handlePickerPick}
-    />
-  ) : null;
 
   const downloadNode: ReactNode = downloadPrompt ? (
     <DownloadPromptDialog
@@ -261,7 +268,6 @@ export function useAppLaunch({ onOpenTab }: UseAppLaunchOpts): UseAppLaunchResul
     apps,
     enginesFor,
     launchApp,
-    pickerNode,
     downloadNode,
     errorMessage,
     clearError,

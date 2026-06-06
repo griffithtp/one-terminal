@@ -694,6 +694,30 @@ async fn wm_overflow_menu_open(
         .map_err(|e| e.to_string())
 }
 
+/// Show the engine picker dialog in the overlay webview. Used when a
+/// multi-engine app is launched from the kebab / drawer / palette — moves
+/// the picker out of chrome (where panel webviews would cover it and force
+/// `wm_park_panels` to hide widgets) and into the overlay so widgets stay
+/// visible behind the dialog and clicks land directly on the modal.
+///
+/// `payload` is the opaque `{ app, engines, target }` JSON built by the
+/// chrome — Rust passes it through unchanged.
+#[tauri::command]
+async fn wm_engine_picker_open(
+    payload: serde_json::Value,
+    window: Window,
+    manager: State<'_, TerminalManager>,
+    app: AppHandle,
+) -> Result<(), String> {
+    let terminal = get_terminal!(manager, window);
+    overlay_raise(Arc::clone(&terminal.overlay), window.label(), &app).await?;
+    let overlay = format!("{}-overlay", window.label());
+    app.get_webview(&overlay)
+        .ok_or("overlay not found".to_string())?
+        .emit("wm:engine-picker-open", payload)
+        .map_err(|e| e.to_string())
+}
+
 /// Open the App Menu drawer in the overlay webview. Uses the same
 /// overlay_raise mechanism as the palette / context menu so the drawer
 /// sits above all panel webviews — widgets stay visible underneath.
@@ -1285,6 +1309,7 @@ pub fn run() {
             wm_ctx_menu_close,
             wm_palette_open,
             wm_overflow_menu_open,
+            wm_engine_picker_open,
             wm_menu_open,
             wm_dashboard_create_open,
             wm_dashboard_confirm_open,

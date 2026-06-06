@@ -327,9 +327,11 @@ function ChromeApp() {
         onManageDashboards={() => openMenuAt("dashboards")}
       />
 
-      {/* Drawer renders inside the overlay webview — see OverlayMenu. */}
+      {/* Drawer + engine picker render inside the overlay webview — see
+          OverlayMenu and the EnginePickerDialog block in OverlayApp. The
+          download prompt stays in chrome because it carries long-running
+          progress UI; parking is acceptable while a download runs. */}
 
-      {launch.pickerNode}
       {launch.downloadNode}
 
       {/* Per-panel headers — drag region + title + close button, painted in
