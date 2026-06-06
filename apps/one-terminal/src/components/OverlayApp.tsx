@@ -602,10 +602,20 @@ export function OverlayApp() {
           //   - anchor="left" (right-click): menu's LEFT edge sits at
           //     menu.x. `Math.min(..., viewportW - menuW - 8)` keeps it
           //     from overflowing the right of the viewport.
-          const useRightAnchor = anchor === "right";
+          //
+          // Edge case: kebab on a widget pinned to the LEFT side of the
+          // window where the widget tab is narrower than the menu. The
+          // right-anchored menu would extend off-screen to the LEFT. When
+          // there isn't enough room to the left of menu.x, fall back to a
+          // left-pinned position at `left: 8` so the menu stays fully
+          // visible — it loses the kebab-edge alignment but remains usable.
+          const wantRightAnchor = anchor === "right";
+          const useRightAnchor = wantRightAnchor && menu.x >= menuW + 8;
           const left = useRightAnchor
             ? undefined
-            : Math.min(menu.x, window.innerWidth - menuW - 8);
+            : wantRightAnchor
+              ? 8
+              : Math.min(menu.x, window.innerWidth - menuW - 8);
           const right = useRightAnchor
             ? Math.max(8, window.innerWidth - menu.x)
             : undefined;
@@ -614,8 +624,8 @@ export function OverlayApp() {
           // Flip them to open LEFTWARD only when there isn't room — i.e.
           // when the parent's right edge sits too close to the viewport's
           // right edge for the submenu to fit. For right-anchored menus
-          // the parent's right edge is menu.x; for left-anchored we use
-          // the clamped `left + menuW`.
+          // the parent's right edge is menu.x; for left-anchored (and the
+          // left-pin fallback) we use the resolved `left + menuW`.
           const SUBMENU_W = 240;
           const parentRight = useRightAnchor ? menu.x : (left ?? 0) + menuW;
           const flipSubmenuLeft = parentRight + SUBMENU_W > window.innerWidth - 8;
