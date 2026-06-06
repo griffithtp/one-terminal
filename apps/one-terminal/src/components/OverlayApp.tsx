@@ -6,9 +6,18 @@ import { PanelHighlightLayer } from "./CommandPalette";
 import { OverlayMenu } from "./OverlayMenu";
 import { OverlayConfirmDashboardSwitch } from "./OverlayConfirmDashboardSwitch";
 import { OverlayCreateDashboard } from "./OverlayCreateDashboard";
+import { WidgetCatalog } from "./WidgetCatalog";
+import { EnginePickerDialog } from "./EnginePickerDialog";
+import { useAppDirectory } from "../hooks/useAppDirectory";
 import { bigramScore } from "../commands/registry";
 import type { SerializableCommand } from "../commands/registry";
-import type { LayoutSnapshot, HostLayout, OverflowMenuPayload } from "../types";
+import type {
+  AppRecord,
+  EngineBinding,
+  HostLayout,
+  LayoutSnapshot,
+  OverflowMenuPayload,
+} from "../types";
 
 // ── FDC3 channel picker types ─────────────────────────────────────────────────
 
@@ -46,6 +55,28 @@ interface CtxMenuPayload {
   appId?: string;
   displayName?: string;
   zoomFactor?: number;
+  /**
+   * Menu shape selector:
+   * - `"tab"` — per-widget kebab + per-tab right-click. Renders Add Widget,
+   *   Duplicate, Rename, Reset name, Zoom, Reset zoom, custom items, Close
+   *   tab. Group footer "Close group" is shown when stackPath is non-empty.
+   * - `"stack-kebab"` — group kebab + strip-background right-click. Renders
+   *   Add Widget, Maximise/Restore group, Close all widgets.
+   */
+  kind?: "tab" | "stack-kebab";
+  /** Whether the source stack is currently maximised — toggles the
+   *  Maximise/Restore label in the `"stack-kebab"` menu. */
+  maximized?: boolean;
+  /**
+   * Horizontal anchor for the menu (left-to-right reading is preserved
+   * regardless — this only controls which menu edge sits at `x`):
+   *   - `"left"` (default) — menu's LEFT edge sits at `x`. Used by
+   *     right-click handlers where `x` is the cursor position.
+   *   - `"right"` — menu's RIGHT edge sits at `x`. Used by kebab buttons
+   *     where `x` is the button's right edge; the menu drops down-left
+   *     from the kebab so the menu's right edge tracks the kebab.
+   */
+  anchor?: "left" | "right";
 }
 
 const ZOOM_LEVELS = [0.75, 0.9, 1.0, 1.1, 1.25, 1.5, 2.0];
@@ -115,6 +146,31 @@ export function OverlayApp() {
   // ── Context menu state ───────────────────────────────────────────────────
   const [menu, setMenu] = useState<CtxMenuPayload | null>(null);
   const [zoomOpen, setZoomOpen] = useState(false);
+  /** "Add Widget" submenu — when open, the ctx menu shows an app list and a
+   *  "View all widgets" footer beneath that item. Mutually exclusive with
+   *  the Zoom submenu so opening one closes the other. */
+  const [addWidgetOpen, setAddWidgetOpen] = useState(false);
+
+  /** Set when the user picks "View all widgets" from the submenu. Stores
+   *  the target panel label so the launch lands in that widget's Stack.
+   *  Null means the modal is closed. */
+  const [allWidgets, setAllWidgets] = useState<{ target: string | null } | null>(null);
+
+  /** Engine picker dialog — fired by chrome via `wm_engine_picker_open`
+   *  when a multi-engine app is launched. Rendering it here (overlay)
+   *  keeps widgets visible behind the modal and ensures clicks land on
+   *  the dialog rather than fall through chrome's `pointer-events: none`. */
+  const [enginePicker, setEnginePicker] = useState<{
+    app: AppRecord;
+    engines: EngineBinding[];
+    target: string | null;
+  } | null>(null);
+
+  // App Directory for the kebab's Add Widget submenu + View all widgets
+  // modal. Same source as `OverlayMenu` / `AddWidgetSection`; the actual
+  // launch always happens in chrome (`useAppLaunch.launchApp`) via the
+  // `wm:launch-app-from-menu` bridge.
+  const { apps, enginesFor } = useAppDirectory();
 
   // ── Overflow menu state ──────────────────────────────────────────────────
   const [overflowMenu, setOverflowMenu] = useState<OverflowMenuPayload | null>(null);
@@ -142,43 +198,76 @@ export function OverlayApp() {
     let cancelled = false;
 
     (async () => {
-      const [unCtxMenu, unPalette, unLayout, unHostLayout, unOverflow, unChannelPicker] =
-        await Promise.all([
-          listen<CtxMenuPayload>("wm:ctx-menu", (e) => {
-            setMenu(e.payload);
-            setZoomOpen(false);
-            setOverflowMenu(null);
-            setChannelPicker(null);
-          }),
-          listen<SerializableCommand[]>("wm:palette-open", (e) => {
-            setPaletteCommands(e.payload);
-            setPaletteQuery("");
-            setPaletteSelectedIdx(0);
-            setOverflowMenu(null);
-            setChannelPicker(null);
-            requestAnimationFrame(() => paletteInputRef.current?.focus());
-          }),
-          listen<LayoutSnapshot>("wm:layout", (e) => setLayout(e.payload)),
-          listen<HostLayout>("wm:host-layout", (e) => setHostLayout(e.payload)),
-          listen<OverflowMenuPayload>("wm:overflow-menu", (e) => {
-            setOverflowMenu(e.payload);
+      const [
+        unCtxMenu,
+        unPalette,
+        unLayout,
+        unHostLayout,
+        unOverflow,
+        unChannelPicker,
+        unEnginePicker,
+      ] = await Promise.all([
+        listen<CtxMenuPayload>("wm:ctx-menu", (e) => {
+          setMenu(e.payload);
+          setZoomOpen(false);
+          setAddWidgetOpen(false);
+          setOverflowMenu(null);
+          setChannelPicker(null);
+        }),
+        listen<SerializableCommand[]>("wm:palette-open", (e) => {
+          setPaletteCommands(e.payload);
+          setPaletteQuery("");
+          setPaletteSelectedIdx(0);
+          setOverflowMenu(null);
+          setChannelPicker(null);
+          requestAnimationFrame(() => paletteInputRef.current?.focus());
+        }),
+        listen<LayoutSnapshot>("wm:layout", (e) => setLayout(e.payload)),
+        listen<HostLayout>("wm:host-layout", (e) => setHostLayout(e.payload)),
+        listen<OverflowMenuPayload>("wm:overflow-menu", (e) => {
+          setOverflowMenu(e.payload);
+          setMenu(null);
+          setChannelPicker(null);
+        }),
+        listen<ChannelPickerPayload>("wm:channel-picker", (e) => {
+          setChannelPicker(e.payload);
+          setMenu(null);
+          setOverflowMenu(null);
+        }),
+        listen<{ app: AppRecord; engines: EngineBinding[]; target: string | null }>(
+          "wm:engine-picker-open",
+          (e) => {
+            setEnginePicker(e.payload);
             setMenu(null);
-            setChannelPicker(null);
-          }),
-          listen<ChannelPickerPayload>("wm:channel-picker", (e) => {
-            setChannelPicker(e.payload);
-            setMenu(null);
             setOverflowMenu(null);
-          }),
-        ]);
+            setChannelPicker(null);
+            setPaletteCommands(null);
+            setAllWidgets(null);
+          }
+        ),
+      ]);
 
       if (cancelled) {
-        [unCtxMenu, unPalette, unLayout, unHostLayout, unOverflow, unChannelPicker].forEach((fn) =>
-          fn()
-        );
+        [
+          unCtxMenu,
+          unPalette,
+          unLayout,
+          unHostLayout,
+          unOverflow,
+          unChannelPicker,
+          unEnginePicker,
+        ].forEach((fn) => fn());
         return;
       }
-      unlisteners = [unCtxMenu, unPalette, unLayout, unHostLayout, unOverflow, unChannelPicker];
+      unlisteners = [
+        unCtxMenu,
+        unPalette,
+        unLayout,
+        unHostLayout,
+        unOverflow,
+        unChannelPicker,
+        unEnginePicker,
+      ];
       invoke("wm_overlay_ready").catch(console.error);
     })();
 
@@ -261,7 +350,53 @@ export function OverlayApp() {
   function dismiss() {
     setMenu(null);
     setZoomOpen(false);
+    setAddWidgetOpen(false);
     invoke("wm_ctx_menu_close").catch(console.error);
+  }
+
+  // Close the ctx menu (and submenus) without parking the overlay — used
+  // when transitioning to another overlay surface (View all widgets modal,
+  // App Menu drawer). Parking would race with the next overlay_raise.
+  function dismissForOverlaySwap() {
+    setMenu(null);
+    setZoomOpen(false);
+    setAddWidgetOpen(false);
+  }
+
+  // ── View all widgets modal actions ───────────────────────────────────────
+  function dismissAllWidgets() {
+    setAllWidgets(null);
+    invoke("wm_ctx_menu_close").catch(console.error);
+  }
+
+  // ── Engine picker actions (overlay-resident) ─────────────────────────────
+  function dismissEnginePicker() {
+    setEnginePicker(null);
+    invoke("wm_ctx_menu_close").catch(console.error);
+  }
+
+  function handleEnginePick(binding: EngineBinding) {
+    const p = enginePicker;
+    if (!p) return;
+    emit("wm:engine-picker-pick", {
+      appId: p.app.appId,
+      binding,
+      target: p.target,
+    }).catch(console.error);
+    dismissEnginePicker();
+  }
+
+  function handleEngineCancel() {
+    emit("wm:engine-picker-cancel").catch(console.error);
+    dismissEnginePicker();
+  }
+
+  // Bridge an app launch from the kebab submenu or the View all widgets
+  // modal back to chrome. Chrome resolves the engine picker / download
+  // dialog flow; multi-engine apps re-enter this overlay via
+  // `wm_engine_picker_open` so the picker stays visible above widgets.
+  function launchFromKebab(app: AppRecord, target: string | null) {
+    emit("wm:launch-app-from-menu", { app, target }).catch(console.error);
   }
 
   useEffect(() => {
@@ -272,6 +407,24 @@ export function OverlayApp() {
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [menu]);
+
+  useEffect(() => {
+    if (!allWidgets) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") dismissAllWidgets();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [allWidgets]);
+
+  useEffect(() => {
+    if (!enginePicker) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") handleEngineCancel();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [enginePicker]);
 
   // ── Render ───────────────────────────────────────────────────────────────
 
@@ -434,13 +587,50 @@ export function OverlayApp() {
         </>
       )}
 
-      {/* ── Tab context menu ── */}
+      {/* ── Tab / group context menu ── */}
       {menu &&
         (() => {
-          const left = Math.min(menu.x, window.innerWidth - menuW - 8);
+          const anchor = menu.anchor ?? "left";
+          // Anchor controls which edge of the menu sits at `menu.x`. Items
+          // inside the menu are always left-aligned (LTR text); only the
+          // box's outer position differs.
+          //   - anchor="right" (kebab): use CSS `right` so the menu's
+          //     RIGHT edge sits exactly at menu.x — independent of the
+          //     menu's actual rendered width. This avoids the visual
+          //     offset that would appear if we computed `left = x - menuW`
+          //     with an estimated menuW that doesn't match the real width.
+          //   - anchor="left" (right-click): menu's LEFT edge sits at
+          //     menu.x. `Math.min(..., viewportW - menuW - 8)` keeps it
+          //     from overflowing the right of the viewport.
+          //
+          // Edge case: kebab on a widget pinned to the LEFT side of the
+          // window where the widget tab is narrower than the menu. The
+          // right-anchored menu would extend off-screen to the LEFT. When
+          // there isn't enough room to the left of menu.x, fall back to a
+          // left-pinned position at `left: 8` so the menu stays fully
+          // visible — it loses the kebab-edge alignment but remains usable.
+          const wantRightAnchor = anchor === "right";
+          const useRightAnchor = wantRightAnchor && menu.x >= menuW + 8;
+          const left = useRightAnchor
+            ? undefined
+            : wantRightAnchor
+              ? 8
+              : Math.min(menu.x, window.innerWidth - menuW - 8);
+          const right = useRightAnchor ? Math.max(8, window.innerWidth - menu.x) : undefined;
           const top = Math.min(menu.y, window.innerHeight - 8);
+          // Submenus open to the RIGHT of the parent menu by default.
+          // Flip them to open LEFTWARD only when there isn't room — i.e.
+          // when the parent's right edge sits too close to the viewport's
+          // right edge for the submenu to fit. For right-anchored menus
+          // the parent's right edge is menu.x; for left-anchored (and the
+          // left-pin fallback) we use the resolved `left + menuW`.
+          const SUBMENU_W = 240;
+          const parentRight = useRightAnchor ? menu.x : (left ?? 0) + menuW;
+          const flipSubmenuLeft = parentRight + SUBMENU_W > window.innerWidth - 8;
           const currentZoom = menu.zoomFactor ?? 1.0;
           const hasTab = !!menu.tabLabel;
+          const kind = menu.kind ?? (hasTab ? "tab" : "stack-kebab");
+          const isStandalone = hasTab && menu.stackPath.length === 0;
           const customItems = hasTab ? ctxMenuItemsFor(menu.appId ?? "") : [];
           const customCtx: CtxMenuContext = {
             appId: menu.appId ?? "",
@@ -451,151 +641,350 @@ export function OverlayApp() {
             nTabs: menu.nTabs,
           };
 
+          // "Add Widget" expands into an inline submenu listing every app in
+          // the App Directory. Clicking an app emits `wm:launch-app-from-menu`
+          // with the source's `tabLabel` as target so the new tab joins this
+          // widget's Stack. The footer "View all widgets" opens a larger
+          // modal (still overlay-resident) for users with many apps.
+          const target = menu.tabLabel ?? null;
+          const handleAddWidgetPick = (app: AppRecord) => {
+            launchFromKebab(app, target);
+            dismiss();
+          };
+          const handleViewAllWidgets = () => {
+            // Keep the overlay raised — the modal mounts in the same
+            // webview. Parking would race the modal mount.
+            dismissForOverlaySwap();
+            setAllWidgets({ target });
+          };
+
+          // Duplicate: chrome listens on `wm:duplicate-from-menu`, looks up
+          // the AppRecord by appId, and runs `launch.launchApp(app, target)`
+          // — fresh session, engine picker re-prompted for multi-engine apps.
+          const duplicate = () => {
+            if (!menu.appId || !menu.tabLabel) return;
+            emit("wm:duplicate-from-menu", {
+              appId: menu.appId,
+              target: menu.tabLabel,
+            }).catch(console.error);
+            dismiss();
+          };
+
           return (
             <>
               <div style={{ position: "fixed", inset: 0 }} onPointerDown={dismiss} />
               <div
-                className="wm-tab-ctx-menu"
+                className={`wm-tab-ctx-menu${flipSubmenuLeft ? " wm-tab-ctx-menu--submenu-left" : ""}`}
                 role="menu"
-                style={{ position: "fixed", left, top }}
+                style={{ position: "fixed", left, right, top }}
                 onPointerDown={(e) => e.stopPropagation()}
                 onContextMenu={(e) => e.preventDefault()}
               >
-                {hasTab && (
-                  <>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className="wm-tab-ctx-menu__item"
-                      onClick={() => {
-                        invoke("wm_request_rename", { label: menu.tabLabel }).catch(console.error);
-                        dismiss();
-                      }}
-                    >
-                      Rename
-                    </button>
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className="wm-tab-ctx-menu__item"
-                      onClick={() => {
-                        invoke("wm_rename_panel", {
-                          label: menu.tabLabel,
-                          displayName: null,
-                        }).catch(console.error);
-                        dismiss();
-                      }}
-                    >
-                      Reset name
-                    </button>
-
-                    <div className="wm-tab-ctx-menu__separator" role="separator" />
-
+                {(() => {
+                  // Inline "Add Widget" submenu — same shape in both
+                  // tab-kind and stack-kind menus. Lists every app from the
+                  // App Directory; bottom-of-list "View all widgets" opens
+                  // the larger overlay modal for users with many apps.
+                  const addWidgetItem = (
                     <div className="wm-tab-ctx-menu__submenu-wrap">
                       <button
                         type="button"
                         role="menuitem"
                         className="wm-tab-ctx-menu__item wm-tab-ctx-menu__item--submenu"
                         aria-haspopup="true"
-                        aria-expanded={zoomOpen}
-                        onClick={() => setZoomOpen((o) => !o)}
+                        aria-expanded={addWidgetOpen}
+                        onClick={() => {
+                          setAddWidgetOpen((o) => !o);
+                          setZoomOpen(false);
+                        }}
                       >
-                        Zoom
+                        Add Widget
                         <span className="wm-tab-ctx-menu__submenu-arrow">›</span>
                       </button>
-                      {zoomOpen && (
-                        <div className="wm-tab-ctx-menu__submenu" role="menu">
-                          {ZOOM_LEVELS.map((level) => {
-                            const active = Math.abs(currentZoom - level) < 0.01;
-                            return (
-                              <button
-                                key={level}
-                                type="button"
-                                role="menuitemradio"
-                                aria-checked={active}
-                                className={`wm-tab-ctx-menu__item wm-tab-ctx-menu__item--zoom${active ? " wm-tab-ctx-menu__item--zoom-active" : ""}`}
-                                onClick={() => {
-                                  invoke("wm_set_zoom", {
-                                    label: menu.tabLabel,
-                                    zoomFactor: level,
-                                  }).catch(console.error);
-                                  dismiss();
-                                }}
-                              >
-                                <span className="wm-tab-ctx-menu__zoom-check">
-                                  {active ? "✓" : ""}
-                                </span>
-                                {ZOOM_LABEL[level]}
-                              </button>
-                            );
-                          })}
+                      {addWidgetOpen && (
+                        <div
+                          className="wm-tab-ctx-menu__submenu wm-tab-ctx-menu__submenu--apps"
+                          role="menu"
+                        >
+                          {apps.length === 0 ? (
+                            <div className="wm-tab-ctx-menu__item wm-tab-ctx-menu__item--disabled">
+                              Loading apps…
+                            </div>
+                          ) : (
+                            apps.map((app) => {
+                              const engineCount = enginesFor(app).length;
+                              const cardTitle = app.title ?? app.name;
+                              return (
+                                <button
+                                  key={app.appId}
+                                  type="button"
+                                  role="menuitem"
+                                  className="wm-tab-ctx-menu__item"
+                                  onClick={() => handleAddWidgetPick(app)}
+                                  title={app.description ?? cardTitle}
+                                >
+                                  <span className="wm-tab-ctx-menu__app-title">{cardTitle}</span>
+                                  {engineCount > 1 && (
+                                    <span className="wm-tab-ctx-menu__app-badge" aria-hidden>
+                                      ▾
+                                    </span>
+                                  )}
+                                </button>
+                              );
+                            })
+                          )}
+                          <div className="wm-tab-ctx-menu__separator" role="separator" />
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className="wm-tab-ctx-menu__item"
+                            onClick={handleViewAllWidgets}
+                          >
+                            View all widgets…
+                          </button>
                         </div>
                       )}
                     </div>
+                  );
 
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className="wm-tab-ctx-menu__item"
-                      onClick={() => {
-                        invoke("wm_set_zoom", {
-                          label: menu.tabLabel,
-                          zoomFactor: 1.0,
-                        }).catch(console.error);
-                        dismiss();
-                      }}
-                    >
-                      Reset zoom
-                    </button>
-
-                    {customItems.length > 0 && (
+                  return kind === "stack-kebab" ? (
+                    <>
+                      {addWidgetItem}
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="wm-tab-ctx-menu__item"
+                        onClick={() => {
+                          invoke("wm_toggle_maximize_stack", { path: menu.stackPath }).catch(
+                            console.error
+                          );
+                          dismiss();
+                        }}
+                      >
+                        {menu.maximized ? "Restore group" : "Maximise group"}
+                      </button>
+                      <div className="wm-tab-ctx-menu__separator" role="separator" />
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="wm-tab-ctx-menu__item wm-tab-ctx-menu__item--danger"
+                        onClick={() => {
+                          invoke("wm_close_stack", { path: menu.stackPath }).catch(console.error);
+                          dismiss();
+                        }}
+                      >
+                        Close all widgets ({menu.nTabs} {menu.nTabs === 1 ? "tab" : "tabs"})
+                      </button>
+                    </>
+                  ) : (
+                    hasTab && (
                       <>
+                        {addWidgetItem}
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="wm-tab-ctx-menu__item"
+                          onClick={duplicate}
+                        >
+                          Duplicate
+                        </button>
+
                         <div className="wm-tab-ctx-menu__separator" role="separator" />
-                        {customItems.map((item, i) => (
+
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="wm-tab-ctx-menu__item"
+                          onClick={() => {
+                            invoke("wm_request_rename", { label: menu.tabLabel }).catch(
+                              console.error
+                            );
+                            dismiss();
+                          }}
+                        >
+                          Rename
+                        </button>
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="wm-tab-ctx-menu__item"
+                          onClick={() => {
+                            invoke("wm_rename_panel", {
+                              label: menu.tabLabel,
+                              displayName: null,
+                            }).catch(console.error);
+                            dismiss();
+                          }}
+                        >
+                          Reset name
+                        </button>
+
+                        <div className="wm-tab-ctx-menu__separator" role="separator" />
+
+                        <div className="wm-tab-ctx-menu__submenu-wrap">
                           <button
-                            key={i}
                             type="button"
                             role="menuitem"
-                            className={`wm-tab-ctx-menu__item${item.danger ? " wm-tab-ctx-menu__item--danger" : ""}`}
-                            onClick={() => item.onClick(customCtx, dismiss)}
+                            className="wm-tab-ctx-menu__item wm-tab-ctx-menu__item--submenu"
+                            aria-haspopup="true"
+                            aria-expanded={zoomOpen}
+                            onClick={() => setZoomOpen((o) => !o)}
                           >
-                            {item.label}
+                            Zoom
+                            <span className="wm-tab-ctx-menu__submenu-arrow">›</span>
                           </button>
-                        ))}
+                          {zoomOpen && (
+                            <div className="wm-tab-ctx-menu__submenu" role="menu">
+                              {ZOOM_LEVELS.map((level) => {
+                                const active = Math.abs(currentZoom - level) < 0.01;
+                                return (
+                                  <button
+                                    key={level}
+                                    type="button"
+                                    role="menuitemradio"
+                                    aria-checked={active}
+                                    className={`wm-tab-ctx-menu__item wm-tab-ctx-menu__item--zoom${active ? " wm-tab-ctx-menu__item--zoom-active" : ""}`}
+                                    onClick={() => {
+                                      invoke("wm_set_zoom", {
+                                        label: menu.tabLabel,
+                                        zoomFactor: level,
+                                      }).catch(console.error);
+                                      dismiss();
+                                    }}
+                                  >
+                                    <span className="wm-tab-ctx-menu__zoom-check">
+                                      {active ? "✓" : ""}
+                                    </span>
+                                    {ZOOM_LABEL[level]}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="wm-tab-ctx-menu__item"
+                          onClick={() => {
+                            invoke("wm_set_zoom", {
+                              label: menu.tabLabel,
+                              zoomFactor: 1.0,
+                            }).catch(console.error);
+                            dismiss();
+                          }}
+                        >
+                          Reset zoom
+                        </button>
+
+                        {customItems.length > 0 && (
+                          <>
+                            <div className="wm-tab-ctx-menu__separator" role="separator" />
+                            {customItems.map((item, i) => (
+                              <button
+                                key={i}
+                                type="button"
+                                role="menuitem"
+                                className={`wm-tab-ctx-menu__item${item.danger ? " wm-tab-ctx-menu__item--danger" : ""}`}
+                                onClick={() => item.onClick(customCtx, dismiss)}
+                              >
+                                {item.label}
+                              </button>
+                            ))}
+                          </>
+                        )}
+
+                        <div className="wm-tab-ctx-menu__separator" role="separator" />
+
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="wm-tab-ctx-menu__item wm-tab-ctx-menu__item--danger"
+                          onClick={() => {
+                            invoke("close_tab", { label: menu.tabLabel }).catch(console.error);
+                            dismiss();
+                          }}
+                        >
+                          Close tab
+                        </button>
+
+                        {!isStandalone && (
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className="wm-tab-ctx-menu__item wm-tab-ctx-menu__item--danger"
+                            onClick={() => {
+                              invoke("wm_close_stack", { path: menu.stackPath }).catch(
+                                console.error
+                              );
+                              dismiss();
+                            }}
+                          >
+                            Close group ({menu.nTabs} {menu.nTabs === 1 ? "tab" : "tabs"})
+                          </button>
+                        )}
                       </>
-                    )}
-
-                    <div className="wm-tab-ctx-menu__separator" role="separator" />
-
-                    <button
-                      type="button"
-                      role="menuitem"
-                      className="wm-tab-ctx-menu__item wm-tab-ctx-menu__item--danger"
-                      onClick={() => {
-                        invoke("close_tab", { label: menu.tabLabel }).catch(console.error);
-                        dismiss();
-                      }}
-                    >
-                      Close tab
-                    </button>
-                  </>
-                )}
-
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="wm-tab-ctx-menu__item wm-tab-ctx-menu__item--danger"
-                  onClick={() => {
-                    invoke("wm_close_stack", { path: menu.stackPath }).catch(console.error);
-                    dismiss();
-                  }}
-                >
-                  Close group ({menu.nTabs} {menu.nTabs === 1 ? "tab" : "tabs"})
-                </button>
+                    )
+                  );
+                })()}
               </div>
             </>
           );
         })()}
+
+      {/* ── View all widgets modal ──
+          Opened from the kebab's "Add Widget › View all widgets…" footer.
+          Renders the same WidgetCatalog as the empty-dashboard picker. The
+          launch flows back to chrome through `wm:launch-app-from-menu`. */}
+      {allWidgets && (
+        <>
+          <div className="wm-all-widgets-backdrop" onPointerDown={dismissAllWidgets} aria-hidden />
+          <div
+            className="wm-all-widgets-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="All widgets"
+            onPointerDown={(e) => e.stopPropagation()}
+          >
+            <header className="wm-all-widgets-modal__header">
+              <h2 className="wm-all-widgets-modal__title">Add widget to this group</h2>
+              <button
+                type="button"
+                className="wm-all-widgets-modal__close"
+                onClick={dismissAllWidgets}
+                aria-label="Close all widgets"
+              >
+                ✕
+              </button>
+            </header>
+            <WidgetCatalog
+              apps={apps}
+              enginesFor={enginesFor}
+              onSelect={(app) => {
+                launchFromKebab(app, allWidgets.target);
+                dismissAllWidgets();
+              }}
+              variant="all-widgets-modal"
+            />
+          </div>
+        </>
+      )}
+
+      {/* ── Engine picker (overlay-resident) ──
+          Fired by chrome via `wm_engine_picker_open` when a multi-engine
+          app is launched. Renders here so widgets stay visible behind the
+          modal and clicks land on the dialog. User pick / cancel are
+          bridged back to chrome via `wm:engine-picker-pick` /
+          `wm:engine-picker-cancel`. */}
+      {enginePicker && (
+        <EnginePickerDialog
+          app={enginePicker.app}
+          engines={enginePicker.engines}
+          onPick={handleEnginePick}
+          onCancel={handleEngineCancel}
+        />
+      )}
     </>
   );
 }

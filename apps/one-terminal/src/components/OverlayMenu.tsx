@@ -33,21 +33,30 @@ import type { AppRecord } from "../types";
 
 interface MenuOpenPayload {
   initialSectionId?: string;
+  /**
+   * When set, the Add Widget section's launch fires with this panel label
+   * as `target` so the new tab joins that label's Stack. Used by the
+   * per-widget and group kebab menus' "Add Widget" item.
+   */
+  targetLabel?: string;
 }
 
 export function OverlayMenu() {
   const [open, setOpen] = useState(false);
   const [initialSectionId, setInitialSectionId] = useState<string | undefined>(undefined);
+  const [targetLabel, setTargetLabel] = useState<string | undefined>(undefined);
 
   const { apps, enginesFor } = useAppDirectory();
   const dashboards = useDashboards();
 
   // Listen for chrome's invoke of `wm_menu_open`. Each event payload may
   // include an initialSectionId for deep links (e.g. dashboard pill
-  // right-click → "Manage…").
+  // right-click → "Manage…") and a targetLabel that scopes launches to
+  // a particular widget's Stack.
   useEffect(() => {
     const promise = listen<MenuOpenPayload>("wm:menu-open", (e) => {
       setInitialSectionId(e.payload?.initialSectionId);
+      setTargetLabel(e.payload?.targetLabel);
       setOpen(true);
     });
     return () => {
@@ -57,6 +66,7 @@ export function OverlayMenu() {
 
   const handleClose = useCallback(() => {
     setOpen(false);
+    setTargetLabel(undefined);
     // Park the overlay offscreen so widgets become visible + interactive
     // again. Reusing the existing dismiss command keeps z-order management
     // in one place (Rust).
@@ -71,10 +81,12 @@ export function OverlayMenu() {
       // Bridge the launch back to chrome: chrome owns the engine picker /
       // download flow and renders those dialogs in chrome with proper
       // panel parking. The drawer closes so the user sees the dialogs.
-      emit("wm:launch-app-from-menu", { app }).catch(console.error);
+      // `target` is passed through when the drawer was opened from a
+      // kebab (per-widget or group) so the new tab joins that Stack.
+      emit("wm:launch-app-from-menu", { app, target: targetLabel ?? null }).catch(console.error);
       handleClose();
     },
-    [handleClose]
+    [handleClose, targetLabel]
   );
 
   const sections = useMemo<SectionDef[]>(
