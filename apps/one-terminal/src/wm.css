@@ -921,6 +921,7 @@ body,
   gap: 1px;
 }
 .wm-tab-ctx-menu__item {
+  width: 100%;
   padding: 5px 10px;
   background: transparent;
   color: var(--ot-text-primary);

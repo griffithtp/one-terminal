@@ -64,6 +64,7 @@ impl WebviewPool {
             let label_main = label.clone();
             let app_main = app.clone();
             let terminal_id_main = terminal_id.clone();
+            let overlay_main = Arc::clone(&overlay);
 
             if app
                 .run_on_main_thread(move || {
@@ -89,7 +90,7 @@ impl WebviewPool {
                         )
                         .map_err(|e| e.to_string())?;
                         // New webview is above the overlay in z-order.
-                        let mut inner = overlay.lock().unwrap();
+                        let mut inner = overlay_main.lock().unwrap();
                         inner.stale = true;
                         inner.is_ready = false;
                         Ok(())
@@ -105,6 +106,10 @@ impl WebviewPool {
                 Ok(Ok(())) => {
                     available.lock().unwrap().push_back(label.clone());
                     eprintln!("[pool] +1 ready: {label}");
+                    // Prewarm the overlay so the next menu open hits a
+                    // ready overlay instead of paying recreate latency
+                    // when the user clicks a kebab right after a launch.
+                    crate::overlay_prewarm_in_background(overlay, &terminal_id, &app);
                 }
                 Ok(Err(e)) => eprintln!("[pool] replenish failed: {e}"),
                 Err(_) => {}

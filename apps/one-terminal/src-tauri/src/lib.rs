@@ -369,6 +369,13 @@ async fn wm_open(
         inner.is_ready = false;
     }
 
+    // Prewarm the overlay in the background so the next kebab / palette /
+    // engine-picker click hits an already-ready overlay instead of paying
+    // the ~200–500 ms recreate latency (close old → add_child new → React
+    // mount → register listeners → wm_overlay_ready). Without this the
+    // first click after any widget launch appears unresponsive.
+    overlay_prewarm_in_background(Arc::clone(overlay), window.label(), &app);
+
     // Replenish the pool in the background after a slot was consumed.
     // No-op on the cold path (pool not used) or when already at capacity.
     pool.replenish(&app, overlay, window.label());
@@ -470,13 +477,16 @@ fn wm_overlay_ready(window: Window, manager: State<'_, TerminalManager>) {
     }
 }
 
-/// Ensure the overlay webview is the topmost child, then position it
-/// full-screen. Shared by all overlay-show commands.
+/// Ensure the overlay webview is the topmost child and ready to receive
+/// events, but leave it parked offscreen. Idempotent and safe to call
+/// concurrently — a second caller sees `stale=false` and just waits for
+/// the ready signal already in flight.
 ///
-/// If `stale=true` the overlay is closed and recreated as the last child
-/// webview (so it sits above all content panels), then we wait for the overlay
-/// to call `wm_overlay_ready` before returning.
-async fn overlay_raise(
+/// Called both from `overlay_raise` (synchronously, before showing a menu)
+/// and from background prewarm tasks spawned by `wm_open` / pool replenish
+/// so the next user click hits an already-ready overlay instead of paying
+/// a 200–500 ms recreate latency.
+pub(crate) async fn overlay_prewarm(
     overlay_arc: Arc<Mutex<OverlayInner>>,
     terminal_id: &str,
     app: &AppHandle,
@@ -553,8 +563,46 @@ async fn overlay_raise(
             .map_err(|_| "overlay waker dropped".to_string())?;
     }
 
-    // Move the overlay to cover the full window so its backdrop captures
-    // outside-clicks and menus render at the correct cursor position.
+    Ok(())
+}
+
+/// Spawn a background task that prewarms the overlay so the next
+/// menu-open click doesn't pay recreate latency. Fire-and-forget — errors
+/// are logged but don't surface; the on-click path will retry if needed.
+///
+/// Call this immediately after any operation that sets `stale=true`
+/// (`wm_open`, pool replenish, dashboard switch/discard, terminal restore).
+pub(crate) fn overlay_prewarm_in_background(
+    overlay_arc: Arc<Mutex<OverlayInner>>,
+    terminal_id: &str,
+    app: &AppHandle,
+) {
+    let terminal_id = terminal_id.to_string();
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        if let Err(e) = overlay_prewarm(overlay_arc, &terminal_id, &app).await {
+            eprintln!("[overlay_prewarm bg] {terminal_id}: {e}");
+        }
+    });
+}
+
+/// Ensure the overlay webview is the topmost child, then position it
+/// full-screen. Shared by all overlay-show commands.
+async fn overlay_raise(
+    overlay_arc: Arc<Mutex<OverlayInner>>,
+    terminal_id: &str,
+    app: &AppHandle,
+) -> Result<(), String> {
+    let overlay_label = format!("{terminal_id}-overlay");
+    let win_label = terminal_id.to_string();
+
+    overlay_prewarm(Arc::clone(&overlay_arc), &win_label, app).await?;
+
+    // Restore the overlay to cover the full window so its backdrop
+    // captures outside-clicks and menus render at the correct cursor
+    // position. `set_bounds` updates both position and size in one OS-
+    // level frame change, which is the most reliable way to bring the
+    // webview back into hit-testing on macOS.
     let win = app
         .get_window(&win_label)
         .ok_or_else(|| format!("window '{}' not found", win_label))?;
@@ -645,15 +693,25 @@ fn wm_request_rename(label: String, app: AppHandle) {
     }
 }
 
-/// Hide the overlay by parking it offscreen.  Called by the overlay itself
-/// when the user dismisses the menu or selects an action.
+/// Hide the overlay by parking it offscreen with a 1×1 hit area. Called
+/// by the overlay itself when the user dismisses a menu or selects an
+/// action.
+///
+/// We collapse the size to 1×1 (in addition to moving to -20000,-20000)
+/// so that even if the OS-level hit-test caches the previous bounds for
+/// a frame, the cached area is a single pixel far offscreen — clicks on
+/// the chrome's kebab buttons can't accidentally land on the overlay.
+/// Using `set_bounds` (rather than `hide()`/`show()`) avoids a separate
+/// issue where `show()` doesn't reliably restore hit-testing in time for
+/// the first click after a menu appears.
 #[tauri::command]
 fn wm_ctx_menu_close(window: Window, app: AppHandle) {
     let overlay_label = format!("{}-overlay", window.label());
     if let Some(wv) = app.get_webview(&overlay_label) {
-        let _ = wv.set_position(tauri::Position::Logical(LogicalPosition::new(
-            -20000.0, -20000.0,
-        )));
+        let _ = wv.set_bounds(tauri::Rect {
+            position: tauri::Position::Logical(LogicalPosition::new(-20000.0, -20000.0)),
+            size: tauri::Size::Logical(LogicalSize::new(1.0, 1.0)),
+        });
     }
 }
 
@@ -819,6 +877,7 @@ async fn wm_switch_dashboard(
         inner.stale = true;
         inner.is_ready = false;
     }
+    overlay_prewarm_in_background(Arc::clone(&terminal.overlay), window.label(), &app);
     terminal.layout_tree.emit_dashboards(&app);
     Ok(())
 }
@@ -843,6 +902,7 @@ async fn wm_discard_dashboard(
         inner.stale = true;
         inner.is_ready = false;
     }
+    overlay_prewarm_in_background(Arc::clone(&terminal.overlay), window.label(), &app);
     terminal.layout_tree.emit_dashboards(&app);
     Ok(())
 }
@@ -1236,6 +1296,11 @@ pub fn run() {
                     inner.stale = true;
                     inner.is_ready = false;
                 }
+                overlay_prewarm_in_background(
+                    Arc::clone(&overlay_state),
+                    WIN,
+                    app.handle(),
+                );
                 tree.reflow(app.handle());
                 tree.emit_host(app.handle());
                 if let Some(snap) = tree.snapshot() {
