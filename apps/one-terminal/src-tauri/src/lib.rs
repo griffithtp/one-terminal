@@ -1296,11 +1296,7 @@ pub fn run() {
                     inner.stale = true;
                     inner.is_ready = false;
                 }
-                overlay_prewarm_in_background(
-                    Arc::clone(&overlay_state),
-                    WIN,
-                    app.handle(),
-                );
+                overlay_prewarm_in_background(Arc::clone(&overlay_state), WIN, app.handle());
                 tree.reflow(app.handle());
                 tree.emit_host(app.handle());
                 if let Some(snap) = tree.snapshot() {

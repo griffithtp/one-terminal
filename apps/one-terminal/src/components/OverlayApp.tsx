@@ -616,9 +616,7 @@ export function OverlayApp() {
             : wantRightAnchor
               ? 8
               : Math.min(menu.x, window.innerWidth - menuW - 8);
-          const right = useRightAnchor
-            ? Math.max(8, window.innerWidth - menu.x)
-            : undefined;
+          const right = useRightAnchor ? Math.max(8, window.innerWidth - menu.x) : undefined;
           const top = Math.min(menu.y, window.innerHeight - 8);
           // Submenus open to the RIGHT of the parent menu by default.
           // Flip them to open LEFTWARD only when there isn't room — i.e.
