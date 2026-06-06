@@ -514,17 +514,31 @@ export function OverlayApp() {
           // Anchor controls which edge of the menu sits at `menu.x`. Items
           // inside the menu are always left-aligned (LTR text); only the
           // box's outer position differs.
-          //   - anchor="right" (kebab): menu's RIGHT edge sits at menu.x.
-          //     `Math.max(8, ...)` keeps the menu from poking off the LEFT
-          //     of the viewport when the kebab is unexpectedly close to it.
-          //   - anchor="left" (right-click): menu's LEFT edge sits at menu.x.
-          //     `Math.min(..., viewportW - menuW - 8)` keeps the menu from
-          //     overflowing the RIGHT of the viewport.
-          const left =
-            anchor === "right"
-              ? Math.max(8, menu.x - menuW)
-              : Math.min(menu.x, window.innerWidth - menuW - 8);
+          //   - anchor="right" (kebab): use CSS `right` so the menu's
+          //     RIGHT edge sits exactly at menu.x — independent of the
+          //     menu's actual rendered width. This avoids the visual
+          //     offset that would appear if we computed `left = x - menuW`
+          //     with an estimated menuW that doesn't match the real width.
+          //   - anchor="left" (right-click): menu's LEFT edge sits at
+          //     menu.x. `Math.min(..., viewportW - menuW - 8)` keeps it
+          //     from overflowing the right of the viewport.
+          const useRightAnchor = anchor === "right";
+          const left = useRightAnchor
+            ? undefined
+            : Math.min(menu.x, window.innerWidth - menuW - 8);
+          const right = useRightAnchor
+            ? Math.max(8, window.innerWidth - menu.x)
+            : undefined;
           const top = Math.min(menu.y, window.innerHeight - 8);
+          // Submenus open to the RIGHT of the parent menu by default.
+          // Flip them to open LEFTWARD only when there isn't room — i.e.
+          // when the parent's right edge sits too close to the viewport's
+          // right edge for the submenu to fit. For right-anchored menus
+          // the parent's right edge is menu.x; for left-anchored we use
+          // the clamped `left + menuW`.
+          const SUBMENU_W = 240;
+          const parentRight = useRightAnchor ? menu.x : (left ?? 0) + menuW;
+          const flipSubmenuLeft = parentRight + SUBMENU_W > window.innerWidth - 8;
           const currentZoom = menu.zoomFactor ?? 1.0;
           const hasTab = !!menu.tabLabel;
           const kind = menu.kind ?? (hasTab ? "tab" : "stack-kebab");
@@ -572,9 +586,9 @@ export function OverlayApp() {
             <>
               <div style={{ position: "fixed", inset: 0 }} onPointerDown={dismiss} />
               <div
-                className={`wm-tab-ctx-menu${anchor === "right" ? " wm-tab-ctx-menu--anchor-right" : ""}`}
+                className={`wm-tab-ctx-menu${flipSubmenuLeft ? " wm-tab-ctx-menu--submenu-left" : ""}`}
                 role="menu"
-                style={{ position: "fixed", left, top }}
+                style={{ position: "fixed", left, right, top }}
                 onPointerDown={(e) => e.stopPropagation()}
                 onContextMenu={(e) => e.preventDefault()}
               >

@@ -975,10 +975,10 @@ body,
   gap: 1px;
   z-index: 31;
 }
-/* When the parent menu is right-anchored (kebab-driven, menu's right edge
- * sits at the kebab), flip submenus to expand leftward — otherwise the
- * apps submenu would extend off-screen past the kebab. */
-.wm-tab-ctx-menu--anchor-right .wm-tab-ctx-menu__submenu {
+/* Submenus default to opening rightward (`left: 100%` above). When the
+ * parent menu's right edge is too close to the viewport's right edge to
+ * fit a submenu, OverlayApp applies this modifier to flip them leftward. */
+.wm-tab-ctx-menu--submenu-left .wm-tab-ctx-menu__submenu {
   left: auto;
   right: 100%;
 }
