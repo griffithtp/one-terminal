@@ -109,16 +109,16 @@ one-terminal/
 
 The scaffolder produces one of two workspace shapes selected by a prompt:
 
-- **Standalone** *(default)* — Terminal + a single sample widget + a local `widgets.config.json` widget registry. No Desktop Agent. The Terminal connects FDC3 to an external agent over a WebSocket URL.
+- **Standalone** _(default)_ — Terminal + a single sample widget + a local `widgets.config.json` widget registry. No Desktop Agent. The Terminal connects FDC3 to an external agent over a WebSocket URL.
 - **Enterprise** — the full stack: Terminal + Desktop Agent + App Directory + engine plugin runtime + sample ticker/chart.
 
 Templates are partitioned across three overlays. `render.ts` walks `shared/` first, then the selected variant overlay; collisions are won by the later overlay.
 
-| Overlay       | Contents                                                                                               | Source                                                |
-| ------------- | ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------- |
-| `shared/`     | Terminal shell, ot-core, fdc3-plugin, fdc3-client, root `.gitignore`                                   | Extracted from `apps/one-terminal/`, `packages/ot-core/`, `packages/fdc3-*` |
-| `enterprise/` | Desktop Agent, App Directory, tauri-webview-host, electron-host, sample-ticker, sample-chart, ot-fdc3, root `Cargo.toml`, root `package.json` | Extracted from the corresponding `apps/` / `packages/ot-fdc3/` dirs |
-| `standalone/` | sample-widget, slim Cargo.toml, slim package.json, widgets.config.json, standalone terminal.config.json | sample-widget extracted from `apps/sample-widget/`; the rest from `overlay-overrides/standalone/` |
+| Overlay       | Contents                                                                                                                                      | Source                                                                                            |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `shared/`     | Terminal shell, ot-core, fdc3-plugin, fdc3-client, root `.gitignore`                                                                          | Extracted from `apps/one-terminal/`, `packages/ot-core/`, `packages/fdc3-*`                       |
+| `enterprise/` | Desktop Agent, App Directory, tauri-webview-host, electron-host, sample-ticker, sample-chart, ot-fdc3, root `Cargo.toml`, root `package.json` | Extracted from the corresponding `apps/` / `packages/ot-fdc3/` dirs                               |
+| `standalone/` | sample-widget, slim Cargo.toml, slim package.json, widgets.config.json, standalone terminal.config.json                                       | sample-widget extracted from `apps/sample-widget/`; the rest from `overlay-overrides/standalone/` |
 
 ---
 
@@ -267,32 +267,32 @@ If you add a new framework-internal script to the root `package.json` that shoul
 
 ### The `create/` module
 
-| File               | Responsibility                                                                                                       |
-| ------------------ | -------------------------------------------------------------------------------------------------------------------- |
-| `context.ts`       | `ScaffoldContext` type (including `variant`, `externalFdc3AgentUrl`) + `buildContext()` derivations                  |
-| `prompts.ts`       | Interactive CLI prompts using `@clack/prompts` — variant prompt drives which downstream prompts run                  |
+| File               | Responsibility                                                                                                        |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| `context.ts`       | `ScaffoldContext` type (including `variant`, `externalFdc3AgentUrl`) + `buildContext()` derivations                   |
+| `prompts.ts`       | Interactive CLI prompts using `@clack/prompts` — variant prompt drives which downstream prompts run                   |
 | `render.ts`        | Walks `templates/shared/` then `templates/<variant>/`, renders `.ejs` files, writes atomically (variant-overlay-wins) |
 | `post-scaffold.ts` | Injects `oneTerminal.{version,variant}` into generated `package.json`, prints variant-aware next-step instructions    |
 
 ### The `add-widget/` module
 
-| File       | Responsibility                                                                                                          |
-| ---------- | ----------------------------------------------------------------------------------------------------------------------- |
+| File       | Responsibility                                                                                                                                                                                                                                                                                                                  |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `index.ts` | Interactive `add-widget` subcommand + programmatic `createWidget(cwd, spec)` API used by tests. Renders the embedded template at `packages/create-one-terminal/widget-template/`, then registers the widget — appends to `widgets.config.json` for Standalone workspaces, or prints/runs a `curl POST /v2/apps` for Enterprise. |
 
 ### The `upgrade/` module
 
-| File                  | Responsibility                                                                                                       |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `index.ts`            | Orchestrates the 9-step upgrade flow                                                                                  |
+| File                  | Responsibility                                                                                                             |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `index.ts`            | Orchestrates the 9-step upgrade flow                                                                                       |
 | `detect.ts`           | Reads `oneTerminal.{version,variant}` from target `package.json`; infers variant from filesystem for pre-variant scaffolds |
-| `manifest.ts`         | Fetches `versions.json` from the installed package                                                                    |
-| `chain.ts`            | Builds the ordered list of migrations to apply, filtered by the project's variant (via each migration's `appliesTo`)  |
-| `backup.ts`           | Snapshots affected files to `.one-terminal/upgrade-backup-<ver>/`                                                     |
-| `restore.ts`          | Restores snapshot on failure                                                                                          |
-| `conflict.ts`         | Handles `_managed`-field conflicts: auto / skip / merge                                                               |
-| `report.ts`           | Writes `.one-terminal/upgrade-report-<ver>.md`                                                                        |
-| `migrations/types.ts` | `MigrationSpec`, `AppliesTo`, `VersionEntry`, `VersionsManifest` types                                                |
+| `manifest.ts`         | Fetches `versions.json` from the installed package                                                                         |
+| `chain.ts`            | Builds the ordered list of migrations to apply, filtered by the project's variant (via each migration's `appliesTo`)       |
+| `backup.ts`           | Snapshots affected files to `.one-terminal/upgrade-backup-<ver>/`                                                          |
+| `restore.ts`          | Restores snapshot on failure                                                                                               |
+| `conflict.ts`         | Handles `_managed`-field conflicts: auto / skip / merge                                                                    |
+| `report.ts`           | Writes `.one-terminal/upgrade-report-<ver>.md`                                                                             |
+| `migrations/types.ts` | `MigrationSpec`, `AppliesTo`, `VersionEntry`, `VersionsManifest` types                                                     |
 
 `applyStructural` in `index.ts` searches each overlay (`shared/`, `enterprise/`, `standalone/`) when resolving a migration's `op.sourcePath`, so `add-file` operations work regardless of which overlay the template was authored in.
 
@@ -311,7 +311,7 @@ Migrations live in the `migrations` array of a version entry in [packages/create
 
 - `id` — unique string, used to skip already-applied migrations on re-runs
 - `target` — relative path from the scaffolded workspace root (always without an overlay prefix — the wizard strips it during authoring)
-- `appliesTo` *(optional)* — `"both"`, `"standalone"`, or `"enterprise"`. The wizard infers this from which overlay the changed template lives in: `shared/` → `"both"`, `enterprise/` → `"enterprise"`, `standalone/` → `"standalone"`. Older migrations without this field default to `"both"` for backward compatibility with pre-variant scaffolds.
+- `appliesTo` _(optional)_ — `"both"`, `"standalone"`, or `"enterprise"`. The wizard infers this from which overlay the changed template lives in: `shared/` → `"both"`, `enterprise/` → `"enterprise"`, `standalone/` → `"standalone"`. Older migrations without this field default to `"both"` for backward compatibility with pre-variant scaffolds.
 
 `buildChain` filters out migrations whose `appliesTo` does not match the workspace variant before any are applied. You generally don't write `appliesTo` by hand — let the wizard set it from the overlay context.
 
@@ -471,8 +471,8 @@ The prompts are:
 2. **Output folder** — defaults to `./<workspace-name>`, accept or change it
 3. **Workspace variant** — Standalone (default) or Enterprise
 4. **Reverse-domain identifier** — e.g. `com.acme.trading`
-5. **External FDC3 agent URL** *(Standalone only)* — optional; leave blank to configure later
-6. **Include FDC3?** *(Enterprise only)* — defaults to yes
+5. **External FDC3 agent URL** _(Standalone only)_ — optional; leave blank to configure later
+6. **Include FDC3?** _(Enterprise only)_ — defaults to yes
 7. **Customize ports?** — defaults to no (Standalone asks only the Terminal dev port; Enterprise asks all six)
 
 After confirming, move into the output folder:
@@ -528,8 +528,8 @@ npm run dev:terminal
 | `cargo check --workspace` | exits 0                                                   |
 | `npm install`             | no peer dep errors                                        |
 | Terminal starts           | window opens, launcher shows sample widget(s)             |
-| App Directory starts      | responds at `http://localhost:<port>` *(Enterprise only)* |
-| Desktop Agent starts      | connects to App Directory, no crash *(Enterprise only)*   |
+| App Directory starts      | responds at `http://localhost:<port>` _(Enterprise only)_ |
+| Desktop Agent starts      | connects to App Directory, no crash _(Enterprise only)_   |
 
 ---
 

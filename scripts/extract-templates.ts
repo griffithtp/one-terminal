@@ -81,7 +81,11 @@ const SOURCES: Array<{ src: string; templateBase: string; overlay: Overlay }> = 
     templateBase: "apps/sample-ticker",
     overlay: "enterprise",
   },
-  { src: join(ROOT, "apps/sample-chart"), templateBase: "apps/sample-chart", overlay: "enterprise" },
+  {
+    src: join(ROOT, "apps/sample-chart"),
+    templateBase: "apps/sample-chart",
+    overlay: "enterprise",
+  },
   {
     src: join(ROOT, "apps/electron-host"),
     templateBase: "apps/electron-host",

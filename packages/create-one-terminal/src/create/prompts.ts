@@ -106,9 +106,7 @@ export async function runPrompts(): Promise<PromptsResult> {
   } = {};
 
   if (overridePorts) {
-    portAnswers = isStandalone
-      ? await promptStandalonePorts()
-      : await promptEnterprisePorts();
+    portAnswers = isStandalone ? await promptStandalonePorts() : await promptEnterprisePorts();
   }
 
   const ctx = buildContext({
@@ -127,9 +125,7 @@ export async function runPrompts(): Promise<PromptsResult> {
       `npm scope:   @${ctx.orgScope}/*`,
       `Tauri ID:    ${ctx.tauriIdentifier}.*`,
       `FDC3:        ${ctx.includeFdc3 ? "yes" : "no"}`,
-      isStandalone
-        ? `FDC3 agent:  ${externalFdc3AgentUrl || "(not configured)"}`
-        : "",
+      isStandalone ? `FDC3 agent:  ${externalFdc3AgentUrl || "(not configured)"}` : "",
       `Output:      ${outputDir}`,
     ]
       .filter(Boolean)

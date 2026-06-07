@@ -178,11 +178,7 @@ async function registerWidget(spec: WidgetSpec, cwd: string, variant: Variant): 
   );
 }
 
-async function tryRegisterViaApi(
-  url: string,
-  payload: unknown,
-  token: string
-): Promise<boolean> {
+async function tryRegisterViaApi(url: string, payload: unknown, token: string): Promise<boolean> {
   try {
     const res = await fetch(url, {
       method: "POST",

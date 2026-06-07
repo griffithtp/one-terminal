@@ -31,7 +31,9 @@ const { createWidget } = await import(
 // CLI: `npx tsx scripts/test-scaffold.ts [--variant standalone|enterprise|both] [--keep]`
 const variantArg = process.argv.indexOf("--variant");
 const variantSelector =
-  variantArg !== -1 ? (process.argv[variantArg + 1] as "standalone" | "enterprise" | "both") : "both";
+  variantArg !== -1
+    ? (process.argv[variantArg + 1] as "standalone" | "enterprise" | "both")
+    : "both";
 
 type Variant = "standalone" | "enterprise";
 const variants: Variant[] =
@@ -96,9 +98,9 @@ try {
       throw new Error("add-widget did not create apps/smoke-widget/server.js");
     }
     if (variant === "standalone") {
-      const registry = JSON.parse(
-        readFileSync(join(OUT, "widgets.config.json"), "utf8")
-      ) as { widgets: Array<{ appId: string }> };
+      const registry = JSON.parse(readFileSync(join(OUT, "widgets.config.json"), "utf8")) as {
+        widgets: Array<{ appId: string }>;
+      };
       if (!registry.widgets.some((w) => w.appId === "smoke-widget")) {
         throw new Error("widgets.config.json was not updated with smoke-widget");
       }

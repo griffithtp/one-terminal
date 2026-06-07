@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -15,7 +15,11 @@
         --green: #3fb950;
         --red: #f85149;
       }
-      * { box-sizing: border-box; margin: 0; padding: 0; }
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
       body {
         background: var(--bg);
         color: var(--text);
@@ -26,8 +30,15 @@
         flex-direction: column;
         gap: 16px;
       }
-      header { display: flex; align-items: center; gap: 12px; }
-      .title { font-weight: 700; font-size: 15px; }
+      header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+      }
+      .title {
+        font-weight: 700;
+        font-size: 15px;
+      }
       .badge {
         font-size: 10px;
         background: rgba(56, 139, 253, 0.15);
@@ -36,12 +47,25 @@
         border-radius: 10px;
         padding: 2px 8px;
       }
-      #status { margin-left: auto; font-size: 11px; color: var(--muted); }
-      #status.ok { color: var(--green); }
-      #status.err { color: var(--red); }
+      #status {
+        margin-left: auto;
+        font-size: 11px;
+        color: var(--muted);
+      }
+      #status.ok {
+        color: var(--green);
+      }
+      #status.err {
+        color: var(--red);
+      }
 
-      .row { display: flex; align-items: center; gap: 8px; }
-      input, button {
+      .row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      input,
+      button {
         background: var(--surface);
         border: 1px solid var(--border);
         color: var(--text);
@@ -50,9 +74,17 @@
         font-family: inherit;
         font-size: 12px;
       }
-      input { flex: 1; }
-      button { cursor: pointer; border-color: var(--accent); color: var(--accent); }
-      button:hover { background: rgba(56, 139, 253, 0.1); }
+      input {
+        flex: 1;
+      }
+      button {
+        cursor: pointer;
+        border-color: var(--accent);
+        color: var(--accent);
+      }
+      button:hover {
+        background: rgba(56, 139, 253, 0.1);
+      }
 
       .panel {
         background: var(--surface);
@@ -67,10 +99,27 @@
         letter-spacing: 0.08em;
         margin-bottom: 8px;
       }
-      pre { font-size: 11px; line-height: 1.4; white-space: pre-wrap; word-break: break-word; }
-      #log { max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
-      .log-entry { font-size: 11px; color: var(--muted); }
-      .log-entry .ts { color: rgba(139, 148, 158, 0.6); margin-right: 6px; }
+      pre {
+        font-size: 11px;
+        line-height: 1.4;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      #log {
+        max-height: 200px;
+        overflow-y: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+      .log-entry {
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .log-entry .ts {
+        color: rgba(139, 148, 158, 0.6);
+        margin-right: 6px;
+      }
     </style>
   </head>
   <body>

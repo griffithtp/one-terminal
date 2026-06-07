@@ -86,7 +86,7 @@ npx create-one-terminal my-terminal
 
 The scaffolder asks for a **variant**:
 
-- **Standalone** *(default)* — Terminal + a single sample widget, joins an external FDC3 agent. No Desktop Agent or App Directory shipped. Best for evaluating the Terminal or joining an existing FDC3 estate.
+- **Standalone** _(default)_ — Terminal + a single sample widget, joins an external FDC3 agent. No Desktop Agent or App Directory shipped. Best for evaluating the Terminal or joining an existing FDC3 estate.
 - **Enterprise** — full stack (Terminal + Desktop Agent + App Directory + samples). Best for platform teams.
 
 ```sh
@@ -193,11 +193,11 @@ Open it inside OneTerminal alongside the sample ticker — switch both to the Gr
 
 ### Sample apps
 
-| Path                 | Port | Variant     | Description                                                                      |
-| -------------------- | ---- | ----------- | -------------------------------------------------------------------------------- |
-| `apps/sample-widget` | 3012 | standalone  | Minimal FDC3 widget — connect, broadcast, receive context                        |
-| `apps/sample-ticker` | 3010 | enterprise  | Market data ticker — broadcasts `fx.rate` on the Green channel                   |
-| `apps/sample-chart`  | 3011 | enterprise  | Candlestick chart — mock EUR/USD stream, handles `ViewChart`/`ViewQuote` intents |
+| Path                 | Port | Variant    | Description                                                                      |
+| -------------------- | ---- | ---------- | -------------------------------------------------------------------------------- |
+| `apps/sample-widget` | 3012 | standalone | Minimal FDC3 widget — connect, broadcast, receive context                        |
+| `apps/sample-ticker` | 3010 | enterprise | Market data ticker — broadcasts `fx.rate` on the Green channel                   |
+| `apps/sample-chart`  | 3011 | enterprise | Candlestick chart — mock EUR/USD stream, handles `ViewChart`/`ViewQuote` intents |
 
 ---
 
@@ -248,12 +248,12 @@ The Desktop Agent reads `agent.config.json` (bundled as a resource) and applies 
 
 **Terminal (both variants):**
 
-| Variable                | Overrides                                                       |
-| ----------------------- | --------------------------------------------------------------- |
-| `OT_WIDGET_SOURCE`      | `widgetSource` — `appd` (App Directory) or `local` (widgets.config.json) |
-| `OT_WIDGETS_CONFIG_PATH`| `localWidgetsPath` — path to widgets.config.json (Standalone)   |
-| `OT_FDC3_AGENT_URL`     | `fdc3.agentUrl` — external FDC3 agent WebSocket URL (Standalone)|
-| `OT_WEBVIEW_POOL_SIZE`  | Pre-warmed webview pool size (default 1)                        |
+| Variable                 | Overrides                                                                |
+| ------------------------ | ------------------------------------------------------------------------ |
+| `OT_WIDGET_SOURCE`       | `widgetSource` — `appd` (App Directory) or `local` (widgets.config.json) |
+| `OT_WIDGETS_CONFIG_PATH` | `localWidgetsPath` — path to widgets.config.json (Standalone)            |
+| `OT_FDC3_AGENT_URL`      | `fdc3.agentUrl` — external FDC3 agent WebSocket URL (Standalone)         |
+| `OT_WEBVIEW_POOL_SIZE`   | Pre-warmed webview pool size (default 1)                                 |
 
 For the full list (App Directory auth, native-app allowlists, engine cache root), see [CLAUDE.md → Environment variables](CLAUDE.md#environment-variables-expanded).
 

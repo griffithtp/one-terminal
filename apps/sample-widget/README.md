@@ -24,9 +24,9 @@ Register the widget so it appears in the Terminal's launcher.
     {
       "appId": "sample-widget",
       "title": "Sample Widget",
-      "url": "http://localhost:3012"
-    }
-  ]
+      "url": "http://localhost:3012",
+    },
+  ],
 }
 ```
 

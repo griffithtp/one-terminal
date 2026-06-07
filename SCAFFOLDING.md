@@ -57,22 +57,22 @@ one-terminal/
 
 ## Template Variables (`ScaffoldContext`)
 
-| Variable                | Example                              | Derived from                                    |
-| ----------------------- | ------------------------------------ | ----------------------------------------------- |
-| `workspaceName`         | `acme-trading`                       | prompt                                          |
-| `orgScope`              | `acme-trading`                       | same as workspaceName                           |
-| `tauriIdentifier`       | `com.acme.trading`                   | prompt                                          |
-| `displayName`           | `AcmeTrading`                        | PascalCase of workspaceName                     |
-| `snakeWorkspaceName`    | `acme_trading`                       | snake_case of workspaceName                     |
-| `variant`               | `standalone` (default) / `enterprise`| prompt — drives overlay selection in `render.ts`|
-| `externalFdc3AgentUrl`  | `ws://prod-fdc3.example:7891/fdc3`   | prompt (Standalone only; empty allowed)         |
-| `terminalDevPort`       | `1422`                               | default / prompt (both variants)                |
-| `agentDevPort`          | `1421`                               | default / prompt (Enterprise only)              |
-| `tcpBrokerPort`         | `7890`                               | default / prompt (Enterprise only)              |
-| `fdc3BusPort`           | `7891`                               | default / prompt (Enterprise only)              |
-| `dacpBridgePort`        | `4475`                               | default / prompt (Enterprise only)              |
-| `appDirectoryPort`      | `3005`                               | default / prompt (Enterprise only)              |
-| `includeFdc3`           | `true`                               | prompt (Enterprise only — forced true on Standalone) |
+| Variable               | Example                               | Derived from                                         |
+| ---------------------- | ------------------------------------- | ---------------------------------------------------- |
+| `workspaceName`        | `acme-trading`                        | prompt                                               |
+| `orgScope`             | `acme-trading`                        | same as workspaceName                                |
+| `tauriIdentifier`      | `com.acme.trading`                    | prompt                                               |
+| `displayName`          | `AcmeTrading`                         | PascalCase of workspaceName                          |
+| `snakeWorkspaceName`   | `acme_trading`                        | snake_case of workspaceName                          |
+| `variant`              | `standalone` (default) / `enterprise` | prompt — drives overlay selection in `render.ts`     |
+| `externalFdc3AgentUrl` | `ws://prod-fdc3.example:7891/fdc3`    | prompt (Standalone only; empty allowed)              |
+| `terminalDevPort`      | `1422`                                | default / prompt (both variants)                     |
+| `agentDevPort`         | `1421`                                | default / prompt (Enterprise only)                   |
+| `tcpBrokerPort`        | `7890`                                | default / prompt (Enterprise only)                   |
+| `fdc3BusPort`          | `7891`                                | default / prompt (Enterprise only)                   |
+| `dacpBridgePort`       | `4475`                                | default / prompt (Enterprise only)                   |
+| `appDirectoryPort`     | `3005`                                | default / prompt (Enterprise only)                   |
+| `includeFdc3`          | `true`                                | prompt (Enterprise only — forced true on Standalone) |
 
 ---
 
@@ -133,7 +133,7 @@ ot-fdc3  = { path = "packages/ot-fdc3" }
 <% } %>
 ```
 
-Use `ot:if` for inline single-line conditionals. For *whole-file* gating (a file that exists only on Standalone or only on Enterprise), use the overlay system instead — put the file's live source under an enterprise-only `apps/<name>/` directory tagged `overlay: "enterprise"` in `SOURCES`, or hand-author it under `overlay-overrides/standalone/`.
+Use `ot:if` for inline single-line conditionals. For _whole-file_ gating (a file that exists only on Standalone or only on Enterprise), use the overlay system instead — put the file's live source under an enterprise-only `apps/<name>/` directory tagged `overlay: "enterprise"` in `SOURCES`, or hand-author it under `overlay-overrides/standalone/`.
 
 ### Static files (never templated, no `.ejs` extension)
 

@@ -72,15 +72,11 @@ pub struct Fdc3Config {
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum WidgetSourceKind {
+    #[default]
     Appd,
     Local,
-}
-
-impl Default for WidgetSourceKind {
-    fn default() -> Self {
-        WidgetSourceKind::Appd
-    }
 }
 
 fn default_local_widgets_path() -> String {
@@ -223,8 +219,8 @@ impl TerminalConfig {
     /// browser-side fdc3-plugin can pick it up.
     pub fn panel_init_script(&self) -> String {
         // JSON-encode the string to handle quotes/backslashes safely.
-        let encoded = serde_json::to_string(&self.fdc3.agent_url)
-            .unwrap_or_else(|_| "\"\"".to_string());
+        let encoded =
+            serde_json::to_string(&self.fdc3.agent_url).unwrap_or_else(|_| "\"\"".to_string());
         format!("window.OT_FDC3_AGENT_URL = {encoded};")
     }
 }

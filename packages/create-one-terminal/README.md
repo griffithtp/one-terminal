@@ -24,15 +24,15 @@ npx create-one-terminal
 
 The CLI walks you through a short set of prompts:
 
-| Prompt                   | Example                          | Notes                                                                                          |
-| ------------------------ | -------------------------------- | ---------------------------------------------------------------------------------------------- |
-| Workspace name           | `acme-trading`                   | kebab-case, used as the npm scope and Cargo workspace name                                     |
-| Output folder            | `./acme-trading`                 | defaults to `./<workspace-name>`                                                               |
-| Workspace variant        | `standalone` (default)           | see [Variants](#variants) below                                                                |
-| Tauri bundle identifier  | `com.acme.trading`               | reverse-domain, dot-separated lowercase segments                                               |
-| External FDC3 agent URL  | `ws://prod-fdc3.example:7891/fdc3` | Standalone only — leave blank to wire up later                                                |
-| Include FDC3 integration | Yes                              | Enterprise only — Standalone always includes the FDC3 browser client                           |
-| Customize default ports  | No                               | optional — Standalone asks only for the Terminal dev port; Enterprise asks for all six         |
+| Prompt                   | Example                            | Notes                                                                                  |
+| ------------------------ | ---------------------------------- | -------------------------------------------------------------------------------------- |
+| Workspace name           | `acme-trading`                     | kebab-case, used as the npm scope and Cargo workspace name                             |
+| Output folder            | `./acme-trading`                   | defaults to `./<workspace-name>`                                                       |
+| Workspace variant        | `standalone` (default)             | see [Variants](#variants) below                                                        |
+| Tauri bundle identifier  | `com.acme.trading`                 | reverse-domain, dot-separated lowercase segments                                       |
+| External FDC3 agent URL  | `ws://prod-fdc3.example:7891/fdc3` | Standalone only — leave blank to wire up later                                         |
+| Include FDC3 integration | Yes                                | Enterprise only — Standalone always includes the FDC3 browser client                   |
+| Customize default ports  | No                                 | optional — Standalone asks only for the Terminal dev port; Enterprise asks for all six |
 
 After confirming, the CLI renders the workspace and prints next steps.
 
@@ -40,7 +40,7 @@ After confirming, the CLI renders the workspace and prints next steps.
 
 OneTerminal scaffolds in one of two shapes:
 
-- **Standalone** *(default)* — Terminal + a single sample widget. No Desktop Agent, no App Directory. The Terminal acts as an FDC3 *client* and joins an external agent over a WebSocket URL you provide. Best for teams that already run an FDC3 agent or want to evaluate the Terminal shell on its own.
+- **Standalone** _(default)_ — Terminal + a single sample widget. No Desktop Agent, no App Directory. The Terminal acts as an FDC3 _client_ and joins an external agent over a WebSocket URL you provide. Best for teams that already run an FDC3 agent or want to evaluate the Terminal shell on its own.
 - **Enterprise** — full stack: Terminal, Desktop Agent (broker, FDC3 bus, DACP), App Directory (Express API + React UI), engine plugin runtime, and the `sample-ticker` / `sample-chart` demos. Best for platform teams standing up an in-house FDC3 estate.
 
 Both variants share the Terminal shell, `ot-core`, `fdc3-plugin`, and `fdc3-client`. The Terminal's widget catalog source switches automatically (`widgets.config.json` on Standalone, App Directory HTTP on Enterprise).
@@ -60,15 +60,15 @@ The wizard asks for a title, picks the next free port (starting at 3010), and:
 
 ### Default ports
 
-| Service                | Default | Variant     | Env var            |
-| ---------------------- | ------- | ----------- | ------------------ |
-| Terminal Vite dev      | 1422    | both        | —                  |
-| Desktop Agent Vite dev | 1421    | enterprise  | —                  |
-| App Directory          | 3005    | enterprise  | —                  |
-| TCP Broker             | 7890    | enterprise  | `OT_TCP_PORT`      |
-| FDC3 Bus WebSocket     | 7891    | enterprise  | `OT_FDC3_BUS_PORT` |
-| DACP Bridge            | 4475    | enterprise  | `OT_DACP_PORT`     |
-| Sample widget          | 3012    | standalone  | —                  |
+| Service                | Default | Variant    | Env var            |
+| ---------------------- | ------- | ---------- | ------------------ |
+| Terminal Vite dev      | 1422    | both       | —                  |
+| Desktop Agent Vite dev | 1421    | enterprise | —                  |
+| App Directory          | 3005    | enterprise | —                  |
+| TCP Broker             | 7890    | enterprise | `OT_TCP_PORT`      |
+| FDC3 Bus WebSocket     | 7891    | enterprise | `OT_FDC3_BUS_PORT` |
+| DACP Bridge            | 4475    | enterprise | `OT_DACP_PORT`     |
+| Sample widget          | 3012    | standalone | —                  |
 
 ### Scaffolded layout
 

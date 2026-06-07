@@ -2,8 +2,7 @@
 //!
 //! Two backends:
 //!   * `Appd`  — HTTP fetch from the App Directory at `cfg.app_directory_url`.
-//!   * `Local` — read `widgets.config.json` from the workspace and translate
-//!               its entries into AppRecord shape.
+//!   * `Local` — read `widgets.config.json` from the workspace and translate its entries into AppRecord shape.
 //!
 //! Both backends return the same JSON shape (`{ applications: [...] }`) so the
 //! frontend treats them identically.
@@ -67,7 +66,9 @@ fn read_local(path: &str) -> Result<AppDirectoryResponse, String> {
             // Missing file is not fatal — return empty catalog so the launcher
             // renders with no widgets rather than erroring out.
             eprintln!("[widgets] {path} not found; returning empty catalog");
-            return Ok(AppDirectoryResponse { applications: vec![] });
+            return Ok(AppDirectoryResponse {
+                applications: vec![],
+            });
         }
     };
     let parsed: LocalWidgetsFile =
