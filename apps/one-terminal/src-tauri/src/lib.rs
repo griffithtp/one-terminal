@@ -4,6 +4,7 @@ mod engines;
 mod layout;
 mod terminal;
 mod webview_pool;
+mod widgets;
 
 use config::TerminalConfig;
 use engine::WmHostIdentity;
@@ -257,8 +258,10 @@ async fn wm_open(
     window: Window,
     manager: State<'_, TerminalManager>,
     identity: State<'_, WmHostIdentity>,
+    cfg: State<'_, TerminalConfig>,
     app: AppHandle,
 ) -> Result<LayoutSnapshot, String> {
+    let panel_init_script = cfg.panel_init_script();
     let terminal = get_terminal!(manager, window);
     let tree = &terminal.layout_tree;
     let overlay = &terminal.overlay;
@@ -309,6 +312,7 @@ async fn wm_open(
     let url_for_main = url.clone();
     let using_pool = pool_label.is_some();
     let terminal_id_for_main = window.label().to_string();
+    let panel_init_script = panel_init_script.clone();
 
     app.run_on_main_thread(move || {
         let result = (|| -> Result<(), String> {
@@ -324,7 +328,8 @@ async fn wm_open(
                 // Placeholder bounds — `tree.reflow` below positions the webview
                 // correctly once it's created.
                 win.add_child(
-                    WebviewBuilder::new(&panel_id_for_main, WebviewUrl::External(parsed_url)),
+                    WebviewBuilder::new(&panel_id_for_main, WebviewUrl::External(parsed_url))
+                        .initialization_script(&panel_init_script),
                     LogicalPosition::new(0.0, 0.0),
                     LogicalSize::new(1.0, 1.0),
                 )
@@ -378,7 +383,7 @@ async fn wm_open(
 
     // Replenish the pool in the background after a slot was consumed.
     // No-op on the cold path (pool not used) or when already at capacity.
-    pool.replenish(&app, overlay, window.label());
+    pool.replenish(&app, overlay, window.label(), &cfg.panel_init_script());
 
     // Reflow positions every webview (including the new/navigated one).
     tree.reflow(&app);
@@ -1128,6 +1133,7 @@ pub fn run() {
     let fresh_start = std::env::var("OT_FRESH_START").is_ok();
 
     let cfg = TerminalConfig::load();
+    let panel_init_script = cfg.panel_init_script();
     let tree = LayoutTree::new(WIN, cfg.window.width, cfg.window.height);
     let identity = WmHostIdentity::from_env();
     let overlay_state: OverlayState = Arc::new(Mutex::new(OverlayInner::default()));
@@ -1259,7 +1265,8 @@ pub fn run() {
                             WebviewUrl::External(
                                 "about:blank".parse().expect("about:blank is a valid URL"),
                             ),
-                        ),
+                        )
+                        .initialization_script(&panel_init_script),
                         LogicalPosition::new(-20000.0, -20000.0),
                         LogicalSize::new(init_w, init_h),
                     ) {
@@ -1281,7 +1288,8 @@ pub fn run() {
                 for (label, url) in &panels_to_restore {
                     if let Ok(parsed_url) = url.parse::<tauri::Url>() {
                         if let Err(e) = win.add_child(
-                            WebviewBuilder::new(label, WebviewUrl::External(parsed_url)),
+                            WebviewBuilder::new(label, WebviewUrl::External(parsed_url))
+                                .initialization_script(&panel_init_script),
                             LogicalPosition::new(0.0, 0.0),
                             LogicalSize::new(1.0, 1.0),
                         ) {
@@ -1344,6 +1352,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             wm_config,
+            widgets::wm_list_apps,
             wm_snapshot,
             wm_host_snapshot,
             wm_open,

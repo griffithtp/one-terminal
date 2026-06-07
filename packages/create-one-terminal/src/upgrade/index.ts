@@ -30,7 +30,7 @@ export async function runUpgrade(cwd = process.cwd()): Promise<void> {
   }
   spin.stop("Manifest loaded.");
 
-  const chain = buildChain(manifest, project.version);
+  const chain = buildChain(manifest, project.version, project.variant);
   const targetVersion = latestVersion(manifest);
 
   if (chain.length === 0) {
@@ -128,26 +128,35 @@ async function applyStructural(
   _version: string
 ): Promise<MigrationResult> {
   const templatesDir = join(fileURLToPath(import.meta.url), "../..", "templates");
+  // Templates live under per-variant overlays; try each in order.
+  // shared first (most common), then enterprise/standalone for variant-specific files.
+  const OVERLAYS = ["shared", "enterprise", "standalone"];
+
+  async function readOverlaySource(sourcePath: string): Promise<string | null> {
+    for (const overlay of OVERLAYS) {
+      for (const candidate of [sourcePath + ".ejs", sourcePath]) {
+        try {
+          return await readFile(join(templatesDir, overlay, candidate), "utf8");
+        } catch {
+          // try next
+        }
+      }
+    }
+    return null;
+  }
 
   // add-file ops create new files — handle them before any readFile on migration.target
   for (const op of migration.operations) {
     if (op.op !== "add-file") continue;
 
-    let srcContent: string;
-    try {
-      // Templates are stored with a .ejs extension; the rendered name has none
-      srcContent = await readFile(join(templatesDir, op.sourcePath + ".ejs"), "utf8");
-    } catch {
-      try {
-        srcContent = await readFile(join(templatesDir, op.sourcePath), "utf8");
-      } catch {
-        return {
-          id: migration.id,
-          description: migration.description,
-          status: "needs-manual",
-          detail: `Template source not found: ${op.sourcePath}`,
-        };
-      }
+    const srcContent = await readOverlaySource(op.sourcePath);
+    if (srcContent === null) {
+      return {
+        id: migration.id,
+        description: migration.description,
+        status: "needs-manual",
+        detail: `Template source not found: ${op.sourcePath}`,
+      };
     }
 
     const destPath = join(cwd, op.targetPath);

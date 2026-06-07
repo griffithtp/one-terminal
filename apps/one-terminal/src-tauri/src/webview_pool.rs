@@ -47,7 +47,13 @@ impl WebviewPool {
     /// The new webview lands after the overlay in z-order (above it), so the
     /// overlay is marked stale so `wm_ctx_menu_open` will push it back to
     /// the top on the next context-menu open.
-    pub fn replenish(&self, app: &AppHandle, overlay: &OverlayState, terminal_id: &str) {
+    pub fn replenish(
+        &self,
+        app: &AppHandle,
+        overlay: &OverlayState,
+        terminal_id: &str,
+        init_script: &str,
+    ) {
         let depth = self.available.lock().unwrap().len();
         if self.target_size == 0 || depth >= self.target_size {
             return;
@@ -57,6 +63,7 @@ impl WebviewPool {
         let app = app.clone();
         let overlay = Arc::clone(overlay);
         let terminal_id = terminal_id.to_string();
+        let init_script = init_script.to_string();
 
         tauri::async_runtime::spawn(async move {
             let label = pool_label(&terminal_id);
@@ -65,6 +72,7 @@ impl WebviewPool {
             let app_main = app.clone();
             let terminal_id_main = terminal_id.clone();
             let overlay_main = Arc::clone(&overlay);
+            let init_script_main = init_script.clone();
 
             if app
                 .run_on_main_thread(move || {
@@ -84,7 +92,8 @@ impl WebviewPool {
                                 WebviewUrl::External(
                                     "about:blank".parse().expect("about:blank is a valid URL"),
                                 ),
-                            ),
+                            )
+                            .initialization_script(&init_script_main),
                             LogicalPosition::new(-20000.0, -20000.0),
                             LogicalSize::new(w, h),
                         )

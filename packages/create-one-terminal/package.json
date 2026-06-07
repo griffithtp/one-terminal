@@ -21,7 +21,7 @@
     "versions.json"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && node -e \"import('node:fs').then(fs => { fs.rmSync('dist/templates', { recursive: true, force: true }); fs.cpSync('templates', 'dist/templates', { recursive: true }); })\" && npx tsx ../../scripts/resolve-static-manifest.ts",
+    "build": "tsc -p tsconfig.build.json && node -e \"import('node:fs').then(fs => { fs.rmSync('dist/templates', { recursive: true, force: true }); fs.cpSync('templates', 'dist/templates', { recursive: true }); fs.rmSync('dist/widget-template', { recursive: true, force: true }); fs.cpSync('widget-template', 'dist/widget-template', { recursive: true }); })\" && npx tsx ../../scripts/resolve-static-manifest.ts",
     "dev": "tsc -p tsconfig.build.json --watch",
     "prepublishOnly": "npm run build",
     "typecheck": "tsc --noEmit"

@@ -156,10 +156,14 @@ export interface LayoutConfig {
   splitterThickness: number;
 }
 
+export type WidgetSourceKind = "appd" | "local";
+
 export interface TerminalConfig {
   title: string;
   appDirectoryUrl: string;
   engineCatalogUrl: string;
+  widgetSource: WidgetSourceKind;
+  localWidgetsPath: string;
   window: WindowConfig;
   layout: LayoutConfig;
 }

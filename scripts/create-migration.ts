@@ -43,6 +43,7 @@ type MigrationSpec =
       target: string;
       description: string;
       patch: Record<string, unknown>;
+      appliesTo?: AppliesTo;
     }
   | {
       type: "dep-bump";
@@ -50,6 +51,7 @@ type MigrationSpec =
       target: string;
       description: string;
       deps: Array<{ name: string; ecosystem: "cargo" | "npm"; newVersion: string }>;
+      appliesTo?: AppliesTo;
     }
   | {
       type: "structural";
@@ -57,6 +59,7 @@ type MigrationSpec =
       target: string;
       description: string;
       operations: PatchOperation[];
+      appliesTo?: AppliesTo;
     };
 
 interface VersionEntry {
@@ -72,7 +75,28 @@ interface VersionsManifest {
   versions: VersionEntry[];
 }
 
+type AppliesTo = "both" | "standalone" | "enterprise";
+
 type MigrationKind = "config-merge" | "dep-bump" | "structural";
+
+/**
+ * Splits an overlay-prefixed template path (e.g. `enterprise/apps/.../foo.ejs`)
+ * into the workspace-relative path and the variant the migration applies to.
+ *
+ * shared/      → appliesTo: "both"
+ * enterprise/  → appliesTo: "enterprise"
+ * standalone/  → appliesTo: "standalone"
+ * (none)       → appliesTo: "both" (defensive fallback)
+ */
+function splitOverlay(relPath: string): { stripped: string; appliesTo: AppliesTo } {
+  if (relPath.startsWith("shared/"))
+    return { stripped: relPath.slice("shared/".length), appliesTo: "both" };
+  if (relPath.startsWith("enterprise/"))
+    return { stripped: relPath.slice("enterprise/".length), appliesTo: "enterprise" };
+  if (relPath.startsWith("standalone/"))
+    return { stripped: relPath.slice("standalone/".length), appliesTo: "standalone" };
+  return { stripped: relPath, appliesTo: "both" };
+}
 
 interface FileChange {
   relPath: string;
@@ -401,7 +425,8 @@ async function promptConfigMerge(
   });
   if (p.isCancel(include) || !include) return null;
 
-  const target = change.relPath.replace(/\.ejs$/, "");
+  const { stripped, appliesTo } = splitOverlay(change.relPath);
+  const target = stripped.replace(/\.ejs$/, "");
 
   const id = await p.text({
     message: "Migration ID",
@@ -433,6 +458,7 @@ async function promptConfigMerge(
     target,
     description: description as string,
     patch,
+    appliesTo,
   };
 }
 
@@ -459,7 +485,8 @@ async function promptDepBump(change: FileChange, version: string): Promise<Migra
   });
   if (p.isCancel(include) || !include) return null;
 
-  const target = change.relPath.replace(/\.ejs$/, "");
+  const { stripped, appliesTo } = splitOverlay(change.relPath);
+  const target = stripped.replace(/\.ejs$/, "");
 
   const id = await p.text({
     message: "Migration ID",
@@ -482,6 +509,7 @@ async function promptDepBump(change: FileChange, version: string): Promise<Migra
     target,
     description: description as string,
     deps: bumps.map((b) => ({ name: b.name, ecosystem: b.ecosystem, newVersion: b.newVersion })),
+    appliesTo,
   };
 }
 
@@ -513,7 +541,8 @@ async function promptStructural(
   });
   if (p.isCancel(include) || !include) return null;
 
-  const target = change.relPath.replace(/\.ejs$/, "");
+  const { stripped, appliesTo } = splitOverlay(change.relPath);
+  const target = stripped.replace(/\.ejs$/, "");
 
   const id = await p.text({
     message: "Migration ID",
@@ -574,6 +603,7 @@ async function promptStructural(
     target,
     description: description as string,
     operations: [op],
+    appliesTo,
   };
 }
 

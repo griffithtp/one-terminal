@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sample Widget</title>
+    <style>
+      :root {
+        --bg: #0d1117;
+        --surface: #161b22;
+        --border: #30363d;
+        --text: #e6edf3;
+        --muted: #8b949e;
+        --accent: #388bfd;
+        --green: #3fb950;
+        --red: #f85149;
+      }
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: ui-monospace, "Cascadia Code", monospace;
+        font-size: 13px;
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+      header { display: flex; align-items: center; gap: 12px; }
+      .title { font-weight: 700; font-size: 15px; }
+      .badge {
+        font-size: 10px;
+        background: rgba(56, 139, 253, 0.15);
+        color: var(--accent);
+        border: 1px solid rgba(56, 139, 253, 0.3);
+        border-radius: 10px;
+        padding: 2px 8px;
+      }
+      #status { margin-left: auto; font-size: 11px; color: var(--muted); }
+      #status.ok { color: var(--green); }
+      #status.err { color: var(--red); }
+
+      .row { display: flex; align-items: center; gap: 8px; }
+      input, button {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        color: var(--text);
+        border-radius: 6px;
+        padding: 6px 12px;
+        font-family: inherit;
+        font-size: 12px;
+      }
+      input { flex: 1; }
+      button { cursor: pointer; border-color: var(--accent); color: var(--accent); }
+      button:hover { background: rgba(56, 139, 253, 0.1); }
+
+      .panel {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 6px;
+        padding: 10px 12px;
+      }
+      .panel-title {
+        font-size: 11px;
+        color: var(--muted);
+        text-transform: uppercase;
+        letter-spacing: 0.08em;
+        margin-bottom: 8px;
+      }
+      pre { font-size: 11px; line-height: 1.4; white-space: pre-wrap; word-break: break-word; }
+      #log { max-height: 200px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+      .log-entry { font-size: 11px; color: var(--muted); }
+      .log-entry .ts { color: rgba(139, 148, 158, 0.6); margin-right: 6px; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <span class="title">Sample Widget</span>
+      <span class="badge">FDC3 2.2</span>
+      <span id="status">Connecting…</span>
+    </header>
+
+    <div class="row">
+      <input id="ticker" value="AAPL" placeholder="Ticker (e.g. AAPL)" />
+      <button id="broadcast">Broadcast instrument</button>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Last received context</div>
+      <pre id="last">(none)</pre>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">Activity</div>
+      <div id="log"></div>
+    </div>
+
+    <script type="module">
+      import { DesktopAgentClient } from "/fdc3-plugin.js";
+
+      const statusEl = document.getElementById("status");
+      const lastEl = document.getElementById("last");
+      const logEl = document.getElementById("log");
+      const tickerEl = document.getElementById("ticker");
+      const broadcastBtn = document.getElementById("broadcast");
+
+      function log(msg) {
+        const entry = document.createElement("div");
+        entry.className = "log-entry";
+        entry.innerHTML = `<span class="ts">${new Date().toTimeString().slice(0, 8)}</span>${msg}`;
+        logEl.prepend(entry);
+        while (logEl.children.length > 30) logEl.removeChild(logEl.lastChild);
+      }
+
+      let fdc3 = null;
+      try {
+        fdc3 = await DesktopAgentClient.connect("sample-widget");
+        statusEl.textContent = `Connected · ${fdc3.getIdentity().instanceId.slice(0, 8)}`;
+        statusEl.className = "ok";
+        log("Connected to FDC3 agent");
+
+        const channels = await fdc3.getUserChannels();
+        if (channels.length > 0) {
+          await fdc3.joinUserChannel(channels[0].id);
+          log(`Joined channel <strong>${channels[0].id}</strong>`);
+        }
+
+        await fdc3.addContextListener("fdc3.instrument", (ctx) => {
+          lastEl.textContent = JSON.stringify(ctx, null, 2);
+          log(`Received instrument: <strong>${ctx.id?.ticker ?? ctx.name ?? "?"}</strong>`);
+        });
+      } catch (e) {
+        statusEl.textContent = e.message?.includes("NoAgentConfigured")
+          ? "No FDC3 agent configured"
+          : "Agent unavailable";
+        statusEl.className = "err";
+        log(`Connection failed: ${e.message}`);
+      }
+
+      broadcastBtn.addEventListener("click", async () => {
+        if (!fdc3) {
+          log("Cannot broadcast — no agent connection");
+          return;
+        }
+        const ticker = tickerEl.value.trim().toUpperCase();
+        if (!ticker) return;
+        const context = {
+          type: "fdc3.instrument",
+          name: ticker,
+          id: { ticker },
+        };
+        try {
+          await fdc3.broadcast(context);
+          log(`Broadcast <strong>${ticker}</strong>`);
+        } catch (e) {
+          log(`Broadcast failed: ${e.message}`);
+        }
+      });
+    </script>
+  </body>
+</html>

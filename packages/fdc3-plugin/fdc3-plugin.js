@@ -27,8 +27,23 @@
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
+// URL resolution order (first non-empty wins):
+//   1. <meta name="ot-fdc3-bus-url"> in the host page
+//   2. window.OT_FDC3_AGENT_URL — injected by Terminal at panel-load time when
+//      a fdc3.agentUrl is configured (Standalone variant)
+//   3. window.OT_FDC3_BUS_URL — legacy override
+//   4. ws://localhost:7891/fdc3 — Enterprise-bundled Desktop Agent default
+//
+// An empty string anywhere in the chain (e.g. window.OT_FDC3_AGENT_URL = "")
+// short-circuits to NoAgentConfigured: connect() will reject so widgets can
+// surface a clear "no FDC3 agent" state instead of timing out.
 const _WS_META = document.querySelector?.('meta[name="ot-fdc3-bus-url"]')?.content;
-const WS_URL = _WS_META || window.OT_FDC3_BUS_URL || 'ws://localhost:7891/fdc3';
+const _AGENT_INJECTED = typeof window !== 'undefined' ? window.OT_FDC3_AGENT_URL : undefined;
+const _LEGACY = typeof window !== 'undefined' ? window.OT_FDC3_BUS_URL : undefined;
+// Detect explicit "no agent" intent: the host injected the variable but left it
+// empty. (`undefined` means the host never set it — fall through to defaults.)
+const _NO_AGENT = _AGENT_INJECTED === '';
+const WS_URL = _WS_META || _AGENT_INJECTED || _LEGACY || 'ws://localhost:7891/fdc3';
 const REPLY_TIMEOUT = 8_000;   // ms before a request promise rejects
 const PROVIDER      = 'one-terminal-desktop-agent';
 const FDC3_VERSION  = '2.2';
@@ -98,6 +113,9 @@ export class DesktopAgentClient {
    * @returns {Promise<DesktopAgentClient>}
    */
   static async connect(appId) {
+    if (_NO_AGENT) {
+      throw new Error('NoAgentConfigured: window.OT_FDC3_AGENT_URL is empty');
+    }
     const id = appId
       ?? new URLSearchParams(globalThis.location?.search ?? '').get('fdc3AppId')
       ?? (typeof document !== 'undefined' ? document.title : null)

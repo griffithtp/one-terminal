@@ -13,7 +13,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { getTerminalConfig } from "../lib/terminalConfig";
+import { loadWidgetRegistry } from "../lib/widgetRegistry";
 import type { AppRecord, EngineBinding, OsKey } from "../types";
 
 function detectCurrentOs(): OsKey {
@@ -33,10 +33,8 @@ export function useAppDirectory(): UseAppDirectoryResult {
   const currentOs = useMemo(() => detectCurrentOs(), []);
 
   useEffect(() => {
-    getTerminalConfig()
-      .then((c) => fetch(c.appDirectoryUrl))
-      .then((r) => r.json())
-      .then((d) => setApps(d.applications ?? []))
+    loadWidgetRegistry()
+      .then(setApps)
       .catch(() => {});
   }, []);
 

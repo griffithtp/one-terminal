@@ -51,6 +51,42 @@ impl Default for LayoutConfig {
     }
 }
 
+// ── FDC3 client configuration ─────────────────────────────────────────────────
+// Standalone scaffolds set `agent_url` to an external FDC3 agent's WS endpoint.
+// Enterprise scaffolds leave it empty — fdc3-plugin falls back to the bundled
+// Desktop Agent's bus at the OT_FDC3_BUS_URL default.
+
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Fdc3Config {
+    /// External FDC3 agent WebSocket URL. Empty string means "no agent
+    /// configured" — widgets that call `getAgent()` get NoAgentConfigured.
+    #[serde(default)]
+    pub agent_url: String,
+}
+
+// ── Widget source ─────────────────────────────────────────────────────────────
+// Determines where the Terminal looks up its widget catalog. Enterprise scaffolds
+// default to "appd" (HTTP fetch from App Directory). Standalone scaffolds set
+// "local" — the catalog comes from widgets.config.json at the workspace root.
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum WidgetSourceKind {
+    Appd,
+    Local,
+}
+
+impl Default for WidgetSourceKind {
+    fn default() -> Self {
+        WidgetSourceKind::Appd
+    }
+}
+
+fn default_local_widgets_path() -> String {
+    "widgets.config.json".into()
+}
+
 // ── Root config ───────────────────────────────────────────────────────────────
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -62,6 +98,16 @@ pub struct TerminalConfig {
     pub app_directory_url: String,
     /// Engine catalog endpoint (usually the same host as the app directory).
     pub engine_catalog_url: String,
+    /// Which widget catalog source the launcher reads from.
+    #[serde(default)]
+    pub widget_source: WidgetSourceKind,
+    /// When widget_source == Local, the path (relative to cwd or the binary)
+    /// to the widgets.config.json file.
+    #[serde(default = "default_local_widgets_path")]
+    pub local_widgets_path: String,
+    /// FDC3 client configuration (external agent URL, etc).
+    #[serde(default)]
+    pub fdc3: Fdc3Config,
     /// Initial and minimum window dimensions.
     #[serde(default)]
     pub window: WindowConfig,
@@ -77,6 +123,9 @@ impl Default for TerminalConfig {
             title: "OneTerminal".into(),
             app_directory_url: "http://localhost:3005/v2/apps".into(),
             engine_catalog_url: "http://localhost:3005/v2/engines".into(),
+            widget_source: WidgetSourceKind::default(),
+            local_widgets_path: default_local_widgets_path(),
+            fdc3: Fdc3Config::default(),
             window: WindowConfig::default(),
             layout: LayoutConfig::default(),
         }
@@ -144,6 +193,19 @@ impl TerminalConfig {
         if let Ok(v) = std::env::var("OT_CATALOG_URL") {
             self.engine_catalog_url = v;
         }
+        if let Ok(v) = std::env::var("OT_WIDGET_SOURCE") {
+            match v.to_lowercase().as_str() {
+                "local" => self.widget_source = WidgetSourceKind::Local,
+                "appd" => self.widget_source = WidgetSourceKind::Appd,
+                other => eprintln!("[config] unknown OT_WIDGET_SOURCE value: {other}"),
+            }
+        }
+        if let Ok(v) = std::env::var("OT_WIDGETS_CONFIG_PATH") {
+            self.local_widgets_path = v;
+        }
+        if let Ok(v) = std::env::var("OT_FDC3_AGENT_URL") {
+            self.fdc3.agent_url = v;
+        }
         if let Ok(v) = std::env::var("OT_WINDOW_WIDTH") {
             if let Ok(n) = v.parse() {
                 self.window.width = n;
@@ -154,5 +216,15 @@ impl TerminalConfig {
                 self.window.height = n;
             }
         }
+    }
+
+    /// JS to inject into every panel webview before page load. Exposes the
+    /// configured FDC3 agent URL on `window.OT_FDC3_AGENT_URL` so the
+    /// browser-side fdc3-plugin can pick it up.
+    pub fn panel_init_script(&self) -> String {
+        // JSON-encode the string to handle quotes/backslashes safely.
+        let encoded = serde_json::to_string(&self.fdc3.agent_url)
+            .unwrap_or_else(|_| "\"\"".to_string());
+        format!("window.OT_FDC3_AGENT_URL = {encoded};")
     }
 }

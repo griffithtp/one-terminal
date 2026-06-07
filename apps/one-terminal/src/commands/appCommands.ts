@@ -1,21 +1,15 @@
-import { invoke } from "@tauri-apps/api/core";
+import { loadWidgetRegistry } from "../lib/widgetRegistry";
 import { registry } from "./registry";
-import type { AppRecord, TerminalConfig } from "../types";
+import type { AppRecord } from "../types";
 
 type OpenPanelFn = (appId: string, url: string, title: string) => void;
 
-/** Fetches App Directory records and registers one "Open <App>" command per
- *  app. Call once after the App Directory is reachable (after wm_config resolves). */
+/** Loads the widget catalog (from App Directory in Enterprise, or the local
+ *  registry in Standalone) and registers one "Open <App>" command per entry.
+ *  Call once after Tauri is ready. */
 export async function initAppCommands(onOpen: OpenPanelFn): Promise<void> {
-  let apps: AppRecord[];
-  try {
-    const cfg = await invoke<TerminalConfig>("wm_config");
-    const res = await fetch(cfg.appDirectoryUrl);
-    const data = await res.json();
-    apps = data.applications ?? [];
-  } catch {
-    return;
-  }
+  const apps: AppRecord[] = await loadWidgetRegistry();
+  if (apps.length === 0) return;
 
   for (const app of apps) {
     const title = app.title ?? app.name;

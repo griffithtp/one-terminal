@@ -1,0 +1,36 @@
+[workspace]
+resolver = "2"
+members = [
+    "apps/one-terminal/src-tauri",
+    "packages/ot-core",
+]
+
+# ── Shared dependency versions ────────────────────────────────────────────────
+# Add new apps/packages here and reference these via `{ workspace = true }`.
+[workspace.dependencies]
+# Serialisation
+serde     = { version = "1",      features = ["derive"] }
+serde_json = "1"
+
+# Async runtime
+tokio = { version = "1.50.0", features = ["full"] }
+
+# Tauri
+tauri              = { version = "2", features = ["unstable"] }
+
+# Concurrency
+indexmap = { version = "2", features = ["serde"] }
+
+# Async helpers
+futures-util      = "0.3"
+
+# HTTP client (Terminal uses it for engine downloads + optional widget registry fetch)
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
+
+# Engine runtime cache (download/verify/extract)
+sha2 = "0.10"
+hex  = "0.4"
+zip  = { version = "0.6", default-features = false, features = ["deflate"] }
+
+# Internal crates
+ot-core = { path = "packages/ot-core" }
