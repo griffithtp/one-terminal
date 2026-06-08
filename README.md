@@ -188,8 +188,8 @@ Open it inside OneTerminal alongside the sample ticker — switch both to the Gr
 | `apps/app-directory`      | Express server serving FDC3 AppD REST API + management UI               |
 | `packages/ot-core`        | Tauri-agnostic shared Rust crate (engine abstraction, plugin manifests) |
 | `packages/ot-fdc3`        | Tauri plugin: FDC3 2.2 TCP spoke client                                 |
-| `packages/fdc3-plugin`    | Browser-side FDC3 2.2 client (`DesktopAgentClient`)                     |
-| `packages/fdc3-client`    | TypeScript FDC3 type definitions                                        |
+| `packages/fdc3-plugin`    | Browser-side FDC3 2.2 client (`DesktopAgentClient`) — ships in both variants |
+| `packages/fdc3-client`    | TypeScript FDC3 type definitions — Enterprise only (Tauri-bound, calls `fdc3_*` commands from `ot-fdc3`) |
 
 ### Sample apps
 
@@ -526,8 +526,8 @@ npx create-one-terminal upgrade                 # upgrade an existing workspace 
 
 Templates live at `packages/create-one-terminal/templates/`, partitioned across three overlays:
 
-- `templates/shared/` — Terminal shell, ot-core, fdc3-plugin, fdc3-client
-- `templates/enterprise/` — Desktop Agent, App Directory, ot-fdc3, enterprise samples
+- `templates/shared/` — Terminal shell, ot-core, fdc3-plugin
+- `templates/enterprise/` — Desktop Agent, App Directory, ot-fdc3, fdc3-client, enterprise samples
 - `templates/standalone/` — sample-widget, slim Cargo/package, `widgets.config.json`
 
 Templates are regenerated from the live apps via `npm run create-migration`. See [SCAFFOLDING.md](SCAFFOLDING.md), [docs/plans/standalone-vs-enterprise-plans.md](docs/plans/standalone-vs-enterprise-plans.md), and [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow.

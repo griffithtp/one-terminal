@@ -78,7 +78,7 @@ one-terminal/
 │   ├── ot-core/                       Shared Rust crate
 │   ├── ot-fdc3/                       Tauri FDC3 spoke plugin — enterprise
 │   ├── fdc3-plugin/                   Browser FDC3 client JS
-│   ├── fdc3-client/                   TypeScript FDC3 types
+│   ├── fdc3-client/                   TypeScript FDC3 types — enterprise (Tauri-bound)
 │   └── create-one-terminal/           npm create scaffolder + upgrade tool
 │       ├── src/
 │       │   ├── create/                scaffold new workspace
@@ -116,8 +116,8 @@ Templates are partitioned across three overlays. `render.ts` walks `shared/` fir
 
 | Overlay       | Contents                                                                                                                                      | Source                                                                                            |
 | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `shared/`     | Terminal shell, ot-core, fdc3-plugin, fdc3-client, root `.gitignore`                                                                          | Extracted from `apps/one-terminal/`, `packages/ot-core/`, `packages/fdc3-*`                       |
-| `enterprise/` | Desktop Agent, App Directory, tauri-webview-host, electron-host, sample-ticker, sample-chart, ot-fdc3, root `Cargo.toml`, root `package.json` | Extracted from the corresponding `apps/` / `packages/ot-fdc3/` dirs                               |
+| `shared/`     | Terminal shell, ot-core, fdc3-plugin, root `.gitignore`                                                                                       | Extracted from `apps/one-terminal/`, `packages/ot-core/`, `packages/fdc3-plugin/`                 |
+| `enterprise/` | Desktop Agent, App Directory, tauri-webview-host, electron-host, sample-ticker, sample-chart, ot-fdc3, fdc3-client, root `Cargo.toml`, root `package.json` | Extracted from the corresponding `apps/` / `packages/` dirs. `fdc3-client` is here because every method invokes `fdc3_*` Tauri commands registered by `ot-fdc3`. |
 | `standalone/` | sample-widget, slim Cargo.toml, slim package.json, widgets.config.json, standalone terminal.config.json                                       | sample-widget extracted from `apps/sample-widget/`; the rest from `overlay-overrides/standalone/` |
 
 ---

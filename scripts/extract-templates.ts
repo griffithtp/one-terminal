@@ -55,15 +55,18 @@ const SOURCES: Array<{ src: string; templateBase: string; overlay: Overlay }> = 
     templateBase: "packages/fdc3-plugin",
     overlay: "shared",
   },
-  {
-    src: join(ROOT, "packages/fdc3-client"),
-    templateBase: "packages/fdc3-client",
-    overlay: "shared",
-  },
 
   {
     src: join(ROOT, "apps/desktop-agent"),
     templateBase: "apps/desktop-agent",
+    overlay: "enterprise",
+  },
+  // fdc3-client is Tauri-bound — every method invokes an `fdc3_*` Tauri
+  // command registered by ot-fdc3 (Enterprise only). Including it in
+  // Standalone would ship dead code that throws on first call.
+  {
+    src: join(ROOT, "packages/fdc3-client"),
+    templateBase: "packages/fdc3-client",
     overlay: "enterprise",
   },
   {

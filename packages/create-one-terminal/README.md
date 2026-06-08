@@ -43,7 +43,7 @@ OneTerminal scaffolds in one of two shapes:
 - **Standalone** _(default)_ — Terminal + a single sample widget. No Desktop Agent, no App Directory. The Terminal acts as an FDC3 _client_ and joins an external agent over a WebSocket URL you provide. Best for teams that already run an FDC3 agent or want to evaluate the Terminal shell on its own.
 - **Enterprise** — full stack: Terminal, Desktop Agent (broker, FDC3 bus, DACP), App Directory (Express API + React UI), engine plugin runtime, and the `sample-ticker` / `sample-chart` demos. Best for platform teams standing up an in-house FDC3 estate.
 
-Both variants share the Terminal shell, `ot-core`, `fdc3-plugin`, and `fdc3-client`. The Terminal's widget catalog source switches automatically (`widgets.config.json` on Standalone, App Directory HTTP on Enterprise).
+Both variants share the Terminal shell, `ot-core`, and `fdc3-plugin` (the browser FDC3 client). The TypeScript `fdc3-client` package is Enterprise-only — it invokes `fdc3_*` Tauri commands that only exist when the bundled `ot-fdc3` plugin ships. The Terminal's widget catalog source switches automatically (`widgets.config.json` on Standalone, App Directory HTTP on Enterprise).
 
 ### Adding a widget
 
@@ -84,7 +84,6 @@ The wizard asks for a title, picks the next free port (starting at 3010), and:
 │   └── sample-widget/            # minimal demo widget (port 3012)
 └── packages/
     ├── ot-core/                  # shared Rust crate
-    ├── fdc3-client/              # TypeScript FDC3 types + Fdc3Agent
     └── fdc3-plugin/              # browser FDC3 agent (fdc3-plugin.js)
 ```
 
@@ -109,7 +108,7 @@ The wizard asks for a title, picks the next free port (starting at 3010), and:
     └── fdc3-plugin/              # browser FDC3 agent (fdc3-plugin.js)             *
 ```
 
-`*` Only included when FDC3 integration is enabled (Enterprise prompt only — Standalone always ships these).
+`*` Only included when FDC3 integration is enabled (Enterprise prompt only). `fdc3-plugin` always ships in Standalone; `fdc3-client` is Enterprise-only because it depends on Tauri commands registered by `ot-fdc3`.
 
 ### Starting the workspace
 

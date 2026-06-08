@@ -606,23 +606,23 @@
     },
     {
       "path": "packages/fdc3-client/src/agent.ts",
-      "overlay": "shared"
+      "overlay": "enterprise"
     },
     {
       "path": "packages/fdc3-client/src/bridge-agent.ts",
-      "overlay": "shared"
+      "overlay": "enterprise"
     },
     {
       "path": "packages/fdc3-client/src/index.ts",
-      "overlay": "shared"
+      "overlay": "enterprise"
     },
     {
       "path": "packages/fdc3-client/src/types.ts",
-      "overlay": "shared"
+      "overlay": "enterprise"
     },
     {
       "path": "packages/fdc3-client/tsconfig.json",
-      "overlay": "shared"
+      "overlay": "enterprise"
     },
     {
       "path": "packages/fdc3-plugin/fdc3-plugin.js",
