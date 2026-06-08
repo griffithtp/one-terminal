@@ -13,6 +13,7 @@
     "build:terminal": "npm -w @<%= orgScope %>/one-terminal run tauri:build",
     "dev:vite:terminal": "npm -w @<%= orgScope %>/one-terminal run dev",
     "dev:sample-widget": "npm -w @<%= orgScope %>/sample-widget run dev",
+    "create-widget": "create-one-terminal new-widget",
     "build": "npm run build:terminal",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "eslint .",
@@ -31,5 +32,8 @@
     "tsx": "^4.19.4",
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.59.2"
+  },
+  "optionalDependencies": {
+    "create-one-terminal": "^0.1.6"
   }
 }

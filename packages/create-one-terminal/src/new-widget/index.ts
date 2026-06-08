@@ -27,7 +27,7 @@ export interface WidgetSpec {
 }
 
 /**
- * Programmatic equivalent of `runAddWidget` — no prompts. Scaffolds the
+ * Programmatic equivalent of `runNewWidget` — no prompts. Scaffolds the
  * widget files and registers it for the workspace variant. Test scripts and
  * future automation use this entry point.
  */
@@ -41,8 +41,8 @@ export async function createWidget(cwd: string, spec: WidgetSpec): Promise<void>
   await registerWidget(spec, cwd, project.variant);
 }
 
-export async function runAddWidget(cwd = process.cwd()): Promise<void> {
-  p.intro("OneTerminal · add-widget");
+export async function runNewWidget(cwd = process.cwd()): Promise<void> {
+  p.intro("OneTerminal · new-widget");
 
   const project = await detectProject(cwd).catch((err: Error) => {
     p.cancel(err.message);

@@ -82,7 +82,7 @@ one-terminal/
 │   └── create-one-terminal/           npm create scaffolder + upgrade tool
 │       ├── src/
 │       │   ├── create/                scaffold new workspace
-│       │   ├── add-widget/            `add-widget` subcommand
+│       │   ├── new-widget/            `new-widget` subcommand (wrapped by `npm run create-widget` in scaffolded workspaces)
 │       │   ├── upgrade/               upgrade an existing workspace
 │       │   └── merge/                 JSON + TOML merge helpers
 │       ├── templates/                 ← GENERATED, never hand-edited
@@ -91,7 +91,7 @@ one-terminal/
 │       │   └── standalone/            slim-variant-only files
 │       ├── overlay-overrides/         hand-authored variant-specific files
 │       │   └── standalone/            ← only place under templates that is hand-authored
-│       ├── widget-template/           embedded template for `add-widget`
+│       ├── widget-template/           embedded template for `new-widget`
 │       └── versions.json              upgrade migration manifest
 ├── scripts/
 │   ├── extract-templates.ts           derives EJS templates from apps/ + copies overlay-overrides/
@@ -114,11 +114,11 @@ The scaffolder produces one of two workspace shapes selected by a prompt:
 
 Templates are partitioned across three overlays. `render.ts` walks `shared/` first, then the selected variant overlay; collisions are won by the later overlay.
 
-| Overlay       | Contents                                                                                                                                      | Source                                                                                            |
-| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `shared/`     | Terminal shell, ot-core, fdc3-plugin, root `.gitignore`                                                                                       | Extracted from `apps/one-terminal/`, `packages/ot-core/`, `packages/fdc3-plugin/`                 |
+| Overlay       | Contents                                                                                                                                                   | Source                                                                                                                                                           |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `shared/`     | Terminal shell, ot-core, fdc3-plugin, root `.gitignore`                                                                                                    | Extracted from `apps/one-terminal/`, `packages/ot-core/`, `packages/fdc3-plugin/`                                                                                |
 | `enterprise/` | Desktop Agent, App Directory, tauri-webview-host, electron-host, sample-ticker, sample-chart, ot-fdc3, fdc3-client, root `Cargo.toml`, root `package.json` | Extracted from the corresponding `apps/` / `packages/` dirs. `fdc3-client` is here because every method invokes `fdc3_*` Tauri commands registered by `ot-fdc3`. |
-| `standalone/` | sample-widget, slim Cargo.toml, slim package.json, widgets.config.json, standalone terminal.config.json                                       | sample-widget extracted from `apps/sample-widget/`; the rest from `overlay-overrides/standalone/` |
+| `standalone/` | sample-widget, slim Cargo.toml, slim package.json, widgets.config.json, standalone terminal.config.json                                                    | sample-widget extracted from `apps/sample-widget/`; the rest from `overlay-overrides/standalone/`                                                                |
 
 ---
 
@@ -274,11 +274,11 @@ If you add a new framework-internal script to the root `package.json` that shoul
 | `render.ts`        | Walks `templates/shared/` then `templates/<variant>/`, renders `.ejs` files, writes atomically (variant-overlay-wins) |
 | `post-scaffold.ts` | Injects `oneTerminal.{version,variant}` into generated `package.json`, prints variant-aware next-step instructions    |
 
-### The `add-widget/` module
+### The `new-widget/` module
 
-| File       | Responsibility                                                                                                                                                                                                                                                                                                                  |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `index.ts` | Interactive `add-widget` subcommand + programmatic `createWidget(cwd, spec)` API used by tests. Renders the embedded template at `packages/create-one-terminal/widget-template/`, then registers the widget — appends to `widgets.config.json` for Standalone workspaces, or prints/runs a `curl POST /v2/apps` for Enterprise. |
+| File       | Responsibility                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `index.ts` | Interactive `new-widget` subcommand + programmatic `createWidget(cwd, spec)` API used by tests. Renders the embedded template at `packages/create-one-terminal/widget-template/`, then registers the widget — appends to `widgets.config.json` for Standalone workspaces, or prints/runs a `curl POST /v2/apps` for Enterprise. Scaffolded workspaces wrap this command behind an `npm run create-widget` script and ship `create-one-terminal` as an `optionalDependency` so the bin resolves locally. |
 
 ### The `upgrade/` module
 
@@ -443,7 +443,7 @@ For a fast non-interactive check that both variants build, use the smoke test:
 
 ```sh
 npm run build:scaffolder
-npm run test:scaffold                       # both variants: cargo check + npm install + add-widget
+npm run test:scaffold                       # both variants: cargo check + npm install + new-widget
 npm run test:scaffold -- --variant standalone   # one variant only
 npm run test:scaffold -- --keep             # don't delete the output (paths printed at end)
 ```

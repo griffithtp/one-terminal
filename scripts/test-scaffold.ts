@@ -25,7 +25,7 @@ const { buildContext } = await import(
   join(ROOT, "packages/create-one-terminal/dist/create/context.js")
 );
 const { createWidget } = await import(
-  join(ROOT, "packages/create-one-terminal/dist/add-widget/index.js")
+  join(ROOT, "packages/create-one-terminal/dist/new-widget/index.js")
 );
 
 // CLI: `npx tsx scripts/test-scaffold.ts [--variant standalone|enterprise|both] [--keep]`
@@ -57,7 +57,7 @@ try {
 
     await renderWorkspace(ctx, OUT);
 
-    // post-scaffold equivalent: write the oneTerminal metadata so add-widget
+    // post-scaffold equivalent: write the oneTerminal metadata so new-widget
     // can detect the workspace variant.
     const pkgPath = join(OUT, "package.json");
     const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as Record<string, unknown>;
@@ -85,8 +85,8 @@ try {
       console.log("✓ build:app-directory passed");
     }
 
-    // Exercise add-widget against the scaffolded workspace.
-    console.log("Running create-one-terminal add-widget…");
+    // Exercise new-widget against the scaffolded workspace.
+    console.log("Running create-one-terminal new-widget…");
     await createWidget(OUT, {
       widgetName: "smoke-widget",
       widgetTitle: "Smoke Widget",
@@ -95,7 +95,7 @@ try {
     });
     const widgetDir = join(OUT, "apps/smoke-widget");
     if (!existsSync(join(widgetDir, "server.js"))) {
-      throw new Error("add-widget did not create apps/smoke-widget/server.js");
+      throw new Error("new-widget did not create apps/smoke-widget/server.js");
     }
     if (variant === "standalone") {
       const registry = JSON.parse(readFileSync(join(OUT, "widgets.config.json"), "utf8")) as {
@@ -105,7 +105,7 @@ try {
         throw new Error("widgets.config.json was not updated with smoke-widget");
       }
     }
-    console.log("✓ add-widget produced apps/smoke-widget and registered it");
+    console.log("✓ new-widget produced apps/smoke-widget and registered it");
 
     console.log(`✓ ${variant}: all checks passed`);
   }

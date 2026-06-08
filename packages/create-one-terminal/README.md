@@ -47,13 +47,19 @@ Both variants share the Terminal shell, `ot-core`, and `fdc3-plugin` (the browse
 
 ### Adding a widget
 
-After scaffolding, generate additional widget apps with the bundled subcommand:
+After scaffolding, generate additional widget apps with the bundled npm script (this is the recommended path — it runs the locally-installed scaffolder, no `npx` download required):
 
 ```sh
-npx create-one-terminal add-widget my-widget
+npm run create-widget my-widget
 ```
 
-The wizard asks for a title, picks the next free port (starting at 3010), and:
+Or invoke the scaffolder directly:
+
+```sh
+npx create-one-terminal new-widget my-widget
+```
+
+Either way, the wizard asks for a title, picks the next free port (starting at 3010), and:
 
 - On **Standalone** — appends an entry to `widgets.config.json`. Restart the Terminal to see it in the launcher.
 - On **Enterprise** — prints a `curl` command to register the widget with the App Directory. If `OT_APPD_TOKEN` and `OT_APP_DIR_URL` are set, the wizard makes the call for you.

@@ -102,7 +102,7 @@ npm run dev:desktop-agent     # separate terminal
 npm run dev:terminal          # separate terminal
 ```
 
-Add new widgets in either variant with `npx create-one-terminal add-widget <name>`. On Standalone the widget is registered in `widgets.config.json`; on Enterprise the wizard prints a curl command for the App Directory (or runs it if `OT_APPD_TOKEN` is set).
+Add new widgets in either variant with `npm run create-widget <name>` (recommended) or `npx create-one-terminal new-widget <name>`. On Standalone the widget is registered in `widgets.config.json`; on Enterprise the wizard prints a curl command for the App Directory (or runs it if `OT_APPD_TOKEN` is set).
 
 Enterprise workspaces also ship `apps/app-directory/src/data.ts` for persisting AppD records.
 
@@ -179,16 +179,16 @@ Open it inside OneTerminal alongside the sample ticker — switch both to the Gr
 
 ### Packages
 
-| Path                      | Purpose                                                                 |
-| ------------------------- | ----------------------------------------------------------------------- |
-| `apps/one-terminal`       | Window manager (Tauri 2 app)                                            |
-| `apps/desktop-agent`      | FDC3 desktop agent + engine launcher                                    |
-| `apps/tauri-webview-host` | Thin Tauri shell spawned for pinned WebView2/WKWebView apps             |
-| `apps/electron-host`      | Thin Electron shell spawned for Electron-engine apps                    |
-| `apps/app-directory`      | Express server serving FDC3 AppD REST API + management UI               |
-| `packages/ot-core`        | Tauri-agnostic shared Rust crate (engine abstraction, plugin manifests) |
-| `packages/ot-fdc3`        | Tauri plugin: FDC3 2.2 TCP spoke client                                 |
-| `packages/fdc3-plugin`    | Browser-side FDC3 2.2 client (`DesktopAgentClient`) — ships in both variants |
+| Path                      | Purpose                                                                                                  |
+| ------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `apps/one-terminal`       | Window manager (Tauri 2 app)                                                                             |
+| `apps/desktop-agent`      | FDC3 desktop agent + engine launcher                                                                     |
+| `apps/tauri-webview-host` | Thin Tauri shell spawned for pinned WebView2/WKWebView apps                                              |
+| `apps/electron-host`      | Thin Electron shell spawned for Electron-engine apps                                                     |
+| `apps/app-directory`      | Express server serving FDC3 AppD REST API + management UI                                                |
+| `packages/ot-core`        | Tauri-agnostic shared Rust crate (engine abstraction, plugin manifests)                                  |
+| `packages/ot-fdc3`        | Tauri plugin: FDC3 2.2 TCP spoke client                                                                  |
+| `packages/fdc3-plugin`    | Browser-side FDC3 2.2 client (`DesktopAgentClient`) — ships in both variants                             |
 | `packages/fdc3-client`    | TypeScript FDC3 type definitions — Enterprise only (Tauri-bound, calls `fdc3_*` commands from `ot-fdc3`) |
 
 ### Sample apps
@@ -520,7 +520,7 @@ OneTerminal ships a `create-one-terminal` package that generates and upgrades wo
 
 ```sh
 npx create-one-terminal my-terminal             # scaffold a new workspace (Standalone or Enterprise)
-npx create-one-terminal add-widget fx-rates     # scaffold a new widget app under apps/
+npx create-one-terminal new-widget fx-rates     # scaffold a new widget app under apps/ (or `npm run create-widget fx-rates` inside the workspace)
 npx create-one-terminal upgrade                 # upgrade an existing workspace in place
 ```
 

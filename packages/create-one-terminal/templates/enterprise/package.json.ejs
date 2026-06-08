@@ -28,6 +28,7 @@
     "start:electron-host": "npm -w @<%= orgScope %>/electron-host start",
     "dev:all:electron": "concurrently --kill-others-on-fail -n appd,cda,terminal -c blue,green,magenta \"npm run dev:app-directory\" \"npm run dev:desktop-agent:electron\" \"npm run dev:terminal:electron\"",
     "build:all": "npm -w @<%= orgScope %>/one-terminal run build && npm -w @<%= orgScope %>/desktop-agent run build && npm -w @<%= orgScope %>/app-directory run build",
+    "create-widget": "create-one-terminal new-widget",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
@@ -47,5 +48,8 @@
     "tsx": "^4.19.4",
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.59.2"
+  },
+  "optionalDependencies": {
+    "create-one-terminal": "^0.1.6"
   }
 }
