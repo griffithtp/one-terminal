@@ -12,7 +12,7 @@ export async function runPrompts(): Promise<PromptsResult> {
 
   const workspaceName = await p.text({
     message: "Workspace name (kebab-case)",
-    placeholder: "acme-trading",
+    initialValue: "acme-trading",
     validate: (v) => {
       if (!/^[a-z][a-z0-9-]+$/.test(v)) return "Must be lowercase kebab-case (e.g. acme-trading)";
     },
@@ -52,7 +52,7 @@ export async function runPrompts(): Promise<PromptsResult> {
 
   const tauriIdentifier = await p.text({
     message: "Reverse-domain identifier (used for Tauri bundle ID)",
-    placeholder: "com.acme.trading",
+    initialValue: "com.acme.trading",
     validate: (v) => {
       if (!/^[a-z][a-z0-9]*(\.[a-z][a-z0-9]*)+$/.test(v))
         return "Must be dot-separated lowercase segments (e.g. com.acme.trading)";
