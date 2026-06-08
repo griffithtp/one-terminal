@@ -593,6 +593,10 @@
       "overlay": "standalone"
     },
     {
+      "path": "apps/tauri-webview-host/dist/index.html",
+      "overlay": "enterprise"
+    },
+    {
       "path": "apps/tauri-webview-host/src-tauri/Cargo.toml",
       "overlay": "enterprise"
     },

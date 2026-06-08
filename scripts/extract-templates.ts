@@ -32,7 +32,7 @@ const BINARY_EXTENSIONS = new Set([".png", ".ico", ".icns", ".svg"]);
 
 // ── Static files — copied verbatim, no .ejs extension ────────────────────────
 // Matched against the filename (basename) only
-const STATIC_FILENAMES = new Set(["build.rs", "vite-env.d.ts", ".gitkeep"]);
+const STATIC_FILENAMES = new Set(["build.rs", "vite-env.d.ts"]);
 
 // ── Directories to skip entirely ──────────────────────────────────────────────
 const SKIP_DIRS = new Set(["node_modules", "target", "dist", "gen", ".git"]);
@@ -315,12 +315,16 @@ async function walkAndProcess(srcDir: string, destDir: string, overlay: Overlay)
 
   for (const item of items) {
     if (SKIP_DIRS.has(item)) {
-      // Allow a dist/ directory that contains only .gitkeep (stub for frontendDist)
+      // Carve-out: a `dist/` directory containing only an `index.html` stub
+      // is the frontendDist placeholder for tauri-webview-host (and any other
+      // headless Tauri host that lives at a URL). Keep walking it so the stub
+      // ships with the scaffold. Any larger `dist/` is a build artifact and
+      // stays skipped.
       const srcPath = join(srcDir, item);
       const info = await stat(srcPath);
       if (info.isDirectory()) {
         const children = await readdir(srcPath);
-        if (children.length === 1 && children[0] === ".gitkeep") {
+        if (children.length === 1 && children[0] === "index.html") {
           await walkAndProcess(srcPath, join(destDir, item), overlay);
         }
       }
