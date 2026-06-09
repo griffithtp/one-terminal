@@ -24,35 +24,93 @@ npx create-one-terminal
 
 The CLI walks you through a short set of prompts:
 
-| Prompt                   | Example            | Notes                                                      |
-| ------------------------ | ------------------ | ---------------------------------------------------------- |
-| Workspace name           | `acme-trading`     | kebab-case, used as the npm scope and Cargo workspace name |
-| Output folder            | `./acme-trading`   | defaults to `./<workspace-name>`                           |
-| Tauri bundle identifier  | `com.acme.trading` | reverse-domain, dot-separated lowercase segments           |
-| Include FDC3 integration | Yes                | adds `ot-fdc3`, `fdc3-client`, and `fdc3-plugin`           |
-| Customize default ports  | No                 | optional — see port table below                            |
+| Prompt                   | Example                            | Notes                                                                                  |
+| ------------------------ | ---------------------------------- | -------------------------------------------------------------------------------------- |
+| Workspace name           | `acme-trading`                     | kebab-case, used as the npm scope and Cargo workspace name                             |
+| Output folder            | `./acme-trading`                   | defaults to `./<workspace-name>`                                                       |
+| Workspace variant        | `standalone` (default)             | see [Variants](#variants) below                                                        |
+| Tauri bundle identifier  | `com.acme.trading`                 | reverse-domain, dot-separated lowercase segments                                       |
+| External FDC3 agent URL  | `ws://prod-fdc3.example:7891/fdc3` | Standalone only — leave blank to wire up later                                         |
+| Include FDC3 integration | Yes                                | Enterprise only — Standalone always includes the FDC3 browser client                   |
+| Customize default ports  | No                                 | optional — Standalone asks only for the Terminal dev port; Enterprise asks for all six |
 
-After confirming, the CLI renders the full monorepo and prints next steps.
+After confirming, the CLI renders the workspace and prints next steps.
+
+### Variants
+
+OneTerminal scaffolds in one of two shapes:
+
+- **Standalone** _(default)_ — Terminal + a single sample widget. No Desktop Agent, no App Directory. The Terminal acts as an FDC3 _client_ and joins an external agent over a WebSocket URL you provide. Best for teams that already run an FDC3 agent or want to evaluate the Terminal shell on its own.
+- **Enterprise** — full stack: Terminal, Desktop Agent (broker, FDC3 bus, DACP), App Directory (Express API + React UI), engine plugin runtime, and the `sample-ticker` / `sample-chart` demos. Best for platform teams standing up an in-house FDC3 estate.
+
+Both variants share the Terminal shell, `ot-core`, and `fdc3-plugin` (the browser FDC3 client). The TypeScript `fdc3-client` package is Enterprise-only — it invokes `fdc3_*` Tauri commands that only exist when the bundled `ot-fdc3` plugin ships. The Terminal's widget catalog source switches automatically (`widgets.config.json` on Standalone, App Directory HTTP on Enterprise).
+
+### Adding a widget
+
+After scaffolding, generate additional widget apps with the bundled npm script (recommended — runs the workspace-local `scripts/new-widget.mjs`, no network or `npx` required):
+
+```sh
+npm run create-widget                                                    # interactive prompts
+npm run create-widget -- --name fx-rates                                  # name as a flag
+npm run create-widget -- --name fx-rates --title "FX Rates" --port 3010   # fully scripted
+```
+
+The script is a ~250-line, zero-dependency Node script using only the standard library (`node:readline`, `node:fs`). It lives at `scripts/new-widget.mjs` in your workspace — you can read it, modify it, or change the bundled `scripts/widget-template/*.tpl` files to customise what new widgets look like.
+
+You can also invoke the original interactive scaffolder remotely (downloads on first run):
+
+```sh
+npx create-one-terminal new-widget my-widget
+```
+
+Either entrypoint asks for a title, picks the next free port (starting at 3010), and:
+
+- On **Standalone** — appends an entry to `widgets.config.json`. Restart the Terminal to see it in the launcher.
+- On **Enterprise** — prints a `curl` command to register the widget with the App Directory. If `OT_APPD_TOKEN` and `OT_APP_DIR_URL` are set, the wizard makes the call for you.
 
 ### Default ports
 
-| Service                | Default | Notes                            |
-| ---------------------- | ------- | -------------------------------- |
-| App Directory          | 3005    | Express AppD API + management UI |
-| TCP Broker             | 7890    | `OT_TCP_PORT`                    |
-| FDC3 Bus WebSocket     | 7891    | `OT_FDC3_BUS_PORT`               |
-| DACP Bridge            | 4475    | `OT_DACP_PORT`                   |
-| Terminal Vite dev      | 1422    |                                  |
-| Desktop Agent Vite dev | 1421    |                                  |
-
-All ports can be customized during scaffolding or overridden at runtime via `OT_*` environment variables.
+| Service                | Default | Variant    | Env var            |
+| ---------------------- | ------- | ---------- | ------------------ |
+| Terminal Vite dev      | 1422    | both       | —                  |
+| Desktop Agent Vite dev | 1421    | enterprise | —                  |
+| App Directory          | 3005    | enterprise | —                  |
+| TCP Broker             | 7890    | enterprise | `OT_TCP_PORT`      |
+| FDC3 Bus WebSocket     | 7891    | enterprise | `OT_FDC3_BUS_PORT` |
+| DACP Bridge            | 4475    | enterprise | `OT_DACP_PORT`     |
+| Sample widget          | 3012    | standalone | —                  |
 
 ### Scaffolded layout
 
+**Standalone:**
+
 ```
 <workspace>/
-├── Cargo.toml                    # Rust workspace
+├── README.md                     # variant-aware getting-started guide
+├── Cargo.toml                    # slim Rust workspace
 ├── package.json                  # npm workspace
+├── widgets.config.json           # local widget registry — the launcher reads this
+├── scripts/
+│   ├── new-widget.mjs            # `npm run create-widget` entry point
+│   └── widget-template/          # boilerplate for new widgets
+├── apps/
+│   ├── one-terminal/             # Tauri 2 window manager (the Terminal)
+│   └── sample-widget/            # minimal demo widget (port 3012)
+└── packages/
+    ├── ot-core/                  # shared Rust crate
+    └── fdc3-plugin/              # browser FDC3 agent (fdc3-plugin.js)
+```
+
+**Enterprise:**
+
+```
+<workspace>/
+├── README.md                     # variant-aware getting-started guide
+├── Cargo.toml                    # full Rust workspace
+├── package.json                  # npm workspace
+├── scripts/
+│   ├── new-widget.mjs            # `npm run create-widget` entry point
+│   └── widget-template/          # boilerplate for new widgets
 ├── apps/
 │   ├── one-terminal/             # Tauri 2 window manager (the Terminal)
 │   ├── desktop-agent/            # Tauri 2 FDC3 broker + engine launcher
@@ -68,9 +126,20 @@ All ports can be customized during scaffolding or overridden at runtime via `OT_
     └── fdc3-plugin/              # browser FDC3 agent (fdc3-plugin.js)             *
 ```
 
-`*` Only included when FDC3 integration is enabled.
+`*` Only included when FDC3 integration is enabled (Enterprise prompt only). `fdc3-plugin` always ships in Standalone; `fdc3-client` is Enterprise-only because it depends on Tauri commands registered by `ot-fdc3`.
 
 ### Starting the workspace
+
+**Standalone:**
+
+```sh
+cd <workspace>
+npm install
+npm run dev:sample-widget   # http://localhost:3012
+npm run dev:terminal        # separate terminal
+```
+
+**Enterprise:**
 
 ```sh
 cd <workspace>
@@ -112,11 +181,14 @@ After scaffolding, your workspace `package.json` contains a metadata block that 
 ```json
 {
   "oneTerminal": {
-    "version": "0.1.2",
-    "scaffoldedAt": "2026-05-04"
+    "version": "0.1.6",
+    "scaffoldedAt": "2026-06-07",
+    "variant": "standalone"
   }
 }
 ```
+
+The `variant` field is used by the upgrade wizard to filter migrations — only migrations whose `appliesTo` matches the workspace variant (or is `"both"`) are applied.
 
 Do not remove or edit this block manually.
 

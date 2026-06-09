@@ -3,6 +3,18 @@ export type PatchOperation =
   | { op: "replace-line-matching"; pattern: string; replacement: string }
   | { op: "add-file"; sourcePath: string; targetPath: string };
 
+/**
+ * Which workspace variants a migration applies to. Inferred at authoring time
+ * from the overlay the changed template lives in:
+ *   shared/      → "both"
+ *   enterprise/  → "enterprise"
+ *   standalone/  → "standalone"
+ *
+ * Older migrations without this field default to "both" for backward
+ * compatibility with pre-variant scaffolds.
+ */
+export type AppliesTo = "both" | "standalone" | "enterprise";
+
 export type MigrationSpec =
   | {
       type: "config-merge";
@@ -10,6 +22,7 @@ export type MigrationSpec =
       target: string;
       description: string;
       patch: Record<string, unknown>;
+      appliesTo?: AppliesTo;
     }
   | {
       type: "dep-bump";
@@ -17,6 +30,7 @@ export type MigrationSpec =
       target: string;
       description: string;
       deps: Array<{ name: string; ecosystem: "cargo" | "npm"; newVersion: string }>;
+      appliesTo?: AppliesTo;
     }
   | {
       type: "structural";
@@ -24,6 +38,7 @@ export type MigrationSpec =
       target: string;
       description: string;
       operations: PatchOperation[];
+      appliesTo?: AppliesTo;
     };
 
 export type MigrationStatus = "applied" | "skipped" | "needs-manual" | "failed";

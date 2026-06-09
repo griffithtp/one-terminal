@@ -1,0 +1,121 @@
+# <%= displayName %>
+
+> Scaffolded by [**OneTerminal**](https://github.com/griffithtchenpan/one-terminal) — an open-source Tauri 2 + FDC3 desktop container for interoperable trading and capital-markets applications.
+
+Workspace variant: **<%= variant %>** · scaffolded on <%= scaffoldedAt %> from OneTerminal v<%= scaffoldVersion %>
+
+---
+
+## Prerequisites
+
+| Tool                          | Version                               |
+| ----------------------------- | ------------------------------------- |
+| [Rust](https://rustup.rs)     | stable ≥ 1.77                         |
+| [Node.js](https://nodejs.org) | ≥ 20 LTS                              |
+| Tauri OS prerequisites        | https://tauri.app/start/prerequisites |
+
+## Install
+
+```sh
+npm install
+cargo check --workspace        # verify the Rust workspace compiles
+```
+
+<% if (variant === "standalone") { %>## Run
+
+Start the bundled sample widget and the Terminal in separate shells:
+
+```sh
+npm run dev:sample-widget      # http://localhost:3012
+npm run dev:terminal           # opens the Terminal window
+```
+
+The Terminal reads the widget catalog from [`widgets.config.json`](./widgets.config.json) at the workspace root — edit that file (or use `npm run create-widget`) to add more widgets.
+
+## Connect to an FDC3 agent
+
+This Standalone workspace acts as an **FDC3 client**. Point it at an external FDC3 agent by setting `fdc3.agentUrl` in [`apps/one-terminal/src-tauri/resources/terminal.config.json`](./apps/one-terminal/src-tauri/resources/terminal.config.json):
+
+```json
+{
+  "fdc3": { "agentUrl": "ws://your-agent.example.com:7891/fdc3" }
+}
+```
+
+Leave it empty if you don't have an agent yet — widgets that call `getAgent()` will get a clear `NoAgentConfigured` rejection instead of silently hanging.
+
+<% } else { %>## Run
+
+Start the three services in separate shells:
+
+```sh
+npm run dev:app-directory      # http://localhost:<%= appDirectoryPort %>
+npm run dev:desktop-agent      # FDC3 broker + engine launcher
+npm run dev:terminal           # opens the Terminal window
+```
+
+The App Directory ships with two demo apps (`sample-ticker` on port 3010, `sample-chart` on port 3011). Edit [`apps/app-directory/src/data.ts`](./apps/app-directory/src/data.ts) to add your own apps, or use the management UI at `http://localhost:<%= appDirectoryPort %>`.
+
+<% } %>## Add a widget
+
+```sh
+npm run create-widget                                                       # interactive
+npm run create-widget -- --name fx-rates --title "FX Rates" --port 3010     # scripted
+```
+
+[`scripts/new-widget.mjs`](./scripts/new-widget.mjs) is a zero-dependency Node script (standard library only — works offline). Edit [`scripts/widget-template/`](./scripts/widget-template/) to customise the boilerplate new widgets are built from.<% if (variant === "standalone") { %> New widgets are auto-registered in `widgets.config.json`.<% } else { %> The script prints a `curl POST /v2/apps` command for the App Directory, or registers automatically if `OT_APPD_TOKEN` and `OT_APP_DIR_URL` are set.<% } %>
+
+## Build
+
+```sh
+npm run build:terminal<% if (variant === "enterprise") { %>
+npm run build:desktop-agent
+npm run build:app-directory
+npm run build:all              # everything in sequence<% } %>
+```
+
+## Upgrade the framework
+
+When OneTerminal ships a new version, upgrade this workspace in place:
+
+```sh
+npx create-one-terminal upgrade
+```
+
+The upgrade wizard reads `oneTerminal.version` from `package.json`, fetches the migration manifest, snapshots affected files, and applies the migrations whose `appliesTo` matches your variant (`<%= variant %>` or `both`).
+
+## What's in this workspace
+
+```
+<%= workspaceName %>/
+├── apps/
+│   ├── one-terminal/             Terminal window manager (Tauri 2)<% if (variant === "standalone") { %>
+│   └── sample-widget/            Minimal FDC3 demo widget<% } else { %>
+│   ├── desktop-agent/            FDC3 broker + engine launcher (Tauri 2)
+│   ├── app-directory/            FDC3 AppD REST API + React UI
+│   ├── tauri-webview-host/       Thin host for pinned WebView2/WKWebView
+│   ├── electron-host/            Thin Electron host for Electron-engine apps
+│   ├── sample-ticker/            Demo: market-data ticker
+│   └── sample-chart/             Demo: candlestick chart<% } %>
+├── packages/
+│   ├── ot-core/                  Shared Rust crate<% if (variant === "enterprise") { %>
+│   ├── ot-fdc3/                  Tauri FDC3 spoke plugin
+│   ├── fdc3-client/              TypeScript FDC3 types + Fdc3Agent<% } %>
+│   └── fdc3-plugin/              Browser FDC3 client (DesktopAgentClient)
+├── scripts/
+│   ├── new-widget.mjs            `npm run create-widget` entry point
+│   └── widget-template/          Boilerplate for new widgets<% if (variant === "standalone") { %>
+├── widgets.config.json           Local widget registry — the launcher reads this<% } %>
+├── Cargo.toml                    Rust workspace
+└── package.json                  npm workspace
+```
+
+## Learn more
+
+- **OneTerminal** — https://github.com/griffithtchenpan/one-terminal
+- **FDC3 2.2 specification** — https://fdc3.finos.org
+- **Tauri 2** — https://tauri.app
+
+---
+
+_This README was generated by the OneTerminal scaffolder. Feel free to edit it freely — it is yours._

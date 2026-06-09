@@ -66,35 +66,60 @@ npm run build:scaffolder
 ```
 one-terminal/
 ├── apps/                              Source-of-truth app code
-│   ├── one-terminal/                  Window manager (Tauri 2)
-│   ├── desktop-agent/                 FDC3 broker + engine launcher (Tauri 2)
-│   ├── tauri-webview-host/            Thin host for pinned WebView2/WKWebView
-│   ├── electron-host/                 Thin Electron host (optional, requires setup)
-│   ├── app-directory/                 FDC3 AppD REST API + management UI
-│   ├── sample-ticker/                 Demo browser app — broadcasts fx.rate context
-│   └── sample-chart/                  Demo browser app — handles ViewChart intent
+│   ├── one-terminal/                  Window manager (Tauri 2) — shared overlay
+│   ├── desktop-agent/                 FDC3 broker + engine launcher (Tauri 2) — enterprise
+│   ├── tauri-webview-host/            Thin host for pinned WebView2/WKWebView — enterprise
+│   ├── electron-host/                 Thin Electron host (optional, requires setup) — enterprise
+│   ├── app-directory/                 FDC3 AppD REST API + management UI — enterprise
+│   ├── sample-ticker/                 Demo browser app — broadcasts fx.rate context — enterprise
+│   ├── sample-chart/                  Demo browser app — handles ViewChart intent — enterprise
+│   └── sample-widget/                 Minimal demo widget — standalone variant
 ├── packages/
 │   ├── ot-core/                       Shared Rust crate
-│   ├── ot-fdc3/                       Tauri FDC3 spoke plugin
+│   ├── ot-fdc3/                       Tauri FDC3 spoke plugin — enterprise
 │   ├── fdc3-plugin/                   Browser FDC3 client JS
-│   ├── fdc3-client/                   TypeScript FDC3 types
+│   ├── fdc3-client/                   TypeScript FDC3 types — enterprise (Tauri-bound)
 │   └── create-one-terminal/           npm create scaffolder + upgrade tool
 │       ├── src/
 │       │   ├── create/                scaffold new workspace
+│       │   ├── new-widget/            `new-widget` subcommand (wrapped by `npm run create-widget` in scaffolded workspaces)
 │       │   ├── upgrade/               upgrade an existing workspace
 │       │   └── merge/                 JSON + TOML merge helpers
 │       ├── templates/                 ← GENERATED, never hand-edited
+│       │   ├── shared/                files common to all variants
+│       │   ├── enterprise/            full-stack-only files
+│       │   └── standalone/            slim-variant-only files
+│       ├── overlay-overrides/         hand-authored variant-specific files
+│       │   ├── shared/                scripts/new-widget.mjs + widget-template/*.tpl (ship in all scaffolds)
+│       │   └── standalone/            slim Cargo.toml, slim package.json, widgets.config.json, etc.
+│       ├── widget-template/           embedded template for the framework's own `new-widget` subcommand
 │       └── versions.json              upgrade migration manifest
 ├── scripts/
-│   ├── extract-templates.ts           derives EJS templates from apps/
+│   ├── extract-templates.ts           derives EJS templates from apps/ + copies overlay-overrides/
 │   ├── create-migration.ts            interactive wizard: extract + diff + author migrations
-│   └── check-template-drift.ts        CI drift check
+│   ├── check-template-drift.ts        CI drift check
+│   └── test-scaffold.ts               smoke-tests both variants end-to-end
 └── .github/workflows/
     ├── template-drift.yml             blocks PRs with stale templates
     └── publish-scaffolder.yml         publishes on v* tags
 ```
 
-**Key rule:** `packages/create-one-terminal/templates/` is always derived from `apps/` by the extractor script. Never edit files inside `templates/` by hand — your changes will be overwritten and the CI drift check will reject the PR.
+**Key rule:** `packages/create-one-terminal/templates/` is always derived by the extractor script. Almost everything in there comes from `apps/` and `packages/ot-*/` via substitution. The one exception is `templates/standalone/Cargo.toml.ejs`, `templates/standalone/package.json.ejs`, `templates/standalone/widgets.config.json.ejs`, and `templates/standalone/apps/one-terminal/.../terminal.config.json.ejs` — these have no live source equivalent and are hand-authored under `packages/create-one-terminal/overlay-overrides/standalone/`. The extractor copies that directory verbatim. Edit there, never inside `templates/` — the CI drift check will reject hand edits to `templates/` directly.
+
+### Variants and overlays
+
+The scaffolder produces one of two workspace shapes selected by a prompt:
+
+- **Standalone** _(default)_ — Terminal + a single sample widget + a local `widgets.config.json` widget registry. No Desktop Agent. The Terminal connects FDC3 to an external agent over a WebSocket URL.
+- **Enterprise** — the full stack: Terminal + Desktop Agent + App Directory + engine plugin runtime + sample ticker/chart.
+
+Templates are partitioned across three overlays. `render.ts` walks `shared/` first, then the selected variant overlay; collisions are won by the later overlay.
+
+| Overlay       | Contents                                                                                                                                                   | Source                                                                                                                                                           |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `shared/`     | Terminal shell, ot-core, fdc3-plugin, `scripts/new-widget.mjs` + `scripts/widget-template/`, root `.gitignore`                                             | Extracted from `apps/one-terminal/`, `packages/ot-core/`, `packages/fdc3-plugin/`; scripts hand-authored under `overlay-overrides/shared/`                       |
+| `enterprise/` | Desktop Agent, App Directory, tauri-webview-host, electron-host, sample-ticker, sample-chart, ot-fdc3, fdc3-client, root `Cargo.toml`, root `package.json` | Extracted from the corresponding `apps/` / `packages/` dirs. `fdc3-client` is here because every method invokes `fdc3_*` Tauri commands registered by `ot-fdc3`. |
+| `standalone/` | sample-widget, slim Cargo.toml, slim package.json, widgets.config.json, standalone terminal.config.json                                                    | sample-widget extracted from `apps/sample-widget/`; the rest from `overlay-overrides/standalone/`                                                                |
 
 ---
 
@@ -173,9 +198,9 @@ The CI drift check will run automatically and confirm templates are in sync. Onc
 
 ### How templates are generated
 
-`scripts/extract-templates.ts` walks each source tree in the `SOURCES` array, applies an ordered substitution table to text files, and writes the results as `.ejs` files into `packages/create-one-terminal/templates/`.
+`scripts/extract-templates.ts` walks each source tree in the `SOURCES` array, applies an ordered substitution table to text files, and writes the results as `.ejs` files into `packages/create-one-terminal/templates/<overlay>/...`. Each `SOURCES` entry declares which overlay (`shared`, `enterprise`, or `standalone`) its files belong to. After processing live sources, the extractor copies every file under `packages/create-one-terminal/overlay-overrides/<overlay>/` verbatim into the matching `templates/<overlay>/` directory — these are the hand-authored files (slim Cargo.toml etc.) that have no live source equivalent.
 
-When `npm create one-terminal` runs, `packages/create-one-terminal/src/create/render.ts` walks those `.ejs` files, renders them through EJS with a `ScaffoldContext` object, and writes the output to the new workspace directory.
+When `npm create one-terminal` runs, `packages/create-one-terminal/src/create/render.ts` walks the overlays in order (`shared/` first, then `<variant>/`), renders each `.ejs` file through EJS with a `ScaffoldContext` object, and writes the output to the new workspace directory. When the same destination path appears in both overlays, the variant overlay wins.
 
 **EJS was chosen over Handlebars** because Rust source files, TOML, and Tauri JSON configs all use `{{` / `}}` extensively. EJS uses `<%= %>` delimiters which have no conflict.
 
@@ -218,7 +243,9 @@ ot-fdc3 = { workspace = true }
 <% } %>
 ```
 
-The variable name after `ot:if` must match a boolean field on `ScaffoldContext`. This is the only mechanism for conditional template content — do not add EJS `if` blocks directly to source files.
+The variable name after `ot:if` must match a boolean field on `ScaffoldContext` (e.g. `includeFdc3`). This is the only inline mechanism for conditional template content — do not add EJS `if` blocks directly to source files.
+
+For variant-level gating (a whole file that only exists in one variant), use the overlay system instead: put the file's live source under an enterprise-only `apps/<name>/` directory and tag it `overlay: "enterprise"` in `SOURCES`, or hand-author it under `overlay-overrides/standalone/`. Don't try to gate whole files with `ot:if`.
 
 ### Static and binary files
 
@@ -231,9 +258,9 @@ To add a file that should always be copied unchanged, add its filename to the `S
 
 ### Stripping scripts from the root `package.json`
 
-The root `package.json` in the framework repo contains scripts that are only meaningful when working on the framework itself (`extract-templates`, `check-template-drift`, `create-migration`, `build:scaffolder`, `scaffold`). These are stripped from the scaffolded workspace template by `ROOT_PACKAGE_SCRIPTS_OMIT` in [scripts/extract-templates.ts](scripts/extract-templates.ts).
+The root `package.json` in the framework repo contains scripts that are only meaningful when working on the framework itself (`extract-templates`, `check-template-drift`, `create-migration`, `build:scaffolder`, `scaffold`, `test:scaffold`) or only belong to one variant (`dev:sample-widget` belongs in the Standalone overlay-override, not the extracted Enterprise template). These are stripped from the extracted Enterprise template by `ROOT_PACKAGE_SCRIPTS_OMIT` in [scripts/extract-templates.ts](scripts/extract-templates.ts). The Standalone `package.json` is hand-authored in `overlay-overrides/standalone/` and ships only the scripts it actually needs, so the omit list does not affect it.
 
-If you add a new framework-internal script to the root `package.json` that should not appear in scaffolded workspaces, add its key to `ROOT_PACKAGE_SCRIPTS_OMIT`. Conversely, app-level scripts (`dev:*`, `build:*`) should remain — they belong in every scaffolded workspace.
+If you add a new framework-internal script to the root `package.json` that should not appear in scaffolded Enterprise workspaces, add its key to `ROOT_PACKAGE_SCRIPTS_OMIT`. Conversely, app-level scripts (`dev:*`, `build:*`) that belong in every Enterprise workspace should remain.
 
 ---
 
@@ -241,26 +268,43 @@ If you add a new framework-internal script to the root `package.json` that shoul
 
 ### The `create/` module
 
-| File               | Responsibility                                                                             |
-| ------------------ | ------------------------------------------------------------------------------------------ |
-| `context.ts`       | `ScaffoldContext` type + `buildContext()` derivations                                      |
-| `prompts.ts`       | Interactive CLI prompts using `@clack/prompts`                                             |
-| `render.ts`        | Walks `templates/`, renders `.ejs` files, writes atomically                                |
-| `post-scaffold.ts` | Injects `oneTerminal.version` into generated `package.json`, prints next-step instructions |
+| File               | Responsibility                                                                                                        |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------- |
+| `context.ts`       | `ScaffoldContext` type (including `variant`, `externalFdc3AgentUrl`) + `buildContext()` derivations                   |
+| `prompts.ts`       | Interactive CLI prompts using `@clack/prompts` — variant prompt drives which downstream prompts run                   |
+| `render.ts`        | Walks `templates/shared/` then `templates/<variant>/`, renders `.ejs` files, writes atomically (variant-overlay-wins) |
+| `post-scaffold.ts` | Injects `oneTerminal.{version,variant}` into generated `package.json`, prints variant-aware next-step instructions    |
+
+### The `new-widget/` module
+
+| File       | Responsibility                                                                                                                                                                                                                                                                     |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `index.ts` | Interactive `npx create-one-terminal new-widget` subcommand + programmatic `createWidget(cwd, spec)` API. Uses `@clack/prompts` and `ejs`. Renders the framework-embedded template at `packages/create-one-terminal/widget-template/*.ejs` (full EJS). Variant-aware registration. |
+
+**Two ways to add a widget to a scaffolded workspace.** Both produce identical output; users pick based on what they have.
+
+| Entrypoint                                           | Where it runs                                        | Dependencies                   | When to use                                                                                              |
+| ---------------------------------------------------- | ---------------------------------------------------- | ------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| `npm run create-widget` _(recommended in-workspace)_ | `scripts/new-widget.mjs` shipped inside the scaffold | None — Node stdlib only        | Default for end users. Works offline; no network. Uses `<%= var %>` regex substitution on `*.tpl` files. |
+| `npx create-one-terminal new-widget`                 | Framework `create-one-terminal` package              | Downloaded by npx on first run | Pre-scaffold or one-off remote use.                                                                      |
+
+The inline `scripts/new-widget.mjs` (and `scripts/widget-template/*.tpl`) is hand-authored under `packages/create-one-terminal/overlay-overrides/shared/scripts/`. Note the `.tpl` extension on the widget template files — distinct from the framework's `widget-template/*.ejs` so the scaffold-time `render.ts` walker passes them through verbatim instead of trying to EJS-render them with `ScaffoldContext`. Both copies of the template stay in sync by convention; if you change one, change the other. The smoke test exercises the inline script, so divergence shows up immediately.
 
 ### The `upgrade/` module
 
-| File                  | Responsibility                                                    |
-| --------------------- | ----------------------------------------------------------------- |
-| `index.ts`            | Orchestrates the 9-step upgrade flow                              |
-| `detect.ts`           | Reads `oneTerminal.version` from target `package.json`            |
-| `manifest.ts`         | Fetches `versions.json` from the installed package                |
-| `chain.ts`            | Builds the ordered list of migrations to apply                    |
-| `backup.ts`           | Snapshots affected files to `.one-terminal/upgrade-backup-<ver>/` |
-| `restore.ts`          | Restores snapshot on failure                                      |
-| `conflict.ts`         | Handles `_managed`-field conflicts: auto / skip / merge           |
-| `report.ts`           | Writes `.one-terminal/upgrade-report-<ver>.md`                    |
-| `migrations/types.ts` | `MigrationSpec`, `VersionEntry`, `VersionsManifest` types         |
+| File                  | Responsibility                                                                                                             |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `index.ts`            | Orchestrates the 9-step upgrade flow                                                                                       |
+| `detect.ts`           | Reads `oneTerminal.{version,variant}` from target `package.json`; infers variant from filesystem for pre-variant scaffolds |
+| `manifest.ts`         | Fetches `versions.json` from the installed package                                                                         |
+| `chain.ts`            | Builds the ordered list of migrations to apply, filtered by the project's variant (via each migration's `appliesTo`)       |
+| `backup.ts`           | Snapshots affected files to `.one-terminal/upgrade-backup-<ver>/`                                                          |
+| `restore.ts`          | Restores snapshot on failure                                                                                               |
+| `conflict.ts`         | Handles `_managed`-field conflicts: auto / skip / merge                                                                    |
+| `report.ts`           | Writes `.one-terminal/upgrade-report-<ver>.md`                                                                             |
+| `migrations/types.ts` | `MigrationSpec`, `AppliesTo`, `VersionEntry`, `VersionsManifest` types                                                     |
+
+`applyStructural` in `index.ts` searches each overlay (`shared/`, `enterprise/`, `standalone/`) when resolving a migration's `op.sourcePath`, so `add-file` operations work regardless of which overlay the template was authored in.
 
 ### The `merge/` module
 
@@ -273,7 +317,13 @@ If you add a new framework-internal script to the root `package.json` that shoul
 
 ## Migration Reference
 
-Migrations live in the `migrations` array of a version entry in [packages/create-one-terminal/versions.json](packages/create-one-terminal/versions.json). Each migration has an `id` (unique string, used to skip already-applied migrations on re-runs) and a `target` (relative path from the scaffolded workspace root).
+Migrations live in the `migrations` array of a version entry in [packages/create-one-terminal/versions.json](packages/create-one-terminal/versions.json). Each migration has:
+
+- `id` — unique string, used to skip already-applied migrations on re-runs
+- `target` — relative path from the scaffolded workspace root (always without an overlay prefix — the wizard strips it during authoring)
+- `appliesTo` _(optional)_ — `"both"`, `"standalone"`, or `"enterprise"`. The wizard infers this from which overlay the changed template lives in: `shared/` → `"both"`, `enterprise/` → `"enterprise"`, `standalone/` → `"standalone"`. Older migrations without this field default to `"both"` for backward compatibility with pre-variant scaffolds.
+
+`buildChain` filters out migrations whose `appliesTo` does not match the workspace variant before any are applied. You generally don't write `appliesTo` by hand — let the wizard set it from the overlay context.
 
 ### `config-merge`
 
@@ -287,6 +337,7 @@ Use this for: adding a new key to `agent.config.json`, updating a URL default, a
   "id": "0.2.0-add-dacpBridge-port",
   "target": "apps/desktop-agent/src-tauri/resources/agent.config.json",
   "description": "Add dacpBridge port to agent config",
+  "appliesTo": "enterprise",
   "patch": {
     "ports": {
       "dacpBridge": 4475
@@ -398,12 +449,21 @@ npm run dev:sample-chart           # http://localhost:3011
 
 ### Test a scaffolded workspace
 
-This confirms that `npm create one-terminal` produces a working workspace from the current templates. Run this after any change to `apps/`, `packages/ot-*`, or the extractor.
+For a fast non-interactive check that both variants build, use the smoke test:
+
+```sh
+npm run build:scaffolder
+npm run test:scaffold                       # both variants: cargo check + npm install + new-widget
+npm run test:scaffold -- --variant standalone   # one variant only
+npm run test:scaffold -- --keep             # don't delete the output (paths printed at end)
+```
+
+For an end-to-end manual check, rebuild templates and run the scaffolder interactively:
 
 **Step 1 — Rebuild templates and scaffolder**
 
 ```sh
-npm run extract-templates    # re-derive EJS templates from apps/
+npm run extract-templates    # re-derive EJS templates from apps/ + overlay-overrides/
 npm run build:scaffolder     # compile create-one-terminal to dist/
 ```
 
@@ -419,9 +479,11 @@ The prompts are:
 
 1. **Workspace name** — kebab-case, e.g. `acme-trading`
 2. **Output folder** — defaults to `./<workspace-name>`, accept or change it
-3. **Reverse-domain identifier** — e.g. `com.acme.trading`
-4. **Include FDC3?** — defaults to yes
-5. **Customize ports?** — defaults to no
+3. **Workspace variant** — Standalone (default) or Enterprise
+4. **Reverse-domain identifier** — e.g. `com.acme.trading`
+5. **External FDC3 agent URL** _(Standalone only)_ — optional; leave blank to configure later
+6. **Include FDC3?** _(Enterprise only)_ — defaults to yes
+7. **Customize ports?** — defaults to no (Standalone asks only the Terminal dev port; Enterprise asks all six)
 
 After confirming, move into the output folder:
 
@@ -446,6 +508,8 @@ npm run build:app-directory
 
 **Step 5 — Run the scaffolded framework**
 
+For an **Enterprise** workspace:
+
 ```sh
 # Terminal 1
 npm run dev:app-directory
@@ -457,15 +521,25 @@ npm run dev:desktop-agent
 npm run dev:terminal
 ```
 
+For a **Standalone** workspace:
+
+```sh
+# Terminal 1
+npm run dev:sample-widget
+
+# Terminal 2
+npm run dev:terminal
+```
+
 **Passing signal:**
 
-| Check                     | Expected                              |
-| ------------------------- | ------------------------------------- |
-| `cargo check --workspace` | exits 0                               |
-| `npm install`             | no peer dep errors                    |
-| App Directory starts      | responds at `http://localhost:<port>` |
-| Desktop Agent starts      | connects to App Directory, no crash   |
-| Terminal starts           | window opens, app list loads          |
+| Check                     | Expected                                                  |
+| ------------------------- | --------------------------------------------------------- |
+| `cargo check --workspace` | exits 0                                                   |
+| `npm install`             | no peer dep errors                                        |
+| Terminal starts           | window opens, launcher shows sample widget(s)             |
+| App Directory starts      | responds at `http://localhost:<port>` _(Enterprise only)_ |
+| Desktop Agent starts      | connects to App Directory, no crash _(Enterprise only)_   |
 
 ---
 

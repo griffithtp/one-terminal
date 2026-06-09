@@ -11,23 +11,37 @@ export async function postScaffold(ctx: ScaffoldContext, outputDir: string): Pro
   pkg["oneTerminal"] = {
     version: ctx.scaffoldVersion,
     scaffoldedAt: ctx.scaffoldedAt,
+    variant: ctx.variant,
   };
 
   await writeFile(pkgPath, JSON.stringify(pkg, null, 2) + "\n", "utf8");
 
+  const nextSteps =
+    ctx.variant === "standalone"
+      ? [
+          "Start developing (two terminals):",
+          "  npm run dev:sample-widget",
+          "  npm run dev:terminal",
+          "",
+          "To register more widgets, edit widgets.config.json.",
+        ]
+      : [
+          "Start developing (three terminals):",
+          "  npm run dev:app-directory",
+          "  npm run dev:desktop-agent",
+          "  npm run dev:terminal",
+        ];
+
   p.outro(
     [
-      `Workspace created at: ${outputDir}`,
+      `Workspace created at: ${outputDir}  (variant: ${ctx.variant})`,
       "",
       "Next steps:",
       `  cd ${outputDir}`,
       "  cargo check --workspace",
       "  npm install",
       "",
-      "Start developing (three terminals):",
-      "  npm run dev:app-directory",
-      "  npm run dev:desktop-agent",
-      "  npm run dev:terminal",
+      ...nextSteps,
     ].join("\n")
   );
 }

@@ -19,7 +19,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { AppRecord, EngineBinding, OsKey } from "../types";
 import { DownloadPromptDialog, type DownloadEvent } from "../components/DownloadPromptDialog";
-import { getTerminalConfig } from "../lib/terminalConfig";
+import { loadWidgetRegistry } from "../lib/widgetRegistry";
 import { popPark, pushPark } from "../lib/parkPanels";
 
 // ── Tauri-side EngineStatus payload ──────────────────────────────────────────
@@ -100,12 +100,10 @@ export function useAppLaunch({ onOpenTab }: UseAppLaunchOpts): UseAppLaunchResul
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const currentOs = useMemo(() => detectCurrentOs(), []);
 
-  // Fetch config from Rust once on mount, then load the app directory.
+  // Load the widget catalog from whichever backend the terminal config selects.
   useEffect(() => {
-    getTerminalConfig()
-      .then((c) => fetch(c.appDirectoryUrl))
-      .then((r) => r.json())
-      .then((d) => setApps(d.applications ?? []))
+    loadWidgetRegistry()
+      .then(setApps)
       .catch(() => {});
   }, []);
 

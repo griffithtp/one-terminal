@@ -82,14 +82,29 @@ The fastest way to evaluate OneTerminal for your team:
 
 ```sh
 npx create-one-terminal my-terminal
-cd my-terminal
-npm install
-npm run dev:app-directory      # http://localhost:3005
-npm run dev:desktop-agent      # separate terminal
-npm run dev:terminal           # separate terminal — launches the window
 ```
 
-The scaffolded workspace ships with the App Directory, Desktop Agent, Terminal, and two sample apps already wired up. Edit `apps/app-directory/src/data.ts` to add your own apps.
+The scaffolder asks for a **variant**:
+
+- **Standalone** _(default)_ — Terminal + a single sample widget, joins an external FDC3 agent. No Desktop Agent or App Directory shipped. Best for evaluating the Terminal or joining an existing FDC3 estate.
+- **Enterprise** — full stack (Terminal + Desktop Agent + App Directory + samples). Best for platform teams.
+
+```sh
+# Standalone start (two terminals):
+cd my-terminal
+npm install
+npm run dev:sample-widget     # http://localhost:3012
+npm run dev:terminal          # separate terminal
+
+# Enterprise start (three terminals):
+npm run dev:app-directory     # http://localhost:3005
+npm run dev:desktop-agent     # separate terminal
+npm run dev:terminal          # separate terminal
+```
+
+Add new widgets in either variant with `npm run create-widget -- --name <name>` (recommended — runs a workspace-local, dependency-free Node script at `scripts/new-widget.mjs`) or `npx create-one-terminal new-widget <name>` (uses the published scaffolder). On Standalone the widget is registered in `widgets.config.json`; on Enterprise the wizard prints a curl command for the App Directory (or runs it if `OT_APPD_TOKEN` is set).
+
+Enterprise workspaces also ship `apps/app-directory/src/data.ts` for persisting AppD records.
 
 ### Option B — Hack on the framework
 
@@ -164,24 +179,25 @@ Open it inside OneTerminal alongside the sample ticker — switch both to the Gr
 
 ### Packages
 
-| Path                      | Purpose                                                                 |
-| ------------------------- | ----------------------------------------------------------------------- |
-| `apps/one-terminal`       | Window manager (Tauri 2 app)                                            |
-| `apps/desktop-agent`      | FDC3 desktop agent + engine launcher                                    |
-| `apps/tauri-webview-host` | Thin Tauri shell spawned for pinned WebView2/WKWebView apps             |
-| `apps/electron-host`      | Thin Electron shell spawned for Electron-engine apps                    |
-| `apps/app-directory`      | Express server serving FDC3 AppD REST API + management UI               |
-| `packages/ot-core`        | Tauri-agnostic shared Rust crate (engine abstraction, plugin manifests) |
-| `packages/ot-fdc3`        | Tauri plugin: FDC3 2.2 TCP spoke client                                 |
-| `packages/fdc3-plugin`    | Browser-side FDC3 2.2 client (`DesktopAgentClient`)                     |
-| `packages/fdc3-client`    | TypeScript FDC3 type definitions                                        |
+| Path                      | Purpose                                                                                                  |
+| ------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `apps/one-terminal`       | Window manager (Tauri 2 app)                                                                             |
+| `apps/desktop-agent`      | FDC3 desktop agent + engine launcher                                                                     |
+| `apps/tauri-webview-host` | Thin Tauri shell spawned for pinned WebView2/WKWebView apps                                              |
+| `apps/electron-host`      | Thin Electron shell spawned for Electron-engine apps                                                     |
+| `apps/app-directory`      | Express server serving FDC3 AppD REST API + management UI                                                |
+| `packages/ot-core`        | Tauri-agnostic shared Rust crate (engine abstraction, plugin manifests)                                  |
+| `packages/ot-fdc3`        | Tauri plugin: FDC3 2.2 TCP spoke client                                                                  |
+| `packages/fdc3-plugin`    | Browser-side FDC3 2.2 client (`DesktopAgentClient`) — ships in both variants                             |
+| `packages/fdc3-client`    | TypeScript FDC3 type definitions — Enterprise only (Tauri-bound, calls `fdc3_*` commands from `ot-fdc3`) |
 
 ### Sample apps
 
-| Path                 | Port | Description                                                                      |
-| -------------------- | ---- | -------------------------------------------------------------------------------- |
-| `apps/sample-ticker` | 3010 | Market data ticker — broadcasts `fx.rate` on the Green channel                   |
-| `apps/sample-chart`  | 3011 | Candlestick chart — mock EUR/USD stream, handles `ViewChart`/`ViewQuote` intents |
+| Path                 | Port | Variant    | Description                                                                      |
+| -------------------- | ---- | ---------- | -------------------------------------------------------------------------------- |
+| `apps/sample-widget` | 3012 | standalone | Minimal FDC3 widget — connect, broadcast, receive context                        |
+| `apps/sample-ticker` | 3010 | enterprise | Market data ticker — broadcasts `fx.rate` on the Green channel                   |
+| `apps/sample-chart`  | 3011 | enterprise | Candlestick chart — mock EUR/USD stream, handles `ViewChart`/`ViewQuote` intents |
 
 ---
 
@@ -219,6 +235,8 @@ The Desktop Agent reads `agent.config.json` (bundled as a resource) and applies 
 
 ### Environment variable overrides
 
+**Desktop Agent (Enterprise only):**
+
 | Variable           | Overrides          |
 | ------------------ | ------------------ |
 | `OT_TITLE`         | Window title       |
@@ -228,7 +246,16 @@ The Desktop Agent reads `agent.config.json` (bundled as a resource) and applies 
 | `OT_FDC3_BUS_PORT` | `ports.fdc3Bus`    |
 | `OT_DACP_PORT`     | `ports.dacpBridge` |
 
-For the full list (App Directory auth, native-app allowlists, webview pool, engine cache root), see [CLAUDE.md → Environment variables](CLAUDE.md#environment-variables-expanded).
+**Terminal (both variants):**
+
+| Variable                 | Overrides                                                                |
+| ------------------------ | ------------------------------------------------------------------------ |
+| `OT_WIDGET_SOURCE`       | `widgetSource` — `appd` (App Directory) or `local` (widgets.config.json) |
+| `OT_WIDGETS_CONFIG_PATH` | `localWidgetsPath` — path to widgets.config.json (Standalone)            |
+| `OT_FDC3_AGENT_URL`      | `fdc3.agentUrl` — external FDC3 agent WebSocket URL (Standalone)         |
+| `OT_WEBVIEW_POOL_SIZE`   | Pre-warmed webview pool size (default 1)                                 |
+
+For the full list (App Directory auth, native-app allowlists, engine cache root), see [CLAUDE.md → Environment variables](CLAUDE.md#environment-variables-expanded).
 
 ---
 
@@ -408,7 +435,16 @@ Browser apps use `fdc3-plugin.js` as the FDC3 desktop agent proxy over WebSocket
 </script>
 ```
 
-The plugin connects to `ws://localhost:7891/fdc3` by default. Override via:
+The plugin resolves its agent URL in this order (first non-empty wins):
+
+1. `<meta name="ot-fdc3-bus-url">` in the host page
+2. `window.OT_FDC3_AGENT_URL` — injected by the Terminal at panel-load time when `fdc3.agentUrl` is configured (Standalone scaffolds)
+3. `window.OT_FDC3_BUS_URL` — legacy override
+4. `ws://localhost:7891/fdc3` — Enterprise-bundled Desktop Agent default
+
+If the Terminal explicitly sets `window.OT_FDC3_AGENT_URL = ""` (no agent configured), `DesktopAgentClient.connect()` rejects with `NoAgentConfigured` instead of silently timing out — so Standalone widgets can surface a clear "no agent" state.
+
+Override at the page level via:
 
 ```html
 <meta name="ot-fdc3-bus-url" content="ws://myhost:7891/fdc3" />
@@ -483,11 +519,18 @@ npm run build:scaffolder                 # rebuild create-one-terminal
 OneTerminal ships a `create-one-terminal` package that generates and upgrades workspaces:
 
 ```sh
-npx create-one-terminal my-terminal           # scaffold a new workspace
-npx create-one-terminal upgrade               # upgrade an existing workspace in place
+npx create-one-terminal my-terminal             # scaffold a new workspace (Standalone or Enterprise)
+npx create-one-terminal new-widget fx-rates     # scaffold a new widget app under apps/ (or `npm run create-widget -- --name fx-rates` inside the workspace)
+npx create-one-terminal upgrade                 # upgrade an existing workspace in place
 ```
 
-Templates live at `packages/create-one-terminal/templates/` and are regenerated from the live apps via `npm run create-migration`. See [SCAFFOLDING.md](SCAFFOLDING.md) and [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow.
+Templates live at `packages/create-one-terminal/templates/`, partitioned across three overlays:
+
+- `templates/shared/` — Terminal shell, ot-core, fdc3-plugin
+- `templates/enterprise/` — Desktop Agent, App Directory, ot-fdc3, fdc3-client, enterprise samples
+- `templates/standalone/` — sample-widget, slim Cargo/package, `widgets.config.json`
+
+Templates are regenerated from the live apps via `npm run create-migration`. See [SCAFFOLDING.md](SCAFFOLDING.md), [docs/plans/standalone-vs-enterprise-plans.md](docs/plans/standalone-vs-enterprise-plans.md), and [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow.
 
 ---
 

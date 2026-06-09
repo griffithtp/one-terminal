@@ -32,24 +32,91 @@ const BINARY_EXTENSIONS = new Set([".png", ".ico", ".icns", ".svg"]);
 
 // ── Static files — copied verbatim, no .ejs extension ────────────────────────
 // Matched against the filename (basename) only
-const STATIC_FILENAMES = new Set(["build.rs", "vite-env.d.ts", ".gitkeep"]);
+const STATIC_FILENAMES = new Set(["build.rs", "vite-env.d.ts"]);
 
 // ── Directories to skip entirely ──────────────────────────────────────────────
 const SKIP_DIRS = new Set(["node_modules", "target", "dist", "gen", ".git"]);
 
+// ── Overlay model ──────────────────────────────────────────────────────────────
+// Templates are partitioned across three overlays:
+//   shared      — common to all variants (Terminal shell, fdc3 browser/TS, ot-core)
+//   enterprise  — full-stack-only (Desktop Agent, App Directory, ot-fdc3, samples)
+//   standalone  — slim-variant-only (sample-widget, slim Cargo/package — added in Phase B)
+//
+// render.ts walks `shared/` then `<variant>/`. variant-overlay-wins on collision.
+type Overlay = "shared" | "enterprise" | "standalone";
+
 // ── Source trees to walk ───────────────────────────────────────────────────────
-const SOURCES: Array<{ src: string; templateBase: string }> = [
-  { src: join(ROOT, "apps/one-terminal"), templateBase: "apps/one-terminal" },
-  { src: join(ROOT, "apps/desktop-agent"), templateBase: "apps/desktop-agent" },
-  { src: join(ROOT, "apps/tauri-webview-host"), templateBase: "apps/tauri-webview-host" },
-  { src: join(ROOT, "apps/app-directory"), templateBase: "apps/app-directory" },
-  { src: join(ROOT, "apps/sample-ticker"), templateBase: "apps/sample-ticker" },
-  { src: join(ROOT, "apps/sample-chart"), templateBase: "apps/sample-chart" },
-  { src: join(ROOT, "apps/electron-host"), templateBase: "apps/electron-host" },
-  { src: join(ROOT, "packages/ot-core"), templateBase: "packages/ot-core" },
-  { src: join(ROOT, "packages/ot-fdc3"), templateBase: "packages/ot-fdc3" },
-  { src: join(ROOT, "packages/fdc3-plugin"), templateBase: "packages/fdc3-plugin" },
-  { src: join(ROOT, "packages/fdc3-client"), templateBase: "packages/fdc3-client" },
+const SOURCES: Array<{ src: string; templateBase: string; overlay: Overlay }> = [
+  { src: join(ROOT, "apps/one-terminal"), templateBase: "apps/one-terminal", overlay: "shared" },
+  { src: join(ROOT, "packages/ot-core"), templateBase: "packages/ot-core", overlay: "shared" },
+  {
+    src: join(ROOT, "packages/fdc3-plugin"),
+    templateBase: "packages/fdc3-plugin",
+    overlay: "shared",
+  },
+
+  {
+    src: join(ROOT, "apps/desktop-agent"),
+    templateBase: "apps/desktop-agent",
+    overlay: "enterprise",
+  },
+  // fdc3-client is Tauri-bound — every method invokes an `fdc3_*` Tauri
+  // command registered by ot-fdc3 (Enterprise only). Including it in
+  // Standalone would ship dead code that throws on first call.
+  {
+    src: join(ROOT, "packages/fdc3-client"),
+    templateBase: "packages/fdc3-client",
+    overlay: "enterprise",
+  },
+  {
+    src: join(ROOT, "apps/tauri-webview-host"),
+    templateBase: "apps/tauri-webview-host",
+    overlay: "enterprise",
+  },
+  {
+    src: join(ROOT, "apps/app-directory"),
+    templateBase: "apps/app-directory",
+    overlay: "enterprise",
+  },
+  {
+    src: join(ROOT, "apps/sample-ticker"),
+    templateBase: "apps/sample-ticker",
+    overlay: "enterprise",
+  },
+  {
+    src: join(ROOT, "apps/sample-chart"),
+    templateBase: "apps/sample-chart",
+    overlay: "enterprise",
+  },
+  {
+    src: join(ROOT, "apps/electron-host"),
+    templateBase: "apps/electron-host",
+    overlay: "enterprise",
+  },
+  { src: join(ROOT, "packages/ot-fdc3"), templateBase: "packages/ot-fdc3", overlay: "enterprise" },
+
+  // Standalone-only sources
+  {
+    src: join(ROOT, "apps/sample-widget"),
+    templateBase: "apps/sample-widget",
+    overlay: "standalone",
+  },
+];
+
+// ── Overlay override directories ──────────────────────────────────────────────
+// Hand-authored files (.ejs templates and static files) that don't have a live
+// source equivalent. Used for variant-specific root files like the slim
+// standalone Cargo.toml / package.json. Copied verbatim — no substitutions.
+const OVERLAY_OVERRIDES: Array<{ src: string; overlay: Overlay }> = [
+  {
+    src: join(ROOT, "packages/create-one-terminal/overlay-overrides/shared"),
+    overlay: "shared",
+  },
+  {
+    src: join(ROOT, "packages/create-one-terminal/overlay-overrides/standalone"),
+    overlay: "standalone",
+  },
 ];
 
 // ── Scripts to strip from the root package.json template ─────────────────────
@@ -61,13 +128,17 @@ const ROOT_PACKAGE_SCRIPTS_OMIT = new Set([
   "build:scaffolder",
   "scaffold",
   "test:scaffold",
+  // sample-widget is standalone-only; its dev script lives in the
+  // standalone overlay-overrides package.json, not in the extracted one.
+  "dev:sample-widget",
 ]);
 
-// Root-level files that also become templates
-const ROOT_FILES = [
-  { src: join(ROOT, "Cargo.toml"), templateBase: "Cargo.toml" },
-  { src: join(ROOT, "package.json"), templateBase: "package.json" },
-  { src: join(ROOT, ".gitignore"), templateBase: ".gitignore" },
+// Root-level files that also become templates.
+// In Phase A these are enterprise-only; Phase B will add standalone variants.
+const ROOT_FILES: Array<{ src: string; templateBase: string; overlay: Overlay }> = [
+  { src: join(ROOT, "Cargo.toml"), templateBase: "Cargo.toml", overlay: "enterprise" },
+  { src: join(ROOT, "package.json"), templateBase: "package.json", overlay: "enterprise" },
+  { src: join(ROOT, ".gitignore"), templateBase: ".gitignore", overlay: "shared" },
 ];
 
 // ── Substitution table (applied in order — longest/most-specific first) ──────
@@ -163,6 +234,8 @@ const CONTEXT_VARS = [
   "dacpBridgePort",
   "appDirectoryPort",
   "includeFdc3",
+  "variant",
+  "externalFdc3AgentUrl",
   "scaffoldVersion",
   "scaffoldedAt",
 ];
@@ -173,7 +246,13 @@ function isDynamic(content: string): boolean {
 }
 
 // Collected during processing; written to MANIFEST_PATH at the end.
-const staticEntries: string[] = [];
+// Each entry pairs the source path (relative to ROOT) with the overlay it
+// belongs to. resolve-static-manifest copies <ROOT>/<path> → <dist/templates>/<overlay>/<path>.
+interface StaticEntry {
+  path: string;
+  overlay: Overlay;
+}
+const staticEntries: StaticEntry[] = [];
 
 // ── Main ──────────────────────────────────────────────────────────────────────
 console.log(`Extracting templates to: ${OUTPUT}`);
@@ -183,14 +262,23 @@ await rm(OUTPUT, { recursive: true, force: true });
 await mkdir(OUTPUT, { recursive: true });
 
 // Process root files
-for (const { src, templateBase } of ROOT_FILES) {
-  await processFile(src, join(OUTPUT, templateBase));
+for (const { src, templateBase, overlay } of ROOT_FILES) {
+  await processFile(src, join(OUTPUT, overlay, templateBase), overlay);
 }
 
 // Process source trees
-for (const { src, templateBase } of SOURCES) {
-  await walkAndProcess(src, join(OUTPUT, templateBase));
+for (const { src, templateBase, overlay } of SOURCES) {
+  await walkAndProcess(src, join(OUTPUT, overlay, templateBase), overlay);
 }
+
+// Copy overlay-override directories verbatim (no substitutions). These are
+// hand-authored EJS/static files that don't have a live source equivalent.
+for (const { src, overlay } of OVERLAY_OVERRIDES) {
+  await copyOverlayOverrides(src, join(OUTPUT, overlay));
+}
+
+// Sort manifest entries for deterministic output (avoid spurious drift)
+staticEntries.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
 
 await mkdir(dirname(MANIFEST_PATH), { recursive: true });
 await writeFile(MANIFEST_PATH, JSON.stringify({ static: staticEntries }, null, 2) + "\n", "utf8");
@@ -199,7 +287,29 @@ console.log(`Done. ${staticEntries.length} static files recorded in manifest.`);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-async function walkAndProcess(srcDir: string, destDir: string): Promise<void> {
+async function copyOverlayOverrides(srcDir: string, destDir: string): Promise<void> {
+  let items: string[];
+  try {
+    items = await readdir(srcDir);
+  } catch {
+    return; // override dir doesn't exist — skip silently
+  }
+
+  for (const item of items) {
+    if (SKIP_DIRS.has(item)) continue;
+    const srcPath = join(srcDir, item);
+    const destPath = join(destDir, item);
+    const info = await stat(srcPath);
+    if (info.isDirectory()) {
+      await copyOverlayOverrides(srcPath, destPath);
+    } else {
+      await mkdir(dirname(destPath), { recursive: true });
+      await copyFile(srcPath, destPath);
+    }
+  }
+}
+
+async function walkAndProcess(srcDir: string, destDir: string, overlay: Overlay): Promise<void> {
   let items: string[];
   try {
     items = await readdir(srcDir);
@@ -209,13 +319,17 @@ async function walkAndProcess(srcDir: string, destDir: string): Promise<void> {
 
   for (const item of items) {
     if (SKIP_DIRS.has(item)) {
-      // Allow a dist/ directory that contains only .gitkeep (stub for frontendDist)
+      // Carve-out: a `dist/` directory containing only an `index.html` stub
+      // is the frontendDist placeholder for tauri-webview-host (and any other
+      // headless Tauri host that lives at a URL). Keep walking it so the stub
+      // ships with the scaffold. Any larger `dist/` is a build artifact and
+      // stays skipped.
       const srcPath = join(srcDir, item);
       const info = await stat(srcPath);
       if (info.isDirectory()) {
         const children = await readdir(srcPath);
-        if (children.length === 1 && children[0] === ".gitkeep") {
-          await walkAndProcess(srcPath, join(destDir, item));
+        if (children.length === 1 && children[0] === "index.html") {
+          await walkAndProcess(srcPath, join(destDir, item), overlay);
         }
       }
       continue;
@@ -224,14 +338,14 @@ async function walkAndProcess(srcDir: string, destDir: string): Promise<void> {
     const destPath = join(destDir, item);
     const info = await stat(srcPath);
     if (info.isDirectory()) {
-      await walkAndProcess(srcPath, destPath);
+      await walkAndProcess(srcPath, destPath, overlay);
     } else {
-      await processFile(srcPath, destPath);
+      await processFile(srcPath, destPath, overlay);
     }
   }
 }
 
-async function processFile(src: string, destWithoutEjs: string): Promise<void> {
+async function processFile(src: string, destWithoutEjs: string, overlay: Overlay): Promise<void> {
   const ext = extname(src);
   const base = src.split("/").pop()!;
 
@@ -272,7 +386,7 @@ async function processFile(src: string, destWithoutEjs: string): Promise<void> {
     await mkdir(dirname(dest), { recursive: true });
     await writeFile(dest, content, "utf8");
   } else {
-    staticEntries.push(relative(ROOT, src));
+    staticEntries.push({ path: relative(ROOT, src), overlay });
   }
 }
 

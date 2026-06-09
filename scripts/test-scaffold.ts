@@ -9,7 +9,7 @@
  */
 
 import { execSync } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
@@ -25,37 +25,99 @@ const { buildContext } = await import(
   join(ROOT, "packages/create-one-terminal/dist/create/context.js")
 );
 
-const OUT = mkdtempSync(join(tmpdir(), "ot-scaffold-test-"));
-console.log(`Scaffolding to: ${OUT}`);
+// CLI: `npx tsx scripts/test-scaffold.ts [--variant standalone|enterprise|both] [--keep]`
+const variantArg = process.argv.indexOf("--variant");
+const variantSelector =
+  variantArg !== -1
+    ? (process.argv[variantArg + 1] as "standalone" | "enterprise" | "both")
+    : "both";
 
-const ctx = buildContext({
-  workspaceName: "test-workspace",
-  tauriIdentifier: "com.test.workspace",
-  includeFdc3: true,
-});
+type Variant = "standalone" | "enterprise";
+const variants: Variant[] =
+  variantSelector === "both" ? ["standalone", "enterprise"] : [variantSelector as Variant];
+
+const outputs: string[] = [];
+let failure: Error | null = null;
 
 try {
-  await renderWorkspace(ctx, OUT);
+  for (const variant of variants) {
+    const OUT = mkdtempSync(join(tmpdir(), `ot-scaffold-test-${variant}-`));
+    outputs.push(OUT);
+    console.log(`\n══ Scaffolding ${variant} → ${OUT}`);
 
-  const fileCount = execSync(`find "${OUT}" -type f | wc -l`, { encoding: "utf8" }).trim();
-  console.log(`✓ Rendered ${fileCount} files`);
+    const ctx = buildContext({
+      workspaceName: "test-workspace",
+      tauriIdentifier: "com.test.workspace",
+      variant,
+      includeFdc3: true,
+    });
 
-  console.log("Running cargo check --workspace…");
-  execSync("cargo check --workspace", { cwd: OUT, stdio: "inherit" });
-  console.log("✓ cargo check passed");
+    await renderWorkspace(ctx, OUT);
 
-  console.log("Running npm install…");
-  execSync("npm install --ignore-scripts", { cwd: OUT, stdio: "inherit" });
-  console.log("✓ npm install passed");
+    // post-scaffold equivalent: write the oneTerminal metadata so new-widget
+    // can detect the workspace variant.
+    const pkgPath = join(OUT, "package.json");
+    const pkg = JSON.parse(readFileSync(pkgPath, "utf8")) as Record<string, unknown>;
+    pkg.oneTerminal = {
+      version: ctx.scaffoldVersion,
+      scaffoldedAt: ctx.scaffoldedAt,
+      variant: ctx.variant,
+    };
+    writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + "\n");
 
-  console.log("Running npm run build:app-directory…");
-  execSync("npm run build:app-directory", { cwd: OUT, stdio: "inherit" });
-  console.log("✓ build:app-directory passed");
+    const fileCount = execSync(`find "${OUT}" -type f | wc -l`, { encoding: "utf8" }).trim();
+    console.log(`✓ Rendered ${fileCount} files`);
 
-  console.log(`\n✓ All checks passed. Output: ${OUT}`);
+    console.log("Running cargo check --workspace…");
+    execSync("cargo check --workspace", { cwd: OUT, stdio: "inherit" });
+    console.log("✓ cargo check passed");
+
+    console.log("Running npm install…");
+    execSync("npm install --ignore-scripts", { cwd: OUT, stdio: "inherit" });
+    console.log("✓ npm install passed");
+
+    if (variant === "enterprise") {
+      console.log("Running npm run build:app-directory…");
+      execSync("npm run build:app-directory", { cwd: OUT, stdio: "inherit" });
+      console.log("✓ build:app-directory passed");
+    }
+
+    // Exercise the inline scripts/new-widget.mjs against the scaffolded workspace.
+    // This mirrors exactly what `npm run create-widget` runs for end users.
+    console.log("Running scripts/new-widget.mjs (non-interactive)…");
+    execSync("node scripts/new-widget.mjs --name smoke-widget --title 'Smoke Widget' --port 3099", {
+      cwd: OUT,
+      stdio: "inherit",
+    });
+    const widgetDir = join(OUT, "apps/smoke-widget");
+    if (!existsSync(join(widgetDir, "server.js"))) {
+      throw new Error("new-widget did not create apps/smoke-widget/server.js");
+    }
+    if (variant === "standalone") {
+      const registry = JSON.parse(readFileSync(join(OUT, "widgets.config.json"), "utf8")) as {
+        widgets: Array<{ appId: string }>;
+      };
+      if (!registry.widgets.some((w) => w.appId === "smoke-widget")) {
+        throw new Error("widgets.config.json was not updated with smoke-widget");
+      }
+    }
+    console.log("✓ new-widget produced apps/smoke-widget and registered it");
+
+    console.log(`✓ ${variant}: all checks passed`);
+  }
+} catch (err) {
+  failure = err as Error;
 } finally {
   if (!keep) {
-    rmSync(OUT, { recursive: true, force: true });
-    if (!keep) console.log("(temp dir cleaned up — use --keep to retain it)");
+    for (const o of outputs) rmSync(o, { recursive: true, force: true });
+    console.log("\n(temp dirs cleaned up — use --keep to retain them)");
+  } else {
+    console.log("\nKept outputs:", outputs.join(", "));
   }
 }
+
+if (failure) {
+  console.error("\n✗ Test failed:", failure.message);
+  process.exit(1);
+}
+console.log("\n✓ All variants passed.");

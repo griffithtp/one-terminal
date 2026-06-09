@@ -1,9 +1,13 @@
+export type Variant = "standalone" | "enterprise";
+
 export interface ScaffoldContext {
   workspaceName: string;
   orgScope: string;
   tauriIdentifier: string;
   displayName: string;
   snakeWorkspaceName: string;
+  variant: Variant;
+  externalFdc3AgentUrl: string;
   terminalDevPort: number;
   agentDevPort: number;
   tcpBrokerPort: number;
@@ -19,6 +23,8 @@ export function buildContext(answers: {
   workspaceName: string;
   tauriIdentifier: string;
   includeFdc3: boolean;
+  variant?: Variant;
+  externalFdc3AgentUrl?: string;
   terminalDevPort?: number;
   agentDevPort?: number;
   tcpBrokerPort?: number;
@@ -32,6 +38,8 @@ export function buildContext(answers: {
     tauriIdentifier: answers.tauriIdentifier,
     displayName: toPascalCase(answers.workspaceName),
     snakeWorkspaceName: toSnakeCase(answers.workspaceName),
+    variant: answers.variant ?? "enterprise",
+    externalFdc3AgentUrl: answers.externalFdc3AgentUrl ?? "",
     terminalDevPort: answers.terminalDevPort ?? 1422,
     agentDevPort: answers.agentDevPort ?? 1421,
     tcpBrokerPort: answers.tcpBrokerPort ?? 7890,
@@ -39,7 +47,7 @@ export function buildContext(answers: {
     dacpBridgePort: answers.dacpBridgePort ?? 4475,
     appDirectoryPort: answers.appDirectoryPort ?? 3005,
     includeFdc3: answers.includeFdc3,
-    scaffoldVersion: "0.1.6",
+    scaffoldVersion: "0.1.7",
     scaffoldedAt: new Date().toISOString().slice(0, 10),
   };
 }

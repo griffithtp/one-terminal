@@ -12,6 +12,12 @@ dist
 dist-ssr
 apps/*/dist/
 packages/*/dist/
+# Exception: tauri-webview-host ships a stub dist/ that satisfies Tauri's
+# frontendDist validation at compile time. It is source-of-truth, not a
+# build artifact, so it must stay tracked in both the framework and any
+# scaffolded workspaces (this .gitignore copies through verbatim).
+!apps/tauri-webview-host/dist/
+!apps/tauri-webview-host/dist/**
 
 # Local development
 .claude/settings.local.json

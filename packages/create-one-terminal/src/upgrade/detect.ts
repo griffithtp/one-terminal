@@ -1,9 +1,12 @@
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
+
+export type Variant = "standalone" | "enterprise";
 
 export interface ProjectMeta {
   version: string;
   scaffoldedAt: string;
+  variant: Variant;
 }
 
 export async function detectProject(cwd: string): Promise<ProjectMeta> {
@@ -26,5 +29,26 @@ export async function detectProject(cwd: string): Promise<ProjectMeta> {
     );
   }
 
-  return { version: meta.version, scaffoldedAt: meta.scaffoldedAt ?? "unknown" };
+  let variant: Variant;
+  if (meta.variant === "standalone" || meta.variant === "enterprise") {
+    variant = meta.variant;
+  } else {
+    // Pre-variant scaffolds: infer from the presence of apps/desktop-agent.
+    variant = (await dirExists(join(cwd, "apps/desktop-agent"))) ? "enterprise" : "standalone";
+  }
+
+  return {
+    version: meta.version,
+    scaffoldedAt: meta.scaffoldedAt ?? "unknown",
+    variant,
+  };
+}
+
+async function dirExists(path: string): Promise<boolean> {
+  try {
+    const info = await stat(path);
+    return info.isDirectory();
+  } catch {
+    return false;
+  }
 }

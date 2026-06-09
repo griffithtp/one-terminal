@@ -1,165 +1,680 @@
 {
   "static": [
-    "Cargo.toml",
-    ".gitignore",
-    "apps/one-terminal/src/App.tsx",
-    "apps/one-terminal/src/commands/appCommands.ts",
-    "apps/one-terminal/src/commands/keybindingStore.ts",
-    "apps/one-terminal/src/commands/keybindingsBridge.ts",
-    "apps/one-terminal/src/commands/keyboardListener.ts",
-    "apps/one-terminal/src/commands/registry.ts",
-    "apps/one-terminal/src/commands/widgetCommands.ts",
-    "apps/one-terminal/src/commands/widgetInstanceCommands.ts",
-    "apps/one-terminal/src/components/AppMenuSidebar.css",
-    "apps/one-terminal/src/components/AppMenuSidebar.tsx",
-    "apps/one-terminal/src/components/CommandPalette.css",
-    "apps/one-terminal/src/components/CommandPalette.tsx",
-    "apps/one-terminal/src/components/DashboardSwitcher.css",
-    "apps/one-terminal/src/components/DashboardSwitcher.tsx",
-    "apps/one-terminal/src/components/DownloadPromptDialog.tsx",
-    "apps/one-terminal/src/components/DropZoneLayer.tsx",
-    "apps/one-terminal/src/components/EnginePickerDialog.tsx",
-    "apps/one-terminal/src/components/GhostLayer.tsx",
-    "apps/one-terminal/src/components/Header.tsx",
-    "apps/one-terminal/src/components/KeybindingsEditor.tsx",
-    "apps/one-terminal/src/components/KeybindingsSettings.css",
-    "apps/one-terminal/src/components/OverlayApp.tsx",
-    "apps/one-terminal/src/components/OverlayConfirmDashboardSwitch.tsx",
-    "apps/one-terminal/src/components/OverlayCreateDashboard.tsx",
-    "apps/one-terminal/src/components/OverlayMenu.tsx",
-    "apps/one-terminal/src/components/PanelHeaderLayer.tsx",
-    "apps/one-terminal/src/components/SplitterHandleLayer.tsx",
-    "apps/one-terminal/src/components/TabStripLayer.tsx",
-    "apps/one-terminal/src/components/contextMenuItems.ts",
-    "apps/one-terminal/src/components/panelHeaders.tsx",
-    "apps/one-terminal/src/components/sections/AddWidgetSection.css",
-    "apps/one-terminal/src/components/sections/AddWidgetSection.tsx",
-    "apps/one-terminal/src/components/sections/DashboardsSection.css",
-    "apps/one-terminal/src/components/sections/DashboardsSection.tsx",
-    "apps/one-terminal/src/components/sections/KeybindingsSection.css",
-    "apps/one-terminal/src/components/sections/KeybindingsSection.tsx",
-    "apps/one-terminal/src/components/sections/ThemeSection.css",
-    "apps/one-terminal/src/components/sections/ThemeSection.tsx",
-    "apps/one-terminal/src/components/sections/UserSettingsSection.css",
-    "apps/one-terminal/src/components/sections/UserSettingsSection.tsx",
-    "apps/one-terminal/src/hooks/useAppDirectory.ts",
-    "apps/one-terminal/src/hooks/useAppLaunch.tsx",
-    "apps/one-terminal/src/hooks/useDashboards.ts",
-    "apps/one-terminal/src/hooks/useHostLayout.ts",
-    "apps/one-terminal/src/hooks/useLayout.ts",
-    "apps/one-terminal/src/hooks/useTabDrag.ts",
-    "apps/one-terminal/src/lib/parkPanels.ts",
-    "apps/one-terminal/src/lib/terminalConfig.ts",
-    "apps/one-terminal/src/main.tsx",
-    "apps/one-terminal/src/settings/userSettingsStore.ts",
-    "apps/one-terminal/src/theme/themeStore.ts",
-    "apps/one-terminal/src/types.ts",
-    "apps/one-terminal/src/wm.css",
-    "apps/one-terminal/src-tauri/capabilities/default.json",
-    "apps/one-terminal/src-tauri/src/config.rs",
-    "apps/one-terminal/src-tauri/src/engine.rs",
-    "apps/one-terminal/src-tauri/src/engines.rs",
-    "apps/one-terminal/src-tauri/src/layout/commands.rs",
-    "apps/one-terminal/src-tauri/src/layout/dashboard.rs",
-    "apps/one-terminal/src-tauri/src/layout/docking.rs",
-    "apps/one-terminal/src-tauri/src/layout/drag.rs",
-    "apps/one-terminal/src-tauri/src/layout/host.rs",
-    "apps/one-terminal/src-tauri/src/layout/mod.rs",
-    "apps/one-terminal/src-tauri/src/layout/node.rs",
-    "apps/one-terminal/src-tauri/src/layout/persist.rs",
-    "apps/one-terminal/src-tauri/src/layout/reflow.rs",
-    "apps/one-terminal/src-tauri/src/layout/store.rs",
-    "apps/one-terminal/src-tauri/src/lib.rs",
-    "apps/one-terminal/src-tauri/src/terminal/manager.rs",
-    "apps/one-terminal/src-tauri/src/terminal/mod.rs",
-    "apps/one-terminal/src-tauri/src/terminal/spawn.rs",
-    "apps/one-terminal/src-tauri/src/terminal/state.rs",
-    "apps/one-terminal/src-tauri/src/webview_pool.rs",
-    "apps/one-terminal/tsconfig.json",
-    "apps/desktop-agent/src/bus/index.ts",
-    "apps/desktop-agent/src/components/ActivityFeed.tsx",
-    "apps/desktop-agent/src/components/BridgeVisualizer.tsx",
-    "apps/desktop-agent/src/components/ChannelsPanel.tsx",
-    "apps/desktop-agent/src/components/ConnectionsPanel.tsx",
-    "apps/desktop-agent/src/components/EngineDevOverride.tsx",
-    "apps/desktop-agent/src/components/IntentResolverModal.tsx",
-    "apps/desktop-agent/src/components/InteropDashboard.tsx",
-    "apps/desktop-agent/src/components/LauncherPanel.tsx",
-    "apps/desktop-agent/src/components/QuitConfirmModal.tsx",
-    "apps/desktop-agent/src/hooks/useAppDirectory.ts",
-    "apps/desktop-agent/src/hooks/useCdaEvents.ts",
-    "apps/desktop-agent/src/hooks/useEngineOverride.ts",
-    "apps/desktop-agent/src/hooks/useFdcBus.ts",
-    "apps/desktop-agent/src/main.tsx",
-    "apps/desktop-agent/src/styles.css",
-    "apps/desktop-agent/src/types.ts",
-    "apps/desktop-agent/src-tauri/capabilities/default.json",
-    "apps/desktop-agent/src-tauri/resources/plugins/cef/manifest.json",
-    "apps/desktop-agent/src-tauri/src/app_dir/mod.rs",
-    "apps/desktop-agent/src-tauri/src/broker/channel_manager.rs",
-    "apps/desktop-agent/src-tauri/src/broker/intent_registry.rs",
-    "apps/desktop-agent/src-tauri/src/broker/mod.rs",
-    "apps/desktop-agent/src-tauri/src/broker/types.rs",
-    "apps/desktop-agent/src-tauri/src/broker/window_manager.rs",
-    "apps/desktop-agent/src-tauri/src/dacp/discovery.rs",
-    "apps/desktop-agent/src-tauri/src/dacp/mod.rs",
-    "apps/desktop-agent/src-tauri/src/dacp/peer.rs",
-    "apps/desktop-agent/src-tauri/src/dacp/registry.rs",
-    "apps/desktop-agent/src-tauri/src/dacp/server.rs",
-    "apps/desktop-agent/src-tauri/src/dacp/types.rs",
-    "apps/desktop-agent/src-tauri/src/engines/catalog.rs",
-    "apps/desktop-agent/src-tauri/src/engines/commands.rs",
-    "apps/desktop-agent/src-tauri/src/engines/mod.rs",
-    "apps/desktop-agent/src-tauri/src/engines/router.rs",
-    "apps/desktop-agent/src-tauri/src/engines/runtime.rs",
-    "apps/desktop-agent/src-tauri/src/fdc3_bus/mod.rs",
-    "apps/desktop-agent/src-tauri/src/tcp/handler.rs",
-    "apps/desktop-agent/src-tauri/src/tcp/mod.rs",
-    "apps/desktop-agent/src-tauri/src/tcp/server.rs",
-    "apps/desktop-agent/tsconfig.json",
-    "apps/desktop-agent/tsconfig.node.json",
-    "apps/tauri-webview-host/src-tauri/Cargo.toml",
-    "apps/tauri-webview-host/src-tauri/capabilities/default.json",
-    "apps/tauri-webview-host/src-tauri/src/main.rs",
-    "apps/app-directory/src/data.ts",
-    "apps/app-directory/src/engines.ts",
-    "apps/app-directory/src/index.ts",
-    "apps/app-directory/src/router.ts",
-    "apps/app-directory/src/types.ts",
-    "apps/app-directory/tsconfig.json",
-    "apps/app-directory/ui/index.html",
-    "apps/app-directory/ui/src/App.tsx",
-    "apps/app-directory/ui/src/components/AppForm.tsx",
-    "apps/app-directory/ui/src/components/AppList.tsx",
-    "apps/app-directory/ui/src/index.css",
-    "apps/app-directory/ui/src/main.tsx",
-    "apps/app-directory/ui/src/types.ts",
-    "apps/app-directory/vite.config.ts",
-    "apps/sample-ticker/README.md",
-    "apps/sample-ticker/index.html",
-    "apps/sample-ticker/server.js",
-    "apps/sample-ticker/sw.js",
-    "apps/sample-chart/README.md",
-    "apps/sample-chart/index.html",
-    "apps/sample-chart/server.js",
-    "apps/sample-chart/sw.js",
-    "apps/electron-host/main.js",
-    "packages/ot-core/Cargo.toml",
-    "packages/ot-core/README.md",
-    "packages/ot-core/src/engine.rs",
-    "packages/ot-core/src/lib.rs",
-    "packages/ot-core/src/plugin.rs",
-    "packages/ot-fdc3/Cargo.toml",
-    "packages/ot-fdc3/src/client.rs",
-    "packages/ot-fdc3/src/commands.rs",
-    "packages/ot-fdc3/src/lib.rs",
-    "packages/ot-fdc3/src/state.rs",
-    "packages/ot-fdc3/src/types.rs",
-    "packages/fdc3-plugin/fdc3-plugin.js",
-    "packages/fdc3-client/src/agent.ts",
-    "packages/fdc3-client/src/bridge-agent.ts",
-    "packages/fdc3-client/src/index.ts",
-    "packages/fdc3-client/src/types.ts",
-    "packages/fdc3-client/tsconfig.json"
+    {
+      "path": ".gitignore",
+      "overlay": "shared"
+    },
+    {
+      "path": "Cargo.toml",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/app-directory/src/data.ts",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/app-directory/src/engines.ts",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/app-directory/src/index.ts",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/app-directory/src/router.ts",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/app-directory/src/types.ts",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/app-directory/tsconfig.json",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/app-directory/ui/index.html",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/app-directory/ui/src/App.tsx",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/app-directory/ui/src/components/AppForm.tsx",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/app-directory/ui/src/components/AppList.tsx",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/app-directory/ui/src/index.css",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/app-directory/ui/src/main.tsx",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/app-directory/ui/src/types.ts",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/app-directory/vite.config.ts",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/desktop-agent/src-tauri/capabilities/default.json",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/desktop-agent/src-tauri/resources/plugins/cef/manifest.json",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/desktop-agent/src-tauri/src/app_dir/mod.rs",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/desktop-agent/src-tauri/src/broker/channel_manager.rs",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/desktop-agent/src-tauri/src/broker/intent_registry.rs",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/desktop-agent/src-tauri/src/broker/mod.rs",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/desktop-agent/src-tauri/src/broker/types.rs",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/desktop-agent/src-tauri/src/broker/window_manager.rs",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/desktop-agent/src-tauri/src/dacp/discovery.rs",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/desktop-agent/src-tauri/src/dacp/mod.rs",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/desktop-agent/src-tauri/src/dacp/peer.rs",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/desktop-agent/src-tauri/src/dacp/registry.rs",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/desktop-agent/src-tauri/src/dacp/server.rs",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/desktop-agent/src-tauri/src/dacp/types.rs",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/desktop-agent/src-tauri/src/engines/catalog.rs",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/desktop-agent/src-tauri/src/engines/commands.rs",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/desktop-agent/src-tauri/src/engines/mod.rs",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/desktop-agent/src-tauri/src/engines/router.rs",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/desktop-agent/src-tauri/src/engines/runtime.rs",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/desktop-agent/src-tauri/src/fdc3_bus/mod.rs",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/desktop-agent/src-tauri/src/tcp/handler.rs",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/desktop-agent/src-tauri/src/tcp/mod.rs",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/desktop-agent/src-tauri/src/tcp/server.rs",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/desktop-agent/src/bus/index.ts",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/desktop-agent/src/components/ActivityFeed.tsx",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/desktop-agent/src/components/BridgeVisualizer.tsx",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/desktop-agent/src/components/ChannelsPanel.tsx",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/desktop-agent/src/components/ConnectionsPanel.tsx",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/desktop-agent/src/components/EngineDevOverride.tsx",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/desktop-agent/src/components/IntentResolverModal.tsx",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/desktop-agent/src/components/InteropDashboard.tsx",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/desktop-agent/src/components/LauncherPanel.tsx",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/desktop-agent/src/components/QuitConfirmModal.tsx",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/desktop-agent/src/hooks/useAppDirectory.ts",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/desktop-agent/src/hooks/useCdaEvents.ts",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/desktop-agent/src/hooks/useEngineOverride.ts",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/desktop-agent/src/hooks/useFdcBus.ts",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/desktop-agent/src/main.tsx",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/desktop-agent/src/styles.css",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/desktop-agent/src/types.ts",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/desktop-agent/tsconfig.json",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/desktop-agent/tsconfig.node.json",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/electron-host/main.js",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/one-terminal/src-tauri/capabilities/default.json",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src-tauri/src/config.rs",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src-tauri/src/engine.rs",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src-tauri/src/engines.rs",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src-tauri/src/layout/commands.rs",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src-tauri/src/layout/dashboard.rs",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src-tauri/src/layout/docking.rs",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src-tauri/src/layout/drag.rs",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src-tauri/src/layout/host.rs",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src-tauri/src/layout/mod.rs",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src-tauri/src/layout/node.rs",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src-tauri/src/layout/persist.rs",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src-tauri/src/layout/reflow.rs",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src-tauri/src/layout/store.rs",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src-tauri/src/lib.rs",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src-tauri/src/terminal/manager.rs",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src-tauri/src/terminal/mod.rs",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src-tauri/src/terminal/spawn.rs",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src-tauri/src/terminal/state.rs",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src-tauri/src/webview_pool.rs",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src-tauri/src/widgets.rs",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/App.tsx",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/commands/appCommands.ts",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/commands/keybindingStore.ts",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/commands/keybindingsBridge.ts",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/commands/keyboardListener.ts",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/commands/registry.ts",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/commands/widgetCommands.ts",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/commands/widgetInstanceCommands.ts",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/components/AppMenuSidebar.css",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/components/AppMenuSidebar.tsx",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/components/CommandPalette.css",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/components/CommandPalette.tsx",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/components/DashboardSwitcher.css",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/components/DashboardSwitcher.tsx",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/components/DownloadPromptDialog.tsx",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/components/DropZoneLayer.tsx",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/components/EmptyDashboardPicker.tsx",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/components/EnginePickerDialog.tsx",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/components/GhostLayer.tsx",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/components/Header.tsx",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/components/KeybindingsEditor.tsx",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/components/KeybindingsSettings.css",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/components/OverlayApp.tsx",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/components/OverlayConfirmDashboardSwitch.tsx",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/components/OverlayCreateDashboard.tsx",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/components/OverlayMenu.tsx",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/components/PanelHeaderLayer.tsx",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/components/SplitterHandleLayer.tsx",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/components/TabStripLayer.tsx",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/components/WidgetCatalog.tsx",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/components/contextMenuItems.ts",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/components/panelHeaders.tsx",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/components/sections/AddWidgetSection.css",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/components/sections/AddWidgetSection.tsx",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/components/sections/DashboardsSection.css",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/components/sections/DashboardsSection.tsx",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/components/sections/KeybindingsSection.css",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/components/sections/KeybindingsSection.tsx",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/components/sections/ThemeSection.css",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/components/sections/ThemeSection.tsx",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/components/sections/UserSettingsSection.css",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/components/sections/UserSettingsSection.tsx",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/hooks/useAppDirectory.ts",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/hooks/useAppLaunch.tsx",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/hooks/useDashboards.ts",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/hooks/useHostLayout.ts",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/hooks/useLayout.ts",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/hooks/useTabDrag.ts",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/lib/parkPanels.ts",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/lib/terminalConfig.ts",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/lib/widgetRegistry.ts",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/main.tsx",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/settings/userSettingsStore.ts",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/theme/themeStore.ts",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/types.ts",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/wm.css",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/tsconfig.json",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/sample-chart/README.md",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/sample-chart/index.html",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/sample-chart/server.js",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/sample-chart/sw.js",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/sample-ticker/README.md",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/sample-ticker/index.html",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/sample-ticker/server.js",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/sample-ticker/sw.js",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/sample-widget/README.md",
+      "overlay": "standalone"
+    },
+    {
+      "path": "apps/sample-widget/index.html",
+      "overlay": "standalone"
+    },
+    {
+      "path": "apps/sample-widget/server.js",
+      "overlay": "standalone"
+    },
+    {
+      "path": "apps/tauri-webview-host/dist/index.html",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/tauri-webview-host/src-tauri/Cargo.toml",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/tauri-webview-host/src-tauri/capabilities/default.json",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/tauri-webview-host/src-tauri/src/main.rs",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "packages/fdc3-client/src/agent.ts",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "packages/fdc3-client/src/bridge-agent.ts",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "packages/fdc3-client/src/index.ts",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "packages/fdc3-client/src/types.ts",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "packages/fdc3-client/tsconfig.json",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "packages/fdc3-plugin/fdc3-plugin.js",
+      "overlay": "shared"
+    },
+    {
+      "path": "packages/ot-core/Cargo.toml",
+      "overlay": "shared"
+    },
+    {
+      "path": "packages/ot-core/README.md",
+      "overlay": "shared"
+    },
+    {
+      "path": "packages/ot-core/src/engine.rs",
+      "overlay": "shared"
+    },
+    {
+      "path": "packages/ot-core/src/lib.rs",
+      "overlay": "shared"
+    },
+    {
+      "path": "packages/ot-core/src/plugin.rs",
+      "overlay": "shared"
+    },
+    {
+      "path": "packages/ot-fdc3/Cargo.toml",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "packages/ot-fdc3/src/client.rs",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "packages/ot-fdc3/src/commands.rs",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "packages/ot-fdc3/src/lib.rs",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "packages/ot-fdc3/src/state.rs",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "packages/ot-fdc3/src/types.rs",
+      "overlay": "enterprise"
+    }
   ]
 }
