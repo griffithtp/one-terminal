@@ -102,7 +102,7 @@ npm run dev:desktop-agent     # separate terminal
 npm run dev:terminal          # separate terminal
 ```
 
-Add new widgets in either variant with `npm run create-widget <name>` (recommended) or `npx create-one-terminal new-widget <name>`. On Standalone the widget is registered in `widgets.config.json`; on Enterprise the wizard prints a curl command for the App Directory (or runs it if `OT_APPD_TOKEN` is set).
+Add new widgets in either variant with `npm run create-widget -- --name <name>` (recommended — runs a workspace-local, dependency-free Node script at `scripts/new-widget.mjs`) or `npx create-one-terminal new-widget <name>` (uses the published scaffolder). On Standalone the widget is registered in `widgets.config.json`; on Enterprise the wizard prints a curl command for the App Directory (or runs it if `OT_APPD_TOKEN` is set).
 
 Enterprise workspaces also ship `apps/app-directory/src/data.ts` for persisting AppD records.
 
@@ -520,7 +520,7 @@ OneTerminal ships a `create-one-terminal` package that generates and upgrades wo
 
 ```sh
 npx create-one-terminal my-terminal             # scaffold a new workspace (Standalone or Enterprise)
-npx create-one-terminal new-widget fx-rates     # scaffold a new widget app under apps/ (or `npm run create-widget fx-rates` inside the workspace)
+npx create-one-terminal new-widget fx-rates     # scaffold a new widget app under apps/ (or `npm run create-widget -- --name fx-rates` inside the workspace)
 npx create-one-terminal upgrade                 # upgrade an existing workspace in place
 ```
 

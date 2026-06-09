@@ -24,9 +24,6 @@ const { renderWorkspace } = await import(
 const { buildContext } = await import(
   join(ROOT, "packages/create-one-terminal/dist/create/context.js")
 );
-const { createWidget } = await import(
-  join(ROOT, "packages/create-one-terminal/dist/new-widget/index.js")
-);
 
 // CLI: `npx tsx scripts/test-scaffold.ts [--variant standalone|enterprise|both] [--keep]`
 const variantArg = process.argv.indexOf("--variant");
@@ -85,14 +82,13 @@ try {
       console.log("✓ build:app-directory passed");
     }
 
-    // Exercise new-widget against the scaffolded workspace.
-    console.log("Running create-one-terminal new-widget…");
-    await createWidget(OUT, {
-      widgetName: "smoke-widget",
-      widgetTitle: "Smoke Widget",
-      widgetPort: 3099,
-      orgScope: "test-workspace",
-    });
+    // Exercise the inline scripts/new-widget.mjs against the scaffolded workspace.
+    // This mirrors exactly what `npm run create-widget` runs for end users.
+    console.log("Running scripts/new-widget.mjs (non-interactive)…");
+    execSync(
+      "node scripts/new-widget.mjs --name smoke-widget --title 'Smoke Widget' --port 3099",
+      { cwd: OUT, stdio: "inherit" }
+    );
     const widgetDir = join(OUT, "apps/smoke-widget");
     if (!existsSync(join(widgetDir, "server.js"))) {
       throw new Error("new-widget did not create apps/smoke-widget/server.js");

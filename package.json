@@ -35,7 +35,7 @@
     "build:scaffolder": "npm -w create-one-terminal run build",
     "scaffold": "node packages/create-one-terminal/dist/index.js",
     "test:scaffold": "npx tsx scripts/test-scaffold.ts",
-    "create-widget": "create-one-terminal new-widget",
+    "create-widget": "node scripts/new-widget.mjs",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
@@ -55,8 +55,5 @@
     "tsx": "^4.19.4",
     "typescript": "~5.8.3",
     "typescript-eslint": "^8.59.2"
-  },
-  "optionalDependencies": {
-    "create-one-terminal": "^0.1.6"
   }
 }

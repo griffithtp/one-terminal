@@ -110,6 +110,10 @@ const SOURCES: Array<{ src: string; templateBase: string; overlay: Overlay }> = 
 // standalone Cargo.toml / package.json. Copied verbatim — no substitutions.
 const OVERLAY_OVERRIDES: Array<{ src: string; overlay: Overlay }> = [
   {
+    src: join(ROOT, "packages/create-one-terminal/overlay-overrides/shared"),
+    overlay: "shared",
+  },
+  {
     src: join(ROOT, "packages/create-one-terminal/overlay-overrides/standalone"),
     overlay: "standalone",
   },
