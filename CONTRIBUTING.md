@@ -277,16 +277,16 @@ If you add a new framework-internal script to the root `package.json` that shoul
 
 ### The `new-widget/` module
 
-| File       | Responsibility                                                                                                                                                                                                                                                                                                                  |
-| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| File       | Responsibility                                                                                                                                                                                                                                                                     |
+| ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `index.ts` | Interactive `npx create-one-terminal new-widget` subcommand + programmatic `createWidget(cwd, spec)` API. Uses `@clack/prompts` and `ejs`. Renders the framework-embedded template at `packages/create-one-terminal/widget-template/*.ejs` (full EJS). Variant-aware registration. |
 
 **Two ways to add a widget to a scaffolded workspace.** Both produce identical output; users pick based on what they have.
 
-| Entrypoint                                       | Where it runs                                          | Dependencies                  | When to use                                                                                            |
-| ------------------------------------------------ | ------------------------------------------------------ | ----------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `npm run create-widget` *(recommended in-workspace)* | `scripts/new-widget.mjs` shipped inside the scaffold | None — Node stdlib only       | Default for end users. Works offline; no network. Uses `<%= var %>` regex substitution on `*.tpl` files. |
-| `npx create-one-terminal new-widget`             | Framework `create-one-terminal` package                | Downloaded by npx on first run | Pre-scaffold or one-off remote use.                                                                    |
+| Entrypoint                                           | Where it runs                                        | Dependencies                   | When to use                                                                                              |
+| ---------------------------------------------------- | ---------------------------------------------------- | ------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| `npm run create-widget` _(recommended in-workspace)_ | `scripts/new-widget.mjs` shipped inside the scaffold | None — Node stdlib only        | Default for end users. Works offline; no network. Uses `<%= var %>` regex substitution on `*.tpl` files. |
+| `npx create-one-terminal new-widget`                 | Framework `create-one-terminal` package              | Downloaded by npx on first run | Pre-scaffold or one-off remote use.                                                                      |
 
 The inline `scripts/new-widget.mjs` (and `scripts/widget-template/*.tpl`) is hand-authored under `packages/create-one-terminal/overlay-overrides/shared/scripts/`. Note the `.tpl` extension on the widget template files — distinct from the framework's `widget-template/*.ejs` so the scaffold-time `render.ts` walker passes them through verbatim instead of trying to EJS-render them with `ScaffoldContext`. Both copies of the template stay in sync by convention; if you change one, change the other. The smoke test exercises the inline script, so divergence shows up immediately.
 

@@ -86,9 +86,13 @@ Either entrypoint asks for a title, picks the next free port (starting at 3010),
 
 ```
 <workspace>/
+├── README.md                     # variant-aware getting-started guide
 ├── Cargo.toml                    # slim Rust workspace
 ├── package.json                  # npm workspace
 ├── widgets.config.json           # local widget registry — the launcher reads this
+├── scripts/
+│   ├── new-widget.mjs            # `npm run create-widget` entry point
+│   └── widget-template/          # boilerplate for new widgets
 ├── apps/
 │   ├── one-terminal/             # Tauri 2 window manager (the Terminal)
 │   └── sample-widget/            # minimal demo widget (port 3012)
@@ -101,8 +105,12 @@ Either entrypoint asks for a title, picks the next free port (starting at 3010),
 
 ```
 <workspace>/
+├── README.md                     # variant-aware getting-started guide
 ├── Cargo.toml                    # full Rust workspace
 ├── package.json                  # npm workspace
+├── scripts/
+│   ├── new-widget.mjs            # `npm run create-widget` entry point
+│   └── widget-template/          # boilerplate for new widgets
 ├── apps/
 │   ├── one-terminal/             # Tauri 2 window manager (the Terminal)
 │   ├── desktop-agent/            # Tauri 2 FDC3 broker + engine launcher

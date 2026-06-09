@@ -85,10 +85,10 @@ try {
     // Exercise the inline scripts/new-widget.mjs against the scaffolded workspace.
     // This mirrors exactly what `npm run create-widget` runs for end users.
     console.log("Running scripts/new-widget.mjs (non-interactive)…");
-    execSync(
-      "node scripts/new-widget.mjs --name smoke-widget --title 'Smoke Widget' --port 3099",
-      { cwd: OUT, stdio: "inherit" }
-    );
+    execSync("node scripts/new-widget.mjs --name smoke-widget --title 'Smoke Widget' --port 3099", {
+      cwd: OUT,
+      stdio: "inherit",
+    });
     const widgetDir = join(OUT, "apps/smoke-widget");
     if (!existsSync(join(widgetDir, "server.js"))) {
       throw new Error("new-widget did not create apps/smoke-widget/server.js");

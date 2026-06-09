@@ -69,8 +69,7 @@ async function main() {
 
   const suggestedPort = await suggestPort();
   const widgetPort =
-    args.port ??
-    Number(await prompt("Dev server port", String(suggestedPort), validatePort));
+    args.port ?? Number(await prompt("Dev server port", String(suggestedPort), validatePort));
 
   const orgScope = await detectOrgScope();
 
@@ -288,8 +287,7 @@ function validatePort(v) {
 }
 
 function validateName(v) {
-  if (!/^[a-z][a-z0-9-]+$/.test(v))
-    throw new Error("Must be lowercase kebab-case (e.g. fx-rates)");
+  if (!/^[a-z][a-z0-9-]+$/.test(v)) throw new Error("Must be lowercase kebab-case (e.g. fx-rates)");
   if (RESERVED.has(v)) throw new Error(`'${v}' is reserved for framework apps`);
 }
 
