@@ -2,6 +2,66 @@
   "schemaVersion": 1,
   "versions": [
     {
+      "version": "0.1.8",
+      "releaseDate": "2026-06-16",
+      "breaking": false,
+      "changelogUrl": "https://github.com/one-terminal/one-terminal/releases/tag/v0.1.8",
+      "migrations": [
+        {
+          "type": "dep-bump",
+          "id": "0.1.8-dep-bump-npm",
+          "target": "apps/desktop-agent/package.json",
+          "description": "Bump @vitejs/plugin-react, vite",
+          "deps": [
+            {
+              "name": "@vitejs/plugin-react",
+              "ecosystem": "npm",
+              "newVersion": "6.0.2"
+            },
+            {
+              "name": "vite",
+              "ecosystem": "npm",
+              "newVersion": "8.0.16"
+            }
+          ],
+          "appliesTo": "enterprise"
+        },
+        {
+          "type": "dep-bump",
+          "id": "0.1.8-dep-bump-npm",
+          "target": "apps/electron-host/package.json",
+          "description": "Bump vite",
+          "deps": [
+            {
+              "name": "vite",
+              "ecosystem": "npm",
+              "newVersion": "8.0.16"
+            }
+          ],
+          "appliesTo": "enterprise"
+        },
+        {
+          "type": "dep-bump",
+          "id": "0.1.8-dep-bump-npm",
+          "target": "apps/one-terminal/package.json",
+          "description": "Bump @vitejs/plugin-react, vite",
+          "deps": [
+            {
+              "name": "@vitejs/plugin-react",
+              "ecosystem": "npm",
+              "newVersion": "6.0.2"
+            },
+            {
+              "name": "vite",
+              "ecosystem": "npm",
+              "newVersion": "8.0.16"
+            }
+          ],
+          "appliesTo": "both"
+        }
+      ]
+    },
+    {
       "version": "0.1.7",
       "releaseDate": "2026-06-09",
       "breaking": false,
