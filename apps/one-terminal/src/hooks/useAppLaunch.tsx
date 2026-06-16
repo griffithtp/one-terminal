@@ -19,7 +19,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { AppRecord, EngineBinding, OsKey } from "../types";
 import { DownloadPromptDialog, type DownloadEvent } from "../components/DownloadPromptDialog";
-import { loadWidgetRegistry } from "../lib/widgetRegistry";
+import { useWidgetCatalog } from "./useWidgetCatalog";
 import { popPark, pushPark } from "../lib/parkPanels";
 
 // ── Tauri-side EngineStatus payload ──────────────────────────────────────────
@@ -93,19 +93,13 @@ export interface UseAppLaunchResult {
 }
 
 export function useAppLaunch({ onOpenTab }: UseAppLaunchOpts): UseAppLaunchResult {
-  const [apps, setApps] = useState<AppRecord[]>([]);
+  // Catalog (union of App Directory + local widgets) with live endpoint refresh.
+  const apps = useWidgetCatalog();
   const [downloadPrompt, setDownloadPrompt] = useState<DownloadPrompt | null>(null);
   const [downloading, setDownloading] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState<DownloadEvent | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const currentOs = useMemo(() => detectCurrentOs(), []);
-
-  // Load the widget catalog from whichever backend the terminal config selects.
-  useEffect(() => {
-    loadWidgetRegistry()
-      .then(setApps)
-      .catch(() => {});
-  }, []);
 
   // ── Park panels while the download dialog is open ───────────────────────
   // The engine picker is overlay-resident now (see `wm_engine_picker_open`)

@@ -66,7 +66,7 @@ export function AddWidgetSection({ apps, enginesFor, onSelect }: Props) {
                 ? `${app.description ?? `Launch ${title}`} — choose engine (${engineCount} available)`
                 : (app.description ?? `Launch ${title}`);
             return (
-              <li key={app.appId}>
+              <li key={app.catalogId ?? app.appId}>
                 <button
                   type="button"
                   className="ot-add-widget__card"
@@ -75,6 +75,13 @@ export function AddWidgetSection({ apps, enginesFor, onSelect }: Props) {
                 >
                   <span className="ot-add-widget__card-head">
                     <span className="ot-add-widget__card-title">{title}</span>
+                    {app.source && (
+                      <span
+                        className={`ot-add-widget__card-source ot-add-widget__card-source--${app.source}`}
+                      >
+                        {app.source === "appd" ? "App Directory" : "Local"}
+                      </span>
+                    )}
                     {engineCount > 1 && (
                       <span className="ot-add-widget__card-badge" aria-hidden>
                         ▾

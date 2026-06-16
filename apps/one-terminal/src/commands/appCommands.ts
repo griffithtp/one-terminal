@@ -1,14 +1,17 @@
+import { getTerminalConfig } from "../lib/terminalConfig";
 import { loadWidgetRegistry } from "../lib/widgetRegistry";
+import { resolveEffectiveUrl } from "../settings/appDirectorySettings";
 import { registry } from "./registry";
 import type { AppRecord } from "../types";
 
 type OpenPanelFn = (appId: string, url: string, title: string) => void;
 
-/** Loads the widget catalog (from App Directory in Enterprise, or the local
- *  registry in Standalone) and registers one "Open <App>" command per entry.
- *  Call once after Tauri is ready. */
+/** Loads the widget catalog (union of the App Directory at the user's effective
+ *  endpoint and the local widgets registry) and registers one "Open <App>"
+ *  command per entry. Call once after Tauri is ready. */
 export async function initAppCommands(onOpen: OpenPanelFn): Promise<void> {
-  const apps: AppRecord[] = await loadWidgetRegistry();
+  const cfg = await getTerminalConfig();
+  const apps: AppRecord[] = await loadWidgetRegistry(resolveEffectiveUrl(cfg.appDirectoryUrl));
   if (apps.length === 0) return;
 
   for (const app of apps) {

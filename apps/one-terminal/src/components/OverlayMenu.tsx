@@ -25,6 +25,7 @@ import { AppMenuSidebar, type SectionDef } from "./AppMenuSidebar";
 import { useAppDirectory } from "../hooks/useAppDirectory";
 import { useDashboards } from "../hooks/useDashboards";
 import { AddWidgetSection } from "./sections/AddWidgetSection";
+import { AppDirectorySection } from "./sections/AppDirectorySection";
 import { DashboardsSection } from "./sections/DashboardsSection";
 import { KeybindingsSection } from "./sections/KeybindingsSection";
 import { ThemeSection } from "./sections/ThemeSection";
@@ -112,6 +113,11 @@ export function OverlayMenu() {
         id: "theme",
         label: "Theme",
         render: () => <ThemeSection />,
+      },
+      {
+        id: "app-directory",
+        label: "App Directory",
+        render: () => <AppDirectorySection />,
       },
       {
         id: "user-settings",
