@@ -28,8 +28,21 @@ http.createServer((req, res) => {
   if (req.url === '/fdc3-plugin.js') {
     filePath = PLUGIN;
   } else {
-    const url = req.url === '/' ? '/index.html' : req.url;
-    filePath = path.join(__dir, url);
+    // Strip the query string, decode, then confine the resolved path to __dir
+    // so crafted requests (e.g. `/../../etc/passwd`) cannot escape the web root.
+    let reqPath;
+    try {
+      reqPath = decodeURIComponent(new URL(req.url, 'http://localhost').pathname);
+    } catch {
+      reqPath = '';
+    }
+    const resolved = path.join(__dir, reqPath === '/' || reqPath === '' ? 'index.html' : reqPath);
+    if (resolved !== __dir && !resolved.startsWith(__dir + path.sep)) {
+      res.writeHead(403, { 'Content-Type': 'text/plain' });
+      res.end('403 Forbidden');
+      return;
+    }
+    filePath = resolved;
   }
 
   fs.readFile(filePath, (err, data) => {
