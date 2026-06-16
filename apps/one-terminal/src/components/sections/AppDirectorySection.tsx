@@ -88,7 +88,9 @@ export function AppDirectorySection() {
           autoComplete="off"
         />
         {!valid && (
-          <span className="ot-app-directory__error">Enter a valid http(s) URL, or leave blank.</span>
+          <span className="ot-app-directory__error">
+            Enter a valid http(s) URL, or leave blank.
+          </span>
         )}
       </label>
 
