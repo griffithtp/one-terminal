@@ -132,6 +132,15 @@ export interface AppRecord {
   version?: string;
   details?: { url?: string };
   categories: string[];
+  /** Which catalog source this record came from (set by `wm_list_apps`). */
+  source?: "local" | "appd";
+  /**
+   * Source-namespaced uniqueness key (`"appd:<appId>"` / `"local:<appId>"`).
+   * Use this — not `appId` — as the list/React key so records with the same
+   * FDC3 `appId` from different sources don't collide. `appId` stays the real
+   * FDC3 identity used for launch / panel headers / context menus.
+   */
+  catalogId?: string;
   /**
    * Per-OS list of supported browser engines. The user picks one before the
    * tab is opened; an empty / missing list means "let the WM use its own

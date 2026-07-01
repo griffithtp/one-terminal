@@ -108,6 +108,22 @@
   color: var(--ot-text-muted);
 }
 
+.ot-add-widget__card-source {
+  flex: 0 0 auto;
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--ot-border-default);
+  color: var(--ot-text-secondary);
+}
+.ot-add-widget__card-source--appd {
+  color: var(--ot-accent);
+  border-color: var(--ot-accent);
+}
+
 .ot-add-widget__card-desc {
   font-size: 11px;
   color: var(--ot-text-secondary);

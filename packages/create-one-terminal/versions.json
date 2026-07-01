@@ -2,6 +2,26 @@
   "schemaVersion": 1,
   "versions": [
     {
+      "version": "0.1.9",
+      "releaseDate": "2026-07-01",
+      "breaking": false,
+      "changelogUrl": "https://github.com/one-terminal/one-terminal/releases/tag/v0.1.9",
+      "migrations": [
+        {
+          "type": "config-merge",
+          "id": "0.1.9-tauri-conf-json",
+          "target": "apps/one-terminal/src-tauri/tauri.conf.json",
+          "description": "Update tauri.conf.json: bundle.resources",
+          "patch": {
+            "bundle": {
+              "resources": ["resources/widgets.config.json"]
+            }
+          },
+          "appliesTo": "both"
+        }
+      ]
+    },
+    {
       "version": "0.1.8",
       "releaseDate": "2026-06-16",
       "breaking": false,

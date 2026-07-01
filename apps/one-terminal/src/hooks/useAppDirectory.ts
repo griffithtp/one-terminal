@@ -12,8 +12,8 @@
  * survive the drawer closing mid-flow.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { loadWidgetRegistry } from "../lib/widgetRegistry";
+import { useCallback, useMemo } from "react";
+import { useWidgetCatalog } from "./useWidgetCatalog";
 import type { AppRecord, EngineBinding, OsKey } from "../types";
 
 function detectCurrentOs(): OsKey {
@@ -29,14 +29,8 @@ export interface UseAppDirectoryResult {
 }
 
 export function useAppDirectory(): UseAppDirectoryResult {
-  const [apps, setApps] = useState<AppRecord[]>([]);
+  const apps = useWidgetCatalog();
   const currentOs = useMemo(() => detectCurrentOs(), []);
-
-  useEffect(() => {
-    loadWidgetRegistry()
-      .then(setApps)
-      .catch(() => {});
-  }, []);
 
   const enginesFor = useCallback(
     (app: AppRecord): EngineBinding[] => app.engineBindings?.[currentOs] ?? [],

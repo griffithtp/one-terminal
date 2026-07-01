@@ -1,0 +1,12 @@
+{
+  "$schema": "https://schemas.one-terminal.dev/widgets.config.v1.json",
+  "widgets": [
+    {
+      "appId": "sample-widget",
+      "title": "Sample Widget",
+      "description": "Local-only widget served from apps/sample-widget (npm run dev:sample-widget).",
+      "url": "http://localhost:3012",
+      "categories": ["sample"]
+    }
+  ]
+}

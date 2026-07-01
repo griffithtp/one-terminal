@@ -33,7 +33,7 @@ Buy-side and sell-side desks have spent the last decade stitching together brows
 
 - **Tiled dashboards with tabs** — drag, split, stack, and rename tabs. Persist multiple dashboards per Terminal and switch between them with one click.
 - **Multiple Terminal instances** — each with its own dashboard list, theme, and configuration.
-- **App Menu drawer** — discover and launch apps registered in the FDC3 App Directory directly from the Terminal.
+- **App Menu drawer** — discover and launch widgets directly from the Terminal. The catalog **combines** the FDC3 App Directory with a local `widgets.config.json`; each entry is badged by source. Point the Terminal at any App Directory endpoint from the drawer's **App Directory** section (persisted per-user, applied live).
 - **Customisable per-app UI** — register custom widget headers and tab context-menu items per `appId` ([see widget extension points](#widget-ui-extension-points)).
 - **Hotkey-driven** — Command Palette ([Epic 06](docs/plans/06-command-palette-hotkeys.md)) is on the roadmap; keybindings configurable today.
 
@@ -248,12 +248,14 @@ The Desktop Agent reads `agent.config.json` (bundled as a resource) and applies 
 
 **Terminal (both variants):**
 
-| Variable                 | Overrides                                                                |
-| ------------------------ | ------------------------------------------------------------------------ |
-| `OT_WIDGET_SOURCE`       | `widgetSource` — `appd` (App Directory) or `local` (widgets.config.json) |
-| `OT_WIDGETS_CONFIG_PATH` | `localWidgetsPath` — path to widgets.config.json (Standalone)            |
-| `OT_FDC3_AGENT_URL`      | `fdc3.agentUrl` — external FDC3 agent WebSocket URL (Standalone)         |
-| `OT_WEBVIEW_POOL_SIZE`   | Pre-warmed webview pool size (default 1)                                 |
+| Variable                 | Overrides                                                                                                                                                             |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `OT_APP_DIR_URL`         | `appDirectoryUrl` — App Directory endpoint (blank disables the App Directory source; can also be overridden per-user from the App Menu → App Directory section)       |
+| `OT_WIDGETS_CONFIG_PATH` | `localWidgetsPath` — path to `widgets.config.json` (default `widgets.config.json`, resolved from the bundle resource dir, a `resources/` dir, or upward from the cwd) |
+| `OT_FDC3_AGENT_URL`      | `fdc3.agentUrl` — external FDC3 agent WebSocket URL (Standalone)                                                                                                      |
+| `OT_WEBVIEW_POOL_SIZE`   | Pre-warmed webview pool size (default 1)                                                                                                                              |
+
+> The Terminal's widget catalog is the **union** of the App Directory (`appDirectoryUrl`) and the local `widgets.config.json` — not an either/or switch. An empty `appDirectoryUrl` disables the remote source; a missing `widgets.config.json` disables the local source. The legacy `OT_WIDGET_SOURCE` / `widgetSource` field is deprecated and no longer selects between sources (retained only for back-compat deserialization).
 
 For the full list (App Directory auth, native-app allowlists, engine cache root), see [CLAUDE.md → Environment variables](CLAUDE.md#environment-variables-expanded).
 

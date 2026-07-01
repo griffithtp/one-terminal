@@ -241,6 +241,10 @@
       "overlay": "shared"
     },
     {
+      "path": "apps/one-terminal/src-tauri/resources/widgets.config.json",
+      "overlay": "shared"
+    },
+    {
       "path": "apps/one-terminal/src-tauri/src/config.rs",
       "overlay": "shared"
     },
@@ -457,6 +461,14 @@
       "overlay": "shared"
     },
     {
+      "path": "apps/one-terminal/src/components/sections/AppDirectorySection.css",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/components/sections/AppDirectorySection.tsx",
+      "overlay": "shared"
+    },
+    {
       "path": "apps/one-terminal/src/components/sections/DashboardsSection.css",
       "overlay": "shared"
     },
@@ -513,6 +525,10 @@
       "overlay": "shared"
     },
     {
+      "path": "apps/one-terminal/src/hooks/useWidgetCatalog.ts",
+      "overlay": "shared"
+    },
+    {
       "path": "apps/one-terminal/src/lib/parkPanels.ts",
       "overlay": "shared"
     },
@@ -526,6 +542,10 @@
     },
     {
       "path": "apps/one-terminal/src/main.tsx",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/settings/appDirectorySettings.ts",
       "overlay": "shared"
     },
     {

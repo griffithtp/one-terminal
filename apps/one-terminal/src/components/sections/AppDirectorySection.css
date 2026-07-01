@@ -1,0 +1,131 @@
+.ot-app-directory {
+  display: flex;
+  flex-direction: column;
+  padding: 16px;
+  gap: 12px;
+  color: var(--ot-text-strong);
+}
+
+.ot-app-directory__head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ot-app-directory__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ot-text-strongest);
+  margin: 0;
+}
+
+.ot-app-directory__subtitle {
+  font-size: 12px;
+  color: var(--ot-text-secondary);
+  margin: 0;
+  line-height: 1.4;
+}
+
+.ot-app-directory__field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ot-app-directory__field-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ot-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.ot-app-directory__input {
+  width: 100%;
+  padding: 6px 10px;
+  background: var(--ot-bg-elevated);
+  border: 1px solid var(--ot-border-default);
+  border-radius: 4px;
+  color: var(--ot-text-strong);
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  outline: none;
+  transition:
+    background 100ms,
+    border-color 100ms;
+}
+.ot-app-directory__input:focus {
+  border-color: var(--ot-accent);
+}
+.ot-app-directory__input::placeholder {
+  color: var(--ot-text-muted);
+}
+
+.ot-app-directory__error {
+  font-size: 11px;
+  color: var(--ot-danger, #e5534b);
+}
+
+.ot-app-directory__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.ot-app-directory__btn {
+  padding: 6px 14px;
+  background: var(--ot-bg-elevated);
+  border: 1px solid var(--ot-border-default);
+  border-radius: 4px;
+  color: var(--ot-text-strong);
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  transition:
+    background 100ms,
+    border-color 100ms,
+    opacity 100ms;
+}
+.ot-app-directory__btn:hover:not(:disabled) {
+  background: var(--ot-bg-elevated-hover);
+  border-color: var(--ot-border-strong);
+}
+.ot-app-directory__btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.ot-app-directory__btn--primary {
+  background: var(--ot-accent);
+  border-color: var(--ot-accent);
+  color: var(--ot-accent-contrast, #fff);
+}
+.ot-app-directory__btn--primary:hover:not(:disabled) {
+  background: var(--ot-accent);
+  filter: brightness(1.08);
+}
+
+.ot-app-directory__effective {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+  padding: 12px;
+  background: var(--ot-bg-elevated);
+  border: 1px solid var(--ot-border-default);
+  border-radius: 6px;
+}
+
+.ot-app-directory__effective-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--ot-text-muted);
+}
+
+.ot-app-directory__effective-url {
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  color: var(--ot-text-strongest);
+  word-break: break-all;
+}

@@ -66,9 +66,11 @@ pub struct Fdc3Config {
 }
 
 // ── Widget source ─────────────────────────────────────────────────────────────
-// Determines where the Terminal looks up its widget catalog. Enterprise scaffolds
-// default to "appd" (HTTP fetch from App Directory). Standalone scaffolds set
-// "local" — the catalog comes from widgets.config.json at the workspace root.
+// Deprecated/non-gating. The launcher now reads the *union* of the App Directory
+// and the local widgets.config.json (see widgets.rs): an empty appDirectoryUrl
+// disables the appd source, a missing widgets.config.json disables the local
+// source. This enum is retained only for back-compat deserialization of older
+// terminal.config.json files and no longer selects between sources.
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]

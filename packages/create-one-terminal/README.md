@@ -43,7 +43,7 @@ OneTerminal scaffolds in one of two shapes:
 - **Standalone** _(default)_ — Terminal + a single sample widget. No Desktop Agent, no App Directory. The Terminal acts as an FDC3 _client_ and joins an external agent over a WebSocket URL you provide. Best for teams that already run an FDC3 agent or want to evaluate the Terminal shell on its own.
 - **Enterprise** — full stack: Terminal, Desktop Agent (broker, FDC3 bus, DACP), App Directory (Express API + React UI), engine plugin runtime, and the `sample-ticker` / `sample-chart` demos. Best for platform teams standing up an in-house FDC3 estate.
 
-Both variants share the Terminal shell, `ot-core`, and `fdc3-plugin` (the browser FDC3 client). The TypeScript `fdc3-client` package is Enterprise-only — it invokes `fdc3_*` Tauri commands that only exist when the bundled `ot-fdc3` plugin ships. The Terminal's widget catalog source switches automatically (`widgets.config.json` on Standalone, App Directory HTTP on Enterprise).
+Both variants share the Terminal shell, `ot-core`, and `fdc3-plugin` (the browser FDC3 client). The TypeScript `fdc3-client` package is Enterprise-only — it invokes `fdc3_*` Tauri commands that only exist when the bundled `ot-fdc3` plugin ships. The Terminal's widget catalog is the **union** of the local `widgets.config.json` and the App Directory: Standalone ships a `widgets.config.json` and leaves the App Directory endpoint blank (so it shows local widgets until you point it at an endpoint from the App Menu → App Directory section), while Enterprise defaults to the bundled App Directory and can additionally ship a `widgets.config.json`. Each catalog entry is badged by source.
 
 ### Adding a widget
 

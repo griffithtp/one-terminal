@@ -113,6 +113,8 @@ The scaffolder produces one of two workspace shapes selected by a prompt:
 - **Standalone** _(default)_ — Terminal + a single sample widget + a local `widgets.config.json` widget registry. No Desktop Agent. The Terminal connects FDC3 to an external agent over a WebSocket URL.
 - **Enterprise** — the full stack: Terminal + Desktop Agent + App Directory + engine plugin runtime + sample ticker/chart.
 
+> **Widget catalog (both variants):** the Terminal launcher shows the **union** of the local `widgets.config.json` and the App Directory — not an either/or switch. The framework repo ships a default `widgets.config.json` at [`apps/one-terminal/src-tauri/resources/widgets.config.json`](apps/one-terminal/src-tauri/resources/widgets.config.json), bundled as a Tauri resource (declared in `src-tauri/tauri.conf.json` → `bundle.resources`) so it resolves in packaged builds too. The App Directory endpoint is user-settable at runtime from the App Menu → App Directory section. The legacy `widgetSource` field is deprecated (no longer gates sources). See [`src-tauri/src/widgets.rs`](apps/one-terminal/src-tauri/src/widgets.rs) `resolve_path` for the resolution order.
+
 Templates are partitioned across three overlays. `render.ts` walks `shared/` first, then the selected variant overlay; collisions are won by the later overlay.
 
 | Overlay       | Contents                                                                                                                                                   | Source                                                                                                                                                           |
@@ -439,11 +441,12 @@ npm run dev:desktop-agent
 npm run dev:terminal
 
 # Optional — sample apps to load inside the Terminal
-npm run dev:sample-ticker          # http://localhost:3010
-npm run dev:sample-chart           # http://localhost:3011
+npm run dev:sample-ticker          # http://localhost:3010  (App Directory app)
+npm run dev:sample-chart           # http://localhost:3011  (App Directory app)
+npm run dev:sample-widget          # http://localhost:3012  (local widgets.config.json widget)
 ```
 
-**Expected:** Desktop Agent connects to App Directory on startup. Terminal window opens and loads the app list. Sample apps appear as launchable entries.
+**Expected:** Desktop Agent connects to App Directory on startup. The Terminal window opens and the App Menu → Add Widget list shows the **combined** catalog — the App Directory apps (`ticker-plant`, `chart-viewer`) plus the local `widgets.config.json` widget (`sample-widget`), each badged by source.
 
 ---
 
