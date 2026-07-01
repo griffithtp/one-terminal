@@ -130,7 +130,7 @@ If `OT_ENGINE_FAMILY` / `OT_ENGINE_VERSION` are unset, the WM defaults to the OS
 | **Session preservation**    | All reparenting reuses the webview process — cookies, localStorage, WebSocket connections, in-page state survive every dock                                                |
 | **Live window resize**      | `on_window_event(Resized)` triggers `reflow` + `emit_host` so the chrome and every panel rect refit the new dimensions                                                     |
 | **Custom window chrome**    | `decorations: false` — minimize / maximize / close buttons are drawn in React and dispatched via `tauri-plugin-window`                                                     |
-| **App launcher**            | Header fetches the FDC3 2.2 App Directory from `http://localhost:3005/v2/apps` and renders a button per app; primary click → open-as-tab, ⊟ → open-as-vertical-split       |
+| **App launcher**            | App Menu → Add Widget lists the combined catalog (local `widgets.config.json` ∪ FDC3 App Directory), badged by source; click → open-as-tab                                  |
 
 ### Empty state
 
@@ -198,14 +198,14 @@ npm install
 npm run dev:terminal
 ```
 
-The app itself doesn't depend on the rest of the monorepo to launch, but the **Header launcher** fetches apps from the App Directory service:
+The app itself doesn't depend on the rest of the monorepo to launch. The App Menu's **Add Widget** catalog is the union of two sources — the local `widgets.config.json` (bundled at `src-tauri/resources/widgets.config.json`) and the FDC3 App Directory service:
 
 ```sh
-# In a separate terminal — required to populate the header app buttons
+# In a separate terminal — populates the App Directory portion of the catalog
 npm run dev:app-directory
 ```
 
-Without the App Directory running, the window opens empty and the launcher row is blank; you can still drive it programmatically via `invoke("wm_open", …)` from devtools.
+Without the App Directory running, the window still opens and shows the local `widgets.config.json` widgets; only the App Directory apps are absent. Each entry is badged by source (`local` / `appd`). You can also drive launches programmatically via `invoke("wm_open", …)` from devtools.
 
 ### Running with the Electron engine
 
@@ -432,13 +432,13 @@ When the dynamic plugin system (Epic 08) lands, `window.OT.plugins.get("contextM
 
 ### Pointing at a different App Directory
 
-Change the constant in [`src/components/Header.tsx`](src/components/Header.tsx):
+Three ways, in precedence order (later wins):
 
-```ts
-const APP_DIR = "http://localhost:3005/v2/apps";
-```
+1. **Config default** — `appDirectoryUrl` in [`src-tauri/resources/terminal.config.json`](src-tauri/resources/terminal.config.json).
+2. **Environment** — `OT_APP_DIR_URL` overrides the config default at launch.
+3. **Per-user, live** — App Menu → **App Directory** section. The entered URL is stored per-user (localStorage) and the catalog re-fetches immediately, no restart. "Reset to default" clears it. Handled by [`src/settings/appDirectorySettings.ts`](src/settings/appDirectorySettings.ts) and [`src/hooks/useWidgetCatalog.ts`](src/hooks/useWidgetCatalog.ts).
 
-The app expects an FDC3 2.2 shape — `{ applications: AppRecord[] }`. See [`src/types.ts:AppRecord`](src/types.ts) for the fields consumed.
+The effective URL is passed to the `wm_list_apps` Tauri command, which fetches it and merges the result with the local `widgets.config.json`. The endpoint must return the FDC3 2.2 shape — `{ applications: AppRecord[] }`; see [`src/types.ts:AppRecord`](src/types.ts) for the fields consumed (records are additionally tagged with `source` / `catalogId`).
 
 ### Vite / Tauri config
 
@@ -524,9 +524,9 @@ Leaves referencing labels that aren't alive are silently skipped by `reflow`, so
 
 ### External services (optional)
 
-| Service                       | URL                             | Used by                                                 |
-| ----------------------------- | ------------------------------- | ------------------------------------------------------- |
-| App Directory (FDC3 2.2 AppD) | `http://localhost:3005/v2/apps` | Header launcher only — the manager runs fine without it |
+| Service                       | URL                             | Used by                                                                                      |
+| ----------------------------- | ------------------------------- | -------------------------------------------------------------------------------------------- |
+| App Directory (FDC3 2.2 AppD) | `http://localhost:3005/v2/apps` | Add Widget catalog — optional; without it the catalog still shows local `widgets.config.json` widgets |
 
 ---
 
