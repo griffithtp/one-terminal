@@ -130,7 +130,7 @@ If `OT_ENGINE_FAMILY` / `OT_ENGINE_VERSION` are unset, the WM defaults to the OS
 | **Session preservation**    | All reparenting reuses the webview process — cookies, localStorage, WebSocket connections, in-page state survive every dock                                                |
 | **Live window resize**      | `on_window_event(Resized)` triggers `reflow` + `emit_host` so the chrome and every panel rect refit the new dimensions                                                     |
 | **Custom window chrome**    | `decorations: false` — minimize / maximize / close buttons are drawn in React and dispatched via `tauri-plugin-window`                                                     |
-| **App launcher**            | App Menu → Add Widget lists the combined catalog (local `widgets.config.json` ∪ FDC3 App Directory), badged by source; click → open-as-tab                                  |
+| **App launcher**            | App Menu → Add Widget lists the combined catalog (local `widgets.config.json` ∪ FDC3 App Directory), badged by source; click → open-as-tab                                 |
 
 ### Empty state
 
@@ -524,8 +524,8 @@ Leaves referencing labels that aren't alive are silently skipped by `reflow`, so
 
 ### External services (optional)
 
-| Service                       | URL                             | Used by                                                                                      |
-| ----------------------------- | ------------------------------- | -------------------------------------------------------------------------------------------- |
+| Service                       | URL                             | Used by                                                                                               |
+| ----------------------------- | ------------------------------- | ----------------------------------------------------------------------------------------------------- |
 | App Directory (FDC3 2.2 AppD) | `http://localhost:3005/v2/apps` | Add Widget catalog — optional; without it the catalog still shows local `widgets.config.json` widgets |
 
 ---

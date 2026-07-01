@@ -248,12 +248,12 @@ The Desktop Agent reads `agent.config.json` (bundled as a resource) and applies 
 
 **Terminal (both variants):**
 
-| Variable                 | Overrides                                                                        |
-| ------------------------ | -------------------------------------------------------------------------------- |
-| `OT_APP_DIR_URL`         | `appDirectoryUrl` — App Directory endpoint (blank disables the App Directory source; can also be overridden per-user from the App Menu → App Directory section) |
+| Variable                 | Overrides                                                                                                                                                             |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `OT_APP_DIR_URL`         | `appDirectoryUrl` — App Directory endpoint (blank disables the App Directory source; can also be overridden per-user from the App Menu → App Directory section)       |
 | `OT_WIDGETS_CONFIG_PATH` | `localWidgetsPath` — path to `widgets.config.json` (default `widgets.config.json`, resolved from the bundle resource dir, a `resources/` dir, or upward from the cwd) |
-| `OT_FDC3_AGENT_URL`      | `fdc3.agentUrl` — external FDC3 agent WebSocket URL (Standalone)                  |
-| `OT_WEBVIEW_POOL_SIZE`   | Pre-warmed webview pool size (default 1)                                          |
+| `OT_FDC3_AGENT_URL`      | `fdc3.agentUrl` — external FDC3 agent WebSocket URL (Standalone)                                                                                                      |
+| `OT_WEBVIEW_POOL_SIZE`   | Pre-warmed webview pool size (default 1)                                                                                                                              |
 
 > The Terminal's widget catalog is the **union** of the App Directory (`appDirectoryUrl`) and the local `widgets.config.json` — not an either/or switch. An empty `appDirectoryUrl` disables the remote source; a missing `widgets.config.json` disables the local source. The legacy `OT_WIDGET_SOURCE` / `widgetSource` field is deprecated and no longer selects between sources (retained only for back-compat deserialization).
 

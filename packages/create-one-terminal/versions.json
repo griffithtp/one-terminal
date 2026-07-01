@@ -14,9 +14,7 @@
           "description": "Update tauri.conf.json: bundle.resources",
           "patch": {
             "bundle": {
-              "resources": [
-                "resources/widgets.config.json"
-              ]
+              "resources": ["resources/widgets.config.json"]
             }
           },
           "appliesTo": "both"
