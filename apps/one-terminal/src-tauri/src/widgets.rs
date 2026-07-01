@@ -17,8 +17,8 @@
 use crate::config::TerminalConfig;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::path::PathBuf;
-use tauri::State;
+use std::path::{Path, PathBuf};
+use tauri::{Manager, State};
 
 /// Entry in widgets.config.json. Subset of FDC3 2.2 AppRecord so it can be
 /// promoted to a full App Directory record later without schema churn.
@@ -48,6 +48,7 @@ pub struct AppDirectoryResponse {
 
 #[tauri::command]
 pub async fn wm_list_apps(
+    app: tauri::AppHandle,
     cfg: State<'_, TerminalConfig>,
     app_directory_url: Option<String>,
 ) -> Result<AppDirectoryResponse, String> {
@@ -72,8 +73,12 @@ pub async fn wm_list_apps(
         }
     };
 
-    // local source — read_local already tolerates a missing file.
-    applications.extend(read_local(&cfg.local_widgets_path)?.applications);
+    // local source — read_local already tolerates a missing file. In a packaged
+    // build the file ships as a Tauri resource, so hand the resolver the app's
+    // resource dir; in dev it falls back to the `resources/` and upward-walk
+    // conventions.
+    let resource_dir = app.path().resource_dir().ok();
+    applications.extend(read_local(&cfg.local_widgets_path, resource_dir.as_deref())?.applications);
 
     Ok(AppDirectoryResponse { applications })
 }
@@ -113,8 +118,8 @@ fn tag_source(app: &mut Value, source: &str) {
     );
 }
 
-fn read_local(path: &str) -> Result<AppDirectoryResponse, String> {
-    let resolved = resolve_path(path);
+fn read_local(path: &str, resource_dir: Option<&Path>) -> Result<AppDirectoryResponse, String> {
+    let resolved = resolve_path(path, resource_dir);
     let text = match &resolved {
         Some(p) => std::fs::read_to_string(p).map_err(|e| format!("{}: {e}", p.display()))?,
         None => {
@@ -137,25 +142,51 @@ fn read_local(path: &str) -> Result<AppDirectoryResponse, String> {
     Ok(AppDirectoryResponse { applications })
 }
 
-/// Search upward from the binary and from cwd for the widgets.config.json file.
-fn resolve_path(path: &str) -> Option<PathBuf> {
+/// Resolve `path` (usually the default `"widgets.config.json"`) to an existing
+/// file. Resolution order:
+///   1. Absolute path as-is.
+///   2. Packaged build — the Tauri resource dir (both `<res>/path` and
+///      `<res>/resources/path`, since bundling can preserve the leading dir).
+///   3. Dev — a `resources/` subdir next to cwd / the binary (mirrors how
+///      `config.rs` finds `terminal.config.json`).
+///   4. Dev / scaffold fallback — walk upward from cwd and the binary, matching
+///      `path` at each ancestor (finds a project-root `widgets.config.json`).
+fn resolve_path(path: &str, resource_dir: Option<&Path>) -> Option<PathBuf> {
     let candidate = PathBuf::from(path);
-    if candidate.is_absolute() && candidate.is_file() {
-        return Some(candidate);
+    if candidate.is_absolute() {
+        return candidate.is_file().then_some(candidate);
     }
 
-    let mut search_roots: Vec<PathBuf> = Vec::new();
-    if let Ok(cwd) = std::env::current_dir() {
-        search_roots.push(cwd);
-    }
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(parent) = exe.parent() {
-            search_roots.push(parent.to_path_buf());
+    let bases: Vec<PathBuf> = {
+        let mut v = Vec::new();
+        if let Ok(cwd) = std::env::current_dir() {
+            v.push(cwd);
         }
+        if let Ok(exe) = std::env::current_exe() {
+            if let Some(parent) = exe.parent() {
+                v.push(parent.to_path_buf());
+            }
+        }
+        v
+    };
+
+    // 2 + 3: explicit candidates (resource dir, then `resources/` conventions).
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    if let Some(rd) = resource_dir {
+        candidates.push(rd.join(path));
+        candidates.push(rd.join("resources").join(path));
+    }
+    for base in &bases {
+        candidates.push(base.join("resources").join(path));
+        candidates.push(base.join(path));
+    }
+    if let Some(hit) = candidates.into_iter().find(|p| p.is_file()) {
+        return Some(hit);
     }
 
-    for root in search_roots {
-        let mut here = Some(root.as_path());
+    // 4: upward walk from each base.
+    for base in &bases {
+        let mut here = Some(base.as_path());
         while let Some(dir) = here {
             let candidate = dir.join(path);
             if candidate.is_file() {

@@ -241,6 +241,10 @@
       "overlay": "shared"
     },
     {
+      "path": "apps/one-terminal/src-tauri/resources/widgets.config.json",
+      "overlay": "shared"
+    },
+    {
       "path": "apps/one-terminal/src-tauri/src/config.rs",
       "overlay": "shared"
     },
