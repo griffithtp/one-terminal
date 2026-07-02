@@ -18,7 +18,12 @@ async fn body_json(resp: axum::response::Response) -> Value {
 #[tokio::test]
 async fn health_ok() {
     let resp = app()
-        .oneshot(Request::builder().uri("/health").body(Body::empty()).unwrap())
+        .oneshot(
+            Request::builder()
+                .uri("/health")
+                .body(Body::empty())
+                .unwrap(),
+        )
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
@@ -30,7 +35,12 @@ async fn health_ok() {
 #[tokio::test]
 async fn list_apps_returns_seed_data() {
     let resp = app()
-        .oneshot(Request::builder().uri("/v2/apps").body(Body::empty()).unwrap())
+        .oneshot(
+            Request::builder()
+                .uri("/v2/apps")
+                .body(Body::empty())
+                .unwrap(),
+        )
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
@@ -60,7 +70,12 @@ async fn filter_by_app_id() {
 #[tokio::test]
 async fn get_app_not_found() {
     let resp = app()
-        .oneshot(Request::builder().uri("/v2/apps/nope").body(Body::empty()).unwrap())
+        .oneshot(
+            Request::builder()
+                .uri("/v2/apps/nope")
+                .body(Body::empty())
+                .unwrap(),
+        )
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::NOT_FOUND);
@@ -109,7 +124,12 @@ async fn create_get_update_delete_roundtrip() {
     // Get it back
     let resp = a
         .clone()
-        .oneshot(Request::builder().uri("/v2/apps/test-app").body(Body::empty()).unwrap())
+        .oneshot(
+            Request::builder()
+                .uri("/v2/apps/test-app")
+                .body(Body::empty())
+                .unwrap(),
+        )
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
@@ -153,7 +173,12 @@ async fn create_get_update_delete_roundtrip() {
 
     // Now gone
     let resp = a
-        .oneshot(Request::builder().uri("/v2/apps/test-app").body(Body::empty()).unwrap())
+        .oneshot(
+            Request::builder()
+                .uri("/v2/apps/test-app")
+                .body(Body::empty())
+                .unwrap(),
+        )
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::NOT_FOUND);
@@ -188,7 +213,12 @@ async fn invalid_engine_binding_rejected() {
 #[tokio::test]
 async fn engines_catalog_served() {
     let resp = app()
-        .oneshot(Request::builder().uri("/v2/engines").body(Body::empty()).unwrap())
+        .oneshot(
+            Request::builder()
+                .uri("/v2/engines")
+                .body(Body::empty())
+                .unwrap(),
+        )
         .await
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);

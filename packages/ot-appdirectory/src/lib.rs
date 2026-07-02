@@ -9,6 +9,14 @@ pub mod engines;
 pub mod filter;
 pub mod router;
 pub mod types;
+pub mod ui;
 
 pub use data::AppStore;
 pub use router::router;
+
+/// The API router (`router()`) plus the embedded React admin UI served as a
+/// catch-all fallback. Used by both `desktop-agent`'s in-process mount and
+/// the standalone `app-directory-server` binary.
+pub fn router_with_ui(store: AppStore) -> axum::Router {
+    ui::serve_ui(router(store))
+}

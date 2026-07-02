@@ -9,7 +9,10 @@ use std::sync::Arc;
 use serde_json::json;
 use tokio::sync::RwLock;
 
-use crate::types::{AppD, AppDetails, AppType, Icon, Interop, IntentDef, IntentInterop, Screenshot, UserChannelInterop};
+use crate::types::{
+    AppD, AppDetails, AppType, Icon, IntentDef, IntentInterop, Interop, Screenshot,
+    UserChannelInterop,
+};
 use ot_core::engine::{EngineBinding, EngineFamily, OsKey};
 
 fn seed_apps() -> Vec<AppD> {
@@ -19,7 +22,9 @@ fn seed_apps() -> Vec<AppD> {
             app_id: "ticker-plant".into(),
             name: "Ticker-Plant".into(),
             app_type: AppType::Web,
-            details: AppDetails { url: "http://localhost:3010".into() },
+            details: AppDetails {
+                url: "http://localhost:3010".into(),
+            },
 
             title: Some("Market Data Ticker Plant".into()),
             description: Some(
@@ -40,8 +45,16 @@ fn seed_apps() -> Vec<AppD> {
             categories: Some(vec!["Market Data".into(), "Data Feed".into(), "FX".into()]),
 
             icons: Some(vec![
-                Icon { src: "http://localhost:3005/static/icons/ticker-plant.svg".into(), size: Some("32x32".into()), icon_type: Some("image/svg+xml".into()) },
-                Icon { src: "http://localhost:3005/static/icons/ticker-plant-128.png".into(), size: Some("128x128".into()), icon_type: Some("image/png".into()) },
+                Icon {
+                    src: "http://localhost:3005/static/icons/ticker-plant.svg".into(),
+                    size: Some("32x32".into()),
+                    icon_type: Some("image/svg+xml".into()),
+                },
+                Icon {
+                    src: "http://localhost:3005/static/icons/ticker-plant-128.png".into(),
+                    size: Some("128x128".into()),
+                    icon_type: Some("image/png".into()),
+                },
             ]),
 
             screenshots: Some(vec![
@@ -52,7 +65,8 @@ fn seed_apps() -> Vec<AppD> {
                     label: Some("Live EUR/USD, GBP/USD and USD/JPY spot rates".into()),
                 },
                 Screenshot {
-                    src: "http://localhost:3005/static/screenshots/ticker-plant-settings.png".into(),
+                    src: "http://localhost:3005/static/screenshots/ticker-plant-settings.png"
+                        .into(),
                     size: Some("1280x720".into()),
                     screenshot_type: Some("image/png".into()),
                     label: Some("Feed configuration — symbols, precision, throttle".into()),
@@ -87,14 +101,29 @@ fn seed_apps() -> Vec<AppD> {
             )])),
 
             custom_config: Some(HashMap::from([
-                ("symbols".to_string(), json!(["EUR/USD", "GBP/USD", "USD/JPY", "AUD/USD", "USD/CHF"])),
+                (
+                    "symbols".to_string(),
+                    json!(["EUR/USD", "GBP/USD", "USD/JPY", "AUD/USD", "USD/CHF"]),
+                ),
                 ("tickIntervalMs".to_string(), json!(250)),
                 ("precisionOverride".to_string(), json!({ "USD/JPY": 3 })),
             ])),
 
             engine_bindings: Some(HashMap::from([
-                (OsKey::Windows, vec![EngineBinding { family: EngineFamily::Webview2, version: "system".into() }]),
-                (OsKey::Macos, vec![EngineBinding { family: EngineFamily::Wkwebview, version: "system".into() }]),
+                (
+                    OsKey::Windows,
+                    vec![EngineBinding {
+                        family: EngineFamily::Webview2,
+                        version: "system".into(),
+                    }],
+                ),
+                (
+                    OsKey::Macos,
+                    vec![EngineBinding {
+                        family: EngineFamily::Wkwebview,
+                        version: "system".into(),
+                    }],
+                ),
             ])),
         },
         // ── Chart-Viewer ────────────────────────────────────────────────────
@@ -102,7 +131,9 @@ fn seed_apps() -> Vec<AppD> {
             app_id: "chart-viewer".into(),
             name: "Chart-Viewer".into(),
             app_type: AppType::Web,
-            details: AppDetails { url: "http://localhost:3011".into() },
+            details: AppDetails {
+                url: "http://localhost:3011".into(),
+            },
 
             title: Some("FX Candlestick Chart Viewer".into()),
             description: Some(
@@ -120,11 +151,24 @@ fn seed_apps() -> Vec<AppD> {
             support_email: Some("support@one-terminal.local".into()),
             more_info: Some("https://docs.one-terminal.local/chart-viewer".into()),
 
-            categories: Some(vec!["Analytics".into(), "Charting".into(), "FX".into(), "Trading".into()]),
+            categories: Some(vec![
+                "Analytics".into(),
+                "Charting".into(),
+                "FX".into(),
+                "Trading".into(),
+            ]),
 
             icons: Some(vec![
-                Icon { src: "http://localhost:3005/static/icons/chart-viewer.svg".into(), size: Some("32x32".into()), icon_type: Some("image/svg+xml".into()) },
-                Icon { src: "http://localhost:3005/static/icons/chart-viewer-128.png".into(), size: Some("128x128".into()), icon_type: Some("image/png".into()) },
+                Icon {
+                    src: "http://localhost:3005/static/icons/chart-viewer.svg".into(),
+                    size: Some("32x32".into()),
+                    icon_type: Some("image/svg+xml".into()),
+                },
+                Icon {
+                    src: "http://localhost:3005/static/icons/chart-viewer-128.png".into(),
+                    size: Some("128x128".into()),
+                    icon_type: Some("image/png".into()),
+                },
             ]),
 
             screenshots: Some(vec![
@@ -145,16 +189,22 @@ fn seed_apps() -> Vec<AppD> {
             interop: Some(Interop {
                 intents: Some(IntentInterop {
                     listens_for: Some(HashMap::from([
-                        ("ViewChart".to_string(), IntentDef {
-                            display_name: Some("View Chart".into()),
-                            contexts: vec!["fdc3.instrument".into()],
-                            result_type: Some("fdc3.chart".into()),
-                        }),
-                        ("ViewQuote".to_string(), IntentDef {
-                            display_name: Some("View Quote".into()),
-                            contexts: vec!["fdc3.instrument".into()],
-                            result_type: None,
-                        }),
+                        (
+                            "ViewChart".to_string(),
+                            IntentDef {
+                                display_name: Some("View Chart".into()),
+                                contexts: vec!["fdc3.instrument".into()],
+                                result_type: Some("fdc3.chart".into()),
+                            },
+                        ),
+                        (
+                            "ViewQuote".to_string(),
+                            IntentDef {
+                                display_name: Some("View Quote".into()),
+                                contexts: vec!["fdc3.instrument".into()],
+                                result_type: None,
+                            },
+                        ),
                     ])),
                     raises: None,
                 }),
@@ -181,23 +231,50 @@ fn seed_apps() -> Vec<AppD> {
             custom_config: Some(HashMap::from([
                 ("defaultSymbol".to_string(), json!("EUR/USD")),
                 ("defaultTimeframe".to_string(), json!("1H")),
-                ("availableTimeframes".to_string(), json!(["1M", "5M", "15M", "30M", "1H", "4H", "1D", "1W"])),
-                ("indicators".to_string(), json!({
-                    "default": ["EMA(20)", "EMA(50)", "Volume"],
-                    "available": ["SMA", "EMA", "VWAP", "Bollinger", "RSI", "MACD", "ATR"]
-                })),
+                (
+                    "availableTimeframes".to_string(),
+                    json!(["1M", "5M", "15M", "30M", "1H", "4H", "1D", "1W"]),
+                ),
+                (
+                    "indicators".to_string(),
+                    json!({
+                        "default": ["EMA(20)", "EMA(50)", "Volume"],
+                        "available": ["SMA", "EMA", "VWAP", "Bollinger", "RSI", "MACD", "ATR"]
+                    }),
+                ),
             ])),
 
             engine_bindings: Some(HashMap::from([
-                (OsKey::Windows, vec![
-                    EngineBinding { family: EngineFamily::Webview2, version: "system".into() },
-                    EngineBinding { family: EngineFamily::Webview2, version: "124.0.2478.97".into() },
-                    EngineBinding { family: EngineFamily::Electron, version: "system".into() },
-                ]),
-                (OsKey::Macos, vec![
-                    EngineBinding { family: EngineFamily::Wkwebview, version: "system".into() },
-                    EngineBinding { family: EngineFamily::Electron, version: "system".into() },
-                ]),
+                (
+                    OsKey::Windows,
+                    vec![
+                        EngineBinding {
+                            family: EngineFamily::Webview2,
+                            version: "system".into(),
+                        },
+                        EngineBinding {
+                            family: EngineFamily::Webview2,
+                            version: "124.0.2478.97".into(),
+                        },
+                        EngineBinding {
+                            family: EngineFamily::Electron,
+                            version: "system".into(),
+                        },
+                    ],
+                ),
+                (
+                    OsKey::Macos,
+                    vec![
+                        EngineBinding {
+                            family: EngineFamily::Wkwebview,
+                            version: "system".into(),
+                        },
+                        EngineBinding {
+                            family: EngineFamily::Electron,
+                            version: "system".into(),
+                        },
+                    ],
+                ),
             ])),
         },
     ]
@@ -211,7 +288,9 @@ pub struct AppStore {
 
 impl Default for AppStore {
     fn default() -> Self {
-        Self { inner: Arc::new(RwLock::new(seed_apps())) }
+        Self {
+            inner: Arc::new(RwLock::new(seed_apps())),
+        }
     }
 }
 
@@ -225,7 +304,12 @@ impl AppStore {
     }
 
     pub async fn get_by_id(&self, app_id: &str) -> Option<AppD> {
-        self.inner.read().await.iter().find(|a| a.app_id == app_id).cloned()
+        self.inner
+            .read()
+            .await
+            .iter()
+            .find(|a| a.app_id == app_id)
+            .cloned()
     }
 
     pub async fn exists(&self, app_id: &str) -> bool {

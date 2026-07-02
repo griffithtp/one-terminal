@@ -748,7 +748,7 @@ pub fn run() {
                     match tokio::net::TcpListener::bind(("127.0.0.1", port)).await {
                         Ok(listener) => {
                             println!("[desktop-agent] App Directory (embedded) listening on 127.0.0.1:{port}");
-                            let router = ot_appdirectory::router(ot_appdirectory::AppStore::new());
+                            let router = ot_appdirectory::router_with_ui(ot_appdirectory::AppStore::new());
                             if let Err(e) = axum::serve(listener, router).await {
                                 eprintln!("[desktop-agent] App Directory server error: {e}");
                             }

@@ -4,6 +4,7 @@ members = [
     "apps/one-terminal/src-tauri",
     "apps/desktop-agent/src-tauri",
     "apps/tauri-webview-host/src-tauri",
+    "apps/app-directory-server",
     "packages/ot-core",
     "packages/ot-fdc3",
     "packages/ot-appdirectory",

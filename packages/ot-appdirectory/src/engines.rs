@@ -47,7 +47,8 @@ pub fn catalog() -> EngineCatalog {
                 version: "29.3.0".into(),
                 label: "Electron 29 (Chromium 122)".into(),
                 download: Some(EngineDownload {
-                    url: "https://engines.internal/electron/29.3.0/electron-darwin-arm64.zip".into(),
+                    url: "https://engines.internal/electron/29.3.0/electron-darwin-arm64.zip"
+                        .into(),
                     sha256: "0".repeat(64),
                     size_bytes: 220_000_000,
                 }),

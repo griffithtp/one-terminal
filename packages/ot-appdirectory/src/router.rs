@@ -31,7 +31,10 @@ pub fn router(store: AppStore) -> Router {
     let v2 = Router::new()
         .route("/engines", get(get_engines))
         .route("/apps", get(list_apps).post(create_app))
-        .route("/apps/:app_id", get(get_app).put(update_app).delete(delete_app));
+        .route(
+            "/apps/:app_id",
+            get(get_app).put(update_app).delete(delete_app),
+        );
 
     Router::new()
         .route("/health", get(health))
@@ -44,7 +47,10 @@ async fn health() -> impl IntoResponse {
 }
 
 async fn get_engines() -> impl IntoResponse {
-    Json(EngineCatalogResponse { engines: engines::catalog(), message: "OK".into() })
+    Json(EngineCatalogResponse {
+        engines: engines::catalog(),
+        message: "OK".into(),
+    })
 }
 
 #[derive(Deserialize)]
@@ -53,18 +59,30 @@ struct ListAppsQuery {
     filter: Option<String>,
 }
 
-async fn list_apps(State(state): State<AppState>, Query(q): Query<ListAppsQuery>) -> impl IntoResponse {
+async fn list_apps(
+    State(state): State<AppState>,
+    Query(q): Query<ListAppsQuery>,
+) -> impl IntoResponse {
     let mut results = state.store.get_all().await;
     if let Some(filter) = q.filter.as_deref().map(str::trim).filter(|f| !f.is_empty()) {
         results = apply_filter(results, filter);
     }
-    Json(AppsListResponse { applications: results, message: "OK".into() })
+    Json(AppsListResponse {
+        applications: results,
+        message: "OK".into(),
+    })
 }
 
 async fn get_app(State(state): State<AppState>, Path(app_id): Path<String>) -> impl IntoResponse {
     match state.store.get_by_id(&app_id).await {
         Some(app) => Json(app).into_response(),
-        None => (StatusCode::NOT_FOUND, Json(ErrorResponse { message: "AppNotFound".into() })).into_response(),
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse {
+                message: "AppNotFound".into(),
+            }),
+        )
+            .into_response(),
     }
 }
 
@@ -72,17 +90,29 @@ async fn create_app(State(state): State<AppState>, Json(body): Json<AppD>) -> im
     if body.details.url.is_empty() || body.app_id.is_empty() || body.name.is_empty() {
         return (
             StatusCode::BAD_REQUEST,
-            Json(ErrorResponse { message: "Missing required fields: appId, name, type, details.url".into() }),
+            Json(ErrorResponse {
+                message: "Missing required fields: appId, name, type, details.url".into(),
+            }),
         )
             .into_response();
     }
 
     if let Some(err) = validate_engine_bindings(&body.engine_bindings) {
-        return (StatusCode::BAD_REQUEST, Json(ErrorResponse { message: err })).into_response();
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse { message: err }),
+        )
+            .into_response();
     }
 
     if state.store.exists(&body.app_id).await {
-        return (StatusCode::CONFLICT, Json(ErrorResponse { message: "AppAlreadyExists".into() })).into_response();
+        return (
+            StatusCode::CONFLICT,
+            Json(ErrorResponse {
+                message: "AppAlreadyExists".into(),
+            }),
+        )
+            .into_response();
     }
 
     state.store.insert(body.clone()).await;
@@ -97,27 +127,48 @@ async fn update_app(
     if body.details.url.is_empty() || body.app_id.is_empty() || body.name.is_empty() {
         return (
             StatusCode::BAD_REQUEST,
-            Json(ErrorResponse { message: "Missing required fields: appId, name, type, details.url".into() }),
+            Json(ErrorResponse {
+                message: "Missing required fields: appId, name, type, details.url".into(),
+            }),
         )
             .into_response();
     }
 
     if let Some(err) = validate_engine_bindings(&body.engine_bindings) {
-        return (StatusCode::BAD_REQUEST, Json(ErrorResponse { message: err })).into_response();
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse { message: err }),
+        )
+            .into_response();
     }
 
     if state.store.replace(&app_id, body.clone()).await {
         Json(body).into_response()
     } else {
-        (StatusCode::NOT_FOUND, Json(ErrorResponse { message: "AppNotFound".into() })).into_response()
+        (
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse {
+                message: "AppNotFound".into(),
+            }),
+        )
+            .into_response()
     }
 }
 
-async fn delete_app(State(state): State<AppState>, Path(app_id): Path<String>) -> impl IntoResponse {
+async fn delete_app(
+    State(state): State<AppState>,
+    Path(app_id): Path<String>,
+) -> impl IntoResponse {
     if state.store.remove(&app_id).await {
         StatusCode::NO_CONTENT.into_response()
     } else {
-        (StatusCode::NOT_FOUND, Json(ErrorResponse { message: "AppNotFound".into() })).into_response()
+        (
+            StatusCode::NOT_FOUND,
+            Json(ErrorResponse {
+                message: "AppNotFound".into(),
+            }),
+        )
+            .into_response()
     }
 }
 
@@ -144,7 +195,10 @@ fn validate_engine_bindings(
             }
             let key = format!("{}@{}", binding.family, binding.version);
             if !seen.insert(key.clone()) {
-                return Some(format!("engineBindings.{}: duplicate entry {key}", os.as_dir()));
+                return Some(format!(
+                    "engineBindings.{}: duplicate entry {key}",
+                    os.as_dir()
+                ));
             }
         }
     }
