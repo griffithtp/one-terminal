@@ -734,6 +734,34 @@ pub fn run() {
 
             let ec = app.state::<EngineCatalogClient>().inner().clone();
 
+            // In-process App Directory server (docs/plans/07-deployment-and-hosting.md
+            // Issue 07-E). Bound to app_directory_url's port so the existing
+            // AppDirectoryCache/EngineCatalogClient reqwest clients below talk to
+            // it over loopback exactly as they would to a remote instance. Skipped
+            // when OT_APPD_EMBEDDED=0 (pointing OT_APP_DIR_URL at a remote/hosted
+            // App Directory instead) or when the port is already taken by
+            // something else (e.g. a dev-mode `npm run dev:app-directory`).
+            let appd_cfg = app.state::<AgentConfig>().inner().clone();
+            if appd_cfg.appd_embedded {
+                let port = config::port_from_url(&appd_cfg.app_directory_url);
+                tauri::async_runtime::spawn(async move {
+                    match tokio::net::TcpListener::bind(("127.0.0.1", port)).await {
+                        Ok(listener) => {
+                            println!("[desktop-agent] App Directory (embedded) listening on 127.0.0.1:{port}");
+                            let router = ot_appdirectory::router(ot_appdirectory::AppStore::new());
+                            if let Err(e) = axum::serve(listener, router).await {
+                                eprintln!("[desktop-agent] App Directory server error: {e}");
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!(
+                                "[desktop-agent] App Directory (embedded) skipped — port {port} unavailable: {e}"
+                            );
+                        }
+                    }
+                });
+            }
+
             // TCP loopback server for spoke apps.
             tauri::async_runtime::spawn(tcp::server::start(
                 ports.tcp_broker,
