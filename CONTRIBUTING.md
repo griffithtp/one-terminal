@@ -28,6 +28,8 @@ This guide covers how the framework is structured for contribution, with a focus
   - [`structural`](#structural)
 - [Testing Changes Locally](#testing-changes-locally)
   - [Test the framework itself](#test-the-framework-itself)
+  - [Test the App Directory bundle (Rust)](#test-the-app-directory-bundle-rust)
+  - [Test a local release bundle](#test-a-local-release-bundle)
   - [Test a scaffolded workspace](#test-a-scaffolded-workspace)
   - [Test the upgrade path](#test-the-upgrade-path)
 - [Publishing a Release](#publishing-a-release)
@@ -428,25 +430,129 @@ cargo check --workspace
 npm run build:scaffolder
 ```
 
-Then start all services to confirm everything connects end-to-end:
+App Directory's REST API is served **in-process by Desktop Agent** (`packages/ot-appdirectory`, mounted on `127.0.0.1:3005` at startup) — there is no separate server process to start for local dev. `npm run dev:app-directory` now only runs the React admin UI's Vite dev server (`http://localhost:5174`, proxying `/v2` and `/health` to whatever is listening on `:3005`); use it only when you're actively editing the admin UI itself.
+
+Start services to confirm everything connects end-to-end:
 
 ```sh
-# Terminal 1 — App Directory (must start first)
-npm run dev:app-directory       # http://localhost:3005
-
-# Terminal 2 — Desktop Agent (FDC3 broker)
+# Terminal 1 — Desktop Agent (FDC3 broker + embedded App Directory)
 npm run dev:desktop-agent
 
-# Terminal 3 — Terminal window manager
+# Terminal 2 — Terminal window manager
 npm run dev:terminal
 
 # Optional — sample apps to load inside the Terminal
 npm run dev:sample-ticker          # http://localhost:3010  (App Directory app)
 npm run dev:sample-chart           # http://localhost:3011  (App Directory app)
 npm run dev:sample-widget          # http://localhost:3012  (local widgets.config.json widget)
+
+# Optional — only if editing the App Directory admin UI
+npm run dev:app-directory          # http://localhost:5174
 ```
 
-**Expected:** Desktop Agent connects to App Directory on startup. The Terminal window opens and the App Menu → Add Widget list shows the **combined** catalog — the App Directory apps (`ticker-plant`, `chart-viewer`) plus the local `widgets.config.json` widget (`sample-widget`), each badged by source.
+**Expected:** Desktop Agent's log shows `App Directory (embedded) listening on 127.0.0.1:3005` followed by `App Directory cache refreshed: 2 record(s)` (its own client fetching from the server it just started, over loopback). The Terminal window opens and the App Menu → Add Widget list shows the **combined** catalog — the App Directory apps (`ticker-plant`, `chart-viewer`) plus the local `widgets.config.json` widget (`sample-widget`), each badged by source.
+
+If you need to point Desktop Agent at a different App Directory instead of the embedded one (e.g. a hosted deployment, or the standalone binary below), set `OT_APP_DIR_URL=<url>` and `OT_APPD_EMBEDDED=0` before starting it.
+
+---
+
+### Test the App Directory bundle (Rust)
+
+App Directory's server (`apps/app-directory/src/*.ts` in earlier versions of this repo) is now `packages/ot-appdirectory`, a Rust crate with two consumers: the in-process mount inside `desktop-agent` (tested above) and the standalone `apps/app-directory-server` binary used for Docker/hosted deployments and for verifying a release build in isolation. Test both when touching anything under `packages/ot-appdirectory/`.
+
+**Unit and integration tests** (types, seed catalogue, `$filter` parsing, full CRUD, engine-binding validation):
+
+```sh
+cargo test -p ot-appdirectory
+```
+
+**Build and embed the admin UI.** `packages/ot-appdirectory/src/ui.rs` embeds `apps/app-directory/ui/dist/` into the binary at compile time via `rust-embed`. If that directory doesn't exist yet, `packages/ot-appdirectory/build.rs` auto-creates a placeholder so `cargo check`/`test` never hard-fail on a fresh clone — but the served UI will just be a stub message, not the real admin UI. To embed the real UI:
+
+```sh
+npm run build:app-directory    # builds apps/app-directory/ui/dist/
+touch packages/ot-appdirectory/src/ui.rs   # force a rebuild so rust-embed re-reads dist/
+cargo build -p app-directory-server
+```
+
+**Run the standalone binary and verify it end-to-end:**
+
+```sh
+PORT=3005 cargo run -p app-directory-server
+```
+
+In another terminal:
+
+```sh
+curl -s localhost:3005/health                 # {"status":"ok","version":"2.2"}
+curl -s localhost:3005/v2/apps | head -c 200   # seed catalogue (ticker-plant, chart-viewer)
+curl -s -o /dev/null -w "%{http_code}\n" localhost:3005/   # 200 — admin UI
+```
+
+**Passing signal:**
+
+| Check                                                                  | Expected                                                          |
+| ---------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `cargo test -p ot-appdirectory`                                        | all tests pass                                                    |
+| `cargo check --workspace` (no `npm run build:app-directory` run first) | still exits 0 — `build.rs` placeholder covers the missing UI dist |
+| `GET /health`                                                          | `{"status":"ok","version":"2.2"}`                                 |
+| `GET /v2/apps`                                                         | 2 seed apps                                                       |
+| `GET /` (with `ui/dist` built)                                         | `200`, serves the real admin UI                                   |
+| `desktop-agent` dev log                                                | `App Directory (embedded) listening on 127.0.0.1:3005`            |
+
+---
+
+### Test a local release bundle
+
+`cargo run`/`tauri dev` prove the code works; they don't prove the **packaged app** works, since bundling changes how resources (like the embedded App Directory UI) are located and included. Do this before any release, and any time you touch `packages/ot-appdirectory`, `tauri.conf.json`, or `bundle.resources`/`externalBin` config.
+
+Until [Plan 07](docs/plans/07-deployment-and-hosting.md) Issue 07-F lands, `one-terminal` and `desktop-agent` are still two separate installers — build and launch both to test the full picture.
+
+**Step 1 — Build the App Directory UI, then the bundles:**
+
+```sh
+npm run build:app-directory                      # apps/app-directory/ui/dist/
+touch packages/ot-appdirectory/src/ui.rs          # force rust-embed to re-read dist/
+npm run build:desktop-agent                       # tauri build — release profile, several minutes on a clean cache
+npm run build:terminal                            # tauri build
+```
+
+Output on macOS lands in `target/release/bundle/macos/{desktop-agent,one-terminal}.app` (and `target/release/bundle/dmg/*.dmg`); on other platforms check the equivalent `target/release/bundle/<format>/` directory `tauri build` prints at the end.
+
+**Step 2 — Launch the packaged apps** (not `cargo run` — the actual `.app`, to exercise real resource resolution):
+
+```sh
+open target/release/bundle/macos/desktop-agent.app
+open target/release/bundle/macos/one-terminal.app
+```
+
+**Step 3 — Verify from outside the app**, same checks as the dev-mode flow above, now against the packaged binary:
+
+```sh
+curl -s localhost:3005/health                              # {"status":"ok","version":"2.2"}
+curl -s localhost:3005/v2/apps | head -c 200                # seed catalogue
+curl -s -o /dev/null -w "%{http_code}\n" localhost:3005/    # 200 — real admin UI, not the build.rs placeholder
+lsof -iTCP -sTCP:LISTEN -P | grep -E "3005|7890|7891|4475"  # App Directory + TCP broker + FDC3 bus + DACP, all from the packaged desktop-agent binary
+```
+
+The Terminal window should open and the App Menu → Add Widget list should show the combined catalog, same as in dev mode.
+
+**Step 4 — Tear down:**
+
+```sh
+osascript -e 'quit app "one-terminal"'
+osascript -e 'quit app "desktop-agent"'
+```
+
+(On Windows/Linux, close the windows normally or kill the bundle's process by name.)
+
+**Passing signal:**
+
+| Check                                            | Expected                                                                                            |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
+| `npm run build:desktop-agent` / `build:terminal` | both exit 0, produce `.app` (macOS) or platform-equivalent bundles                                  |
+| Packaged `desktop-agent.app` launched directly   | `GET /` returns the real admin UI (confirms `ui/dist` was embedded, not the `build.rs` placeholder) |
+| `lsof` on the packaged app's PID                 | listening on `3005`, `7890`, `7891`, `4475`                                                         |
+| Packaged `one-terminal.app` launched alongside   | window opens, no crash, Add Widget list shows the combined catalog                                  |
 
 ---
 

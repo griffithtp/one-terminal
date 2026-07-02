@@ -9,26 +9,6 @@
       "overlay": "enterprise"
     },
     {
-      "path": "apps/app-directory/src/data.ts",
-      "overlay": "enterprise"
-    },
-    {
-      "path": "apps/app-directory/src/engines.ts",
-      "overlay": "enterprise"
-    },
-    {
-      "path": "apps/app-directory/src/index.ts",
-      "overlay": "enterprise"
-    },
-    {
-      "path": "apps/app-directory/src/router.ts",
-      "overlay": "enterprise"
-    },
-    {
-      "path": "apps/app-directory/src/types.ts",
-      "overlay": "enterprise"
-    },
-    {
       "path": "apps/app-directory/tsconfig.json",
       "overlay": "enterprise"
     },

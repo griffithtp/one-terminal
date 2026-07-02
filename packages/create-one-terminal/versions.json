@@ -2,6 +2,24 @@
   "schemaVersion": 1,
   "versions": [
     {
+      "version": "0.1.10",
+      "releaseDate": "2026-07-02",
+      "breaking": false,
+      "changelogUrl": "https://github.com/one-terminal/one-terminal/releases/tag/v0.1.10",
+      "migrations": [
+        {
+          "type": "config-merge",
+          "id": "0.1.10-agent-config-json",
+          "target": "apps/desktop-agent/src-tauri/resources/agent.config.json",
+          "description": "Update agent.config.json: appdEmbedded",
+          "patch": {
+            "appdEmbedded": true
+          },
+          "appliesTo": "enterprise"
+        }
+      ]
+    },
+    {
       "version": "0.1.9",
       "releaseDate": "2026-07-01",
       "breaking": false,

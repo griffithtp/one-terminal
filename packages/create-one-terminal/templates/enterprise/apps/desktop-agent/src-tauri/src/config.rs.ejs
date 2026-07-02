@@ -60,6 +60,26 @@ pub struct AgentConfig {
     pub engine_catalog_url: String,
     pub ports: PortsConfig,
     pub user_channels: Vec<UserChannel>,
+    /// Start an in-process App Directory server bound to `app_directory_url`'s
+    /// port (see `packages/ot-appdirectory`). Defaults to `true`; set
+    /// `OT_APPD_EMBEDDED=0` when pointing `OT_APP_DIR_URL` at a remote/hosted
+    /// App Directory instead (docs/plans/07-deployment-and-hosting.md Issue 07-E).
+    #[serde(default = "default_appd_embedded")]
+    pub appd_embedded: bool,
+}
+
+fn default_appd_embedded() -> bool {
+    true
+}
+
+/// Best-effort port extraction from an `http(s)://host[:port]` URL, falling
+/// back to 3005 (the App Directory default) if no explicit port is present
+/// or the URL can't be parsed. Avoids pulling in a full URL-parsing crate for
+/// this one call site.
+pub fn port_from_url(url: &str) -> u16 {
+    url.rsplit_once(':')
+        .and_then(|(_, rest)| rest.trim_end_matches('/').parse().ok())
+        .unwrap_or(3005)
 }
 
 impl AgentConfig {
@@ -79,6 +99,7 @@ impl AgentConfig {
                 dacp_bridge: 4475,
             },
             user_channels: Self::default_channels(),
+            appd_embedded: true,
         }
     }
 
@@ -193,6 +214,9 @@ impl AgentConfig {
             if let Ok(p) = v.parse() {
                 cfg.ports.dacp_bridge = p;
             }
+        }
+        if let Ok(v) = std::env::var("OT_APPD_EMBEDDED") {
+            cfg.appd_embedded = !matches!(v.as_str(), "0" | "false" | "FALSE" | "False");
         }
         cfg
     }
