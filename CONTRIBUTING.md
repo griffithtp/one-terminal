@@ -503,26 +503,35 @@ curl -s -o /dev/null -w "%{http_code}\n" localhost:3005/   # 200 — admin UI
 
 ### Test a local release bundle
 
-`cargo run`/`tauri dev` prove the code works; they don't prove the **packaged app** works, since bundling changes how resources (like the embedded App Directory UI) are located and included. Do this before any release, and any time you touch `packages/ot-appdirectory`, `tauri.conf.json`, or `bundle.resources`/`externalBin` config.
+`cargo run`/`tauri dev` prove the code works; they don't prove the **packaged app** works, since bundling changes how resources (like the embedded App Directory UI, `agent.config.json`, and the `one-terminal` sidecar binary) are located and included. Do this before any release, and any time you touch `packages/ot-appdirectory`, `tauri.conf.json`, `bundle.resources`/`externalBin` config, or `scripts/build-terminal-sidecar.ts`.
 
-Until [Plan 07](docs/plans/07-deployment-and-hosting.md) Issue 07-F lands, `one-terminal` and `desktop-agent` are still two separate installers — build and launch both to test the full picture.
+`desktop-agent` is the single downloadable installer — it embeds `one-terminal` as an `externalBin` sidecar and auto-launches it on startup ([Plan 07](docs/plans/07-deployment-and-hosting.md) Issue 07-F), same as it already auto-launches the in-process App Directory (Issue 07-E). You only need to build and launch `desktop-agent`; `one-terminal`'s own installer still works standalone for anyone pointing it at a separately-hosted `desktop-agent`, but isn't required for the single-bundle path.
 
-**Step 1 — Build the App Directory UI, then the bundles:**
+**Step 1 — Build the App Directory UI, then the bundle:**
 
 ```sh
 npm run build:app-directory                      # apps/app-directory/ui/dist/
 touch packages/ot-appdirectory/src/ui.rs          # force rust-embed to re-read dist/
-npm run build:desktop-agent                       # tauri build — release profile, several minutes on a clean cache
-npm run build:terminal                            # tauri build
+npm run build:desktop-agent                       # tauri build — also builds & embeds the one-terminal
+                                                   # sidecar via scripts/build-terminal-sidecar.ts;
+                                                   # release profile, several minutes on a clean cache
 ```
 
-Output on macOS lands in `target/release/bundle/macos/{desktop-agent,one-terminal}.app` (and `target/release/bundle/dmg/*.dmg`); on other platforms check the equivalent `target/release/bundle/<format>/` directory `tauri build` prints at the end.
+Output on macOS lands in `target/release/bundle/macos/desktop-agent.app` (and `target/release/bundle/dmg/*.dmg`); on other platforms check the equivalent `target/release/bundle/<format>/` directory `tauri build` prints at the end. Confirm the sidecar actually landed inside the bundle:
 
-**Step 2 — Launch the packaged apps** (not `cargo run` — the actual `.app`, to exercise real resource resolution):
+```sh
+find target/release/bundle/macos/desktop-agent.app/Contents -maxdepth 3
+# Contents/MacOS/desktop-agent
+# Contents/MacOS/one-terminal          ← the embedded sidecar
+# Contents/Resources/resources/agent.config.json
+# Contents/Resources/resources/widgets.config.json
+# Contents/Resources/resources/plugins
+```
+
+**Step 2 — Launch the packaged app** (not `cargo run` — the actual `.app`, to exercise real resource resolution):
 
 ```sh
 open target/release/bundle/macos/desktop-agent.app
-open target/release/bundle/macos/one-terminal.app
 ```
 
 **Step 3 — Verify from outside the app**, same checks as the dev-mode flow above, now against the packaged binary:
@@ -532,9 +541,10 @@ curl -s localhost:3005/health                              # {"status":"ok","ver
 curl -s localhost:3005/v2/apps | head -c 200                # seed catalogue
 curl -s -o /dev/null -w "%{http_code}\n" localhost:3005/    # 200 — real admin UI, not the build.rs placeholder
 lsof -iTCP -sTCP:LISTEN -P | grep -E "3005|7890|7891|4475"  # App Directory + TCP broker + FDC3 bus + DACP, all from the packaged desktop-agent binary
+ps aux | grep "desktop-agent.app/Contents/MacOS/one-terminal" | grep -v grep   # confirms the sidecar actually spawned
 ```
 
-The Terminal window should open and the App Menu → Add Widget list should show the combined catalog, same as in dev mode.
+The Terminal window should open on its own (no separate launch step) and the App Menu → Add Widget list should show the combined catalog, same as in dev mode.
 
 **Step 4 — Tear down:**
 
@@ -543,16 +553,18 @@ osascript -e 'quit app "one-terminal"'
 osascript -e 'quit app "desktop-agent"'
 ```
 
-(On Windows/Linux, close the windows normally or kill the bundle's process by name.)
+(On Windows/Linux, close the windows normally or kill the bundle's processes by name.)
 
 **Passing signal:**
 
-| Check                                            | Expected                                                                                            |
-| ------------------------------------------------ | --------------------------------------------------------------------------------------------------- |
-| `npm run build:desktop-agent` / `build:terminal` | both exit 0, produce `.app` (macOS) or platform-equivalent bundles                                  |
-| Packaged `desktop-agent.app` launched directly   | `GET /` returns the real admin UI (confirms `ui/dist` was embedded, not the `build.rs` placeholder) |
-| `lsof` on the packaged app's PID                 | listening on `3005`, `7890`, `7891`, `4475`                                                         |
-| Packaged `one-terminal.app` launched alongside   | window opens, no crash, Add Widget list shows the combined catalog                                  |
+| Check                                          | Expected                                                                                         |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `npm run build:desktop-agent`                  | exits 0, produces `.app` (macOS) or platform-equivalent bundle                                   |
+| Bundle contents                                | `Contents/MacOS/one-terminal` present alongside `desktop-agent`                                  |
+| Packaged `desktop-agent.app` launched directly | `GET /` returns the real admin UI (confirms `ui/dist` was embedded, not the placeholder)         |
+| `desktop-agent`'s own log                      | `config loaded from .../Contents/Resources/resources/agent.config.json` — not silently defaulted |
+| `lsof` on the packaged app's PID               | listening on `3005`, `7890`, `7891`, `4475`                                                      |
+| `one-terminal` sidecar                         | spawned automatically, window opens, no crash, Add Widget list shows the combined catalog        |
 
 ---
 
