@@ -32,6 +32,9 @@ jobs:
 
       - name: Create stub frontend dist dirs
         run: mkdir -p apps/one-terminal/dist apps/desktop-agent/dist apps/tauri-webview-host/dist
+        # apps/app-directory/ui/dist is NOT stubbed here — packages/ot-appdirectory's
+        # build.rs creates its own placeholder if missing (rust-embed needs the
+        # folder to exist at compile time; see build.rs for why).
 
       - name: Check formatting
         run: cargo fmt --check --all

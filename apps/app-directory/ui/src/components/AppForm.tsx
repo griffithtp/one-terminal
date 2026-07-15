@@ -146,7 +146,7 @@ function formToAppD(form: FormState): AppD {
   ] as const;
   for (const key of scalars) {
     const v = form[key].trim();
-    if (v) (app as Record<string, unknown>)[key] = v;
+    if (v) (app as unknown as Record<string, unknown>)[key] = v;
   }
 
   const cats = splitCsv(form.categories);

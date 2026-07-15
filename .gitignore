@@ -34,6 +34,10 @@ packages/create-one-terminal/dist/
 apps/*/src-tauri/gen/
 target/
 
+# Tauri externalBin sidecar binaries — built by scripts/build-terminal-sidecar.ts,
+# platform- and target-triple-specific, not source of truth.
+apps/desktop-agent/src-tauri/binaries/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

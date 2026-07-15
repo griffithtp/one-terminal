@@ -1,0 +1,17 @@
+[package]
+name = "ot-appdirectory"
+version = "0.1.0"
+description = "Shared FDC3 2.2 App Directory server logic — types, seed catalogue, and axum router. No Tauri deps; mounted in-process by desktop-agent and served standalone by app-directory-server."
+edition = "2021"
+
+[dependencies]
+serde      = { workspace = true }
+serde_json = { workspace = true }
+tokio      = { workspace = true }
+axum       = { workspace = true }
+ot-core     = { workspace = true }
+rust-embed = { version = "8", features = ["mime-guess"] }
+
+[dev-dependencies]
+tower = { version = "0.4", features = ["util"] }
+http-body-util = "0.1"

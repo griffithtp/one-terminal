@@ -23,7 +23,6 @@
     "dev:sample-widget": "npm -w @one-terminal/sample-widget run dev",
     "dev:app-directory": "npm -w @one-terminal/app-directory run dev",
     "build:app-directory": "npm -w @one-terminal/app-directory run build",
-    "start:app-directory": "npm -w @one-terminal/app-directory run start",
     "build:tauri-webview-host": "cargo build -p tauri-webview-host",
     "setup:electron-host": "npm install -w @one-terminal/electron-host",
     "start:electron-host": "npm -w @one-terminal/electron-host start",

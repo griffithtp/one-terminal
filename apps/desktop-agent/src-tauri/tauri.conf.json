@@ -34,7 +34,9 @@
     ],
     "resources": {
       "resources/agent.config.json": "resources/agent.config.json",
-      "resources/plugins/**/*": "resources/plugins"
-    }
+      "resources/plugins/**/*": "resources/plugins",
+      "../../one-terminal/src-tauri/resources/widgets.config.json": "resources/widgets.config.json"
+    },
+    "externalBin": ["binaries/one-terminal"]
   }
 }

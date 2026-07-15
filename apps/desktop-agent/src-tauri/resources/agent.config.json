@@ -2,6 +2,7 @@
   "title": "OneTerminal Desktop Agent",
   "appDirectoryUrl": "http://localhost:3005",
   "engineCatalogUrl": "http://localhost:3005",
+  "appdEmbedded": true,
   "ports": {
     "tcpBroker": 7890,
     "fdc3Bus": 7891,
