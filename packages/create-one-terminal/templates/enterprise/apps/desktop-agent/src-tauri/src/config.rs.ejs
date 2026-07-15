@@ -176,6 +176,18 @@ impl AgentConfig {
             if let Some(dir) = exe.parent() {
                 paths.push(dir.join("agent.config.json"));
                 paths.push(dir.join("resources").join("agent.config.json"));
+                // macOS .app bundles: `bundle.resources` is placed under
+                // Contents/Resources/, not next to the executable in
+                // Contents/MacOS/ — current_exe() resolves to the latter, so
+                // check the sibling `../Resources/resources/` location too.
+                if let Some(contents_dir) = dir.parent() {
+                    paths.push(
+                        contents_dir
+                            .join("Resources")
+                            .join("resources")
+                            .join("agent.config.json"),
+                    );
+                }
             }
         }
         // Tauri dev: cwd/src-tauri/resources.

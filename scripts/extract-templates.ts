@@ -35,7 +35,11 @@ const BINARY_EXTENSIONS = new Set([".png", ".ico", ".icns", ".svg"]);
 const STATIC_FILENAMES = new Set(["build.rs", "vite-env.d.ts"]);
 
 // ── Directories to skip entirely ──────────────────────────────────────────────
-const SKIP_DIRS = new Set(["node_modules", "target", "dist", "gen", ".git"]);
+// `binaries` is desktop-agent's Tauri externalBin output (scripts/build-terminal-sidecar.ts) —
+// platform/target-triple-specific build output, not template source. Without this,
+// the extractor would read the compiled one-terminal binary as a UTF-8 text template
+// and EJS-process it, producing a corrupted, single-platform binary.ejs file.
+const SKIP_DIRS = new Set(["node_modules", "target", "dist", "gen", ".git", "binaries"]);
 
 // ── Overlay model ──────────────────────────────────────────────────────────────
 // Templates are partitioned across three overlays:
@@ -77,6 +81,16 @@ const SOURCES: Array<{ src: string; templateBase: string; overlay: Overlay }> = 
   {
     src: join(ROOT, "apps/app-directory"),
     templateBase: "apps/app-directory",
+    overlay: "enterprise",
+  },
+  {
+    src: join(ROOT, "apps/app-directory-server"),
+    templateBase: "apps/app-directory-server",
+    overlay: "enterprise",
+  },
+  {
+    src: join(ROOT, "packages/ot-appdirectory"),
+    templateBase: "packages/ot-appdirectory",
     overlay: "enterprise",
   },
   {

@@ -108,9 +108,9 @@ fn electron_binary_in_node_modules(shell_dir: &Path) -> Option<PathBuf> {
         if let Some(bin) = electron_binary_in(&dist) {
             return Some(bin);
         }
-        match dir.parent() {
-            Some(parent) => dir = parent,
-            None => return None,
+        {
+            let parent = dir.parent()?;
+            dir = parent
         }
     }
 }

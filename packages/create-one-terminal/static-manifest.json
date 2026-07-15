@@ -9,6 +9,14 @@
       "overlay": "enterprise"
     },
     {
+      "path": "apps/app-directory-server/Cargo.toml",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/app-directory-server/src/main.rs",
+      "overlay": "enterprise"
+    },
+    {
       "path": "apps/app-directory/tsconfig.json",
       "overlay": "enterprise"
     },
@@ -631,6 +639,42 @@
     {
       "path": "packages/fdc3-plugin/fdc3-plugin.js",
       "overlay": "shared"
+    },
+    {
+      "path": "packages/ot-appdirectory/Cargo.toml",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "packages/ot-appdirectory/src/data.rs",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "packages/ot-appdirectory/src/engines.rs",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "packages/ot-appdirectory/src/filter.rs",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "packages/ot-appdirectory/src/lib.rs",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "packages/ot-appdirectory/src/router.rs",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "packages/ot-appdirectory/src/types.rs",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "packages/ot-appdirectory/src/ui.rs",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "packages/ot-appdirectory/tests/router.rs",
+      "overlay": "enterprise"
     },
     {
       "path": "packages/ot-core/Cargo.toml",

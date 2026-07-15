@@ -16,6 +16,44 @@
             "appdEmbedded": true
           },
           "appliesTo": "enterprise"
+        },
+        {
+          "type": "structural",
+          "id": "0.1.10-one-terminal-aarch64-apple-darwin",
+          "target": "apps/desktop-agent/src-tauri/binaries/one-terminal-aarch64-apple-darwin",
+          "operations": [
+            {
+              "op": "insert-after-line-matching"
+            }
+          ],
+          "appliesTo": "enterprise"
+        },
+        {
+          "type": "config-merge",
+          "id": "0.1.10-tauri-conf-json",
+          "target": "apps/desktop-agent/src-tauri/tauri.conf.json",
+          "description": "Update tauri.conf.json: bundle.resources.../../one-terminal/src-tauri/resources/widgets.config.json, bundle.externalBin",
+          "patch": {
+            "bundle": {
+              "resources": {
+                "": {
+                  "": {
+                    "/": {
+                      "": {
+                        "/one-terminal/src-tauri/resources/widgets": {
+                          "config": {
+                            "json": "resources/widgets.config.json"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "externalBin": ["binaries/one-terminal"]
+            }
+          },
+          "appliesTo": "enterprise"
         }
       ]
     },
