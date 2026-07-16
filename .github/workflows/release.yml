@@ -78,12 +78,20 @@ jobs:
       - name: Sync app version from tag
         # tauri.conf.json's "version" is a static 0.1.0 in the repo — without
         # this, every release would ship installers/app metadata stamped
-        # 0.1.0 regardless of which tag triggered the build.
+        # 0.1.0 regardless of which tag triggered the build. Any semver
+        # pre-release suffix (e.g. the "-test" in v0.0.1-test) is stripped:
+        # MSI's ProductVersion field is strictly major.minor.build, all
+        # numeric, each component <= 65535 — WiX hard-fails on a suffix like
+        # "-test" (confirmed: this broke the windows-latest leg on the first
+        # real run). The GitHub Release's own `prerelease` flag (set from
+        # `contains(tag, '-')` in the create-release job) already carries
+        # the pre-release semantics; the installer's internal version number
+        # doesn't need to duplicate it.
         shell: bash
         run: |
           node -e "
             const fs = require('fs');
-            const version = process.env.GITHUB_REF_NAME.replace(/^v/, '');
+            const version = process.env.GITHUB_REF_NAME.replace(/^v/, '').split('-')[0];
             for (const p of ['apps/one-terminal/src-tauri/tauri.conf.json', 'apps/desktop-agent/src-tauri/tauri.conf.json']) {
               const conf = JSON.parse(fs.readFileSync(p, 'utf-8'));
               conf.version = version;
