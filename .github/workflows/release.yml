@@ -4,8 +4,37 @@ on:
   push:
     tags: ["v[0-9]*"]
 
+permissions:
+  contents: write
+
 jobs:
+  # Creates the (draft) release once, up front. Each matrix leg below attaches
+  # its assets to this same release via `releaseId` rather than each
+  # independently finding-or-creating a release by tag name — with three
+  # parallel OS jobs all hitting the GitHub Releases API for the same tag at
+  # roughly the same time, tag-based lookup is a real create/create race.
+  # `releaseId` sidesteps it entirely (see tauri-apps/tauri-action's docs).
+  create-release:
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.create.outputs.id }}
+    steps:
+      - id: create
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data } = await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: context.ref.replace('refs/tags/', ''),
+              name: `OneTerminal ${context.ref.replace('refs/tags/', '')}`,
+              draft: true,
+              prerelease: context.ref.includes('-'),
+            });
+            core.setOutput('id', data.id);
+
   release:
+    needs: create-release
     strategy:
       fail-fast: false
       matrix:
@@ -46,6 +75,22 @@ jobs:
 
       - run: npm ci
 
+      - name: Sync app version from tag
+        # tauri.conf.json's "version" is a static 0.1.0 in the repo — without
+        # this, every release would ship installers/app metadata stamped
+        # 0.1.0 regardless of which tag triggered the build.
+        shell: bash
+        run: |
+          node -e "
+            const fs = require('fs');
+            const version = process.env.GITHUB_REF_NAME.replace(/^v/, '');
+            for (const p of ['apps/one-terminal/src-tauri/tauri.conf.json', 'apps/desktop-agent/src-tauri/tauri.conf.json']) {
+              const conf = JSON.parse(fs.readFileSync(p, 'utf-8'));
+              conf.version = version;
+              fs.writeFileSync(p, JSON.stringify(conf, null, 2) + '\n');
+            }
+          "
+
       - name: Build App Directory admin UI
         # packages/ot-appdirectory embeds apps/app-directory/ui/dist/ via
         # rust-embed at compile time — must exist before any cargo build
@@ -57,10 +102,9 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         with:
           projectPath: apps/one-terminal
+          releaseId: ${{ needs.create-release.outputs.release_id }}
           tagName: ${{ github.ref_name }}
-          releaseName: "OneTerminal ${{ github.ref_name }}"
           releaseDraft: true
-          prerelease: ${{ contains(github.ref_name, '-') }}
           args: --target ${{ matrix.target }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -75,17 +119,18 @@ jobs:
 
       - name: Release desktop-agent (single-download bundle — embeds one-terminal + App Directory)
         # desktop-agent's own `build` script (apps/desktop-agent/package.json)
-        # runs scripts/build-terminal-sidecar.ts as part of beforeBuildCommand,
-        # which builds one-terminal for `${{ matrix.target }}` (via
-        # TAURI_ENV_TARGET_TRIPLE, set by tauri-action's --target arg below)
-        # and embeds it as the externalBin sidecar. No separate step needed.
+        # runs scripts/build-terminal-sidecar.ts as part of beforeBuildCommand.
+        # In this matrix every target matches its runner's native arch, so
+        # the script's TAURI_ENV_TARGET_TRIPLE cross-compile path is not
+        # actually exercised here (host-triple fallback is what runs) —
+        # that path is unverified until a genuinely cross-compiling target
+        # (e.g. universal macOS) is added.
         uses: tauri-apps/tauri-action@v0
         with:
           projectPath: apps/desktop-agent
+          releaseId: ${{ needs.create-release.outputs.release_id }}
           tagName: ${{ github.ref_name }}
-          releaseName: "OneTerminal ${{ github.ref_name }}"
           releaseDraft: true
-          prerelease: ${{ contains(github.ref_name, '-') }}
           args: --target ${{ matrix.target }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

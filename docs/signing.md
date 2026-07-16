@@ -70,6 +70,19 @@ Store the private key + password as GitHub secrets (never commit the
 private key); the public key goes into `tauri.conf.json`'s `plugins.updater`
 config and is safe to commit.
 
+## Release structure
+
+A dedicated `create-release` job creates one draft GitHub Release up front
+(via the GitHub API directly, not `tauri-action`); each of the three OS jobs
+then attaches its `one-terminal`/`desktop-agent` assets to that same release
+via `releaseId` rather than independently finding-or-creating a release by
+tag name. This matters because three parallel matrix legs racing to
+find-or-create a release for the same tag is a real create/create race —
+`releaseId` sidesteps it. Each OS job also stamps `tauri.conf.json`'s
+`version` field from the pushed tag before building (it's `0.1.0` in the
+repo by default; without this every release would ship installers and app
+metadata labeled `0.1.0` regardless of the tag).
+
 ## Known limitations of the current workflow
 
 - **macOS builds `aarch64-apple-darwin` only** (Apple Silicon) — not
@@ -84,3 +97,9 @@ config and is safe to commit.
 - No Docker/GHCR publishing yet for the hosted `app-directory-server`
   binary — that's [Plan 07](plans/07-deployment-and-hosting.md) Issue 07-B,
   not yet implemented.
+- The whole workflow — including the `create-release` → matrix `releaseId`
+  handoff and the version-sync step — has been validated for YAML/schema
+  correctness and had its individual pieces tested locally (version-sync
+  script, App Directory build, sidecar embedding), but has **not** been run
+  end-to-end against a real tag push. Test with a draft tag (e.g.
+  `v0.0.1-test`) before relying on it for a real release.
