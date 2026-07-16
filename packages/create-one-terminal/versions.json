@@ -2,6 +2,13 @@
   "schemaVersion": 1,
   "versions": [
     {
+      "version": "0.1.11",
+      "releaseDate": "2026-07-16",
+      "breaking": false,
+      "changelogUrl": "https://github.com/one-terminal/one-terminal/releases/tag/v0.1.11",
+      "migrations": []
+    },
+    {
       "version": "0.1.10",
       "releaseDate": "2026-07-02",
       "breaking": false,
