@@ -6,11 +6,13 @@ installer) and `desktop-agent` (the single-download bundle — embeds
 `v*` tag push, as **draft** GitHub Releases. A human must review and publish
 the draft; nothing goes live automatically.
 
-Without the secrets below, the workflow still runs and produces unsigned
-installers — useful for testing the pipeline itself — but unsigned builds
-trigger Gatekeeper (macOS) / SmartScreen (Windows) warnings for end users.
-Set these up before actually publishing a release users are expected to
-install.
+**`release.yml` does not currently reference these secrets at all** — they
+must be added back into the workflow's `env:` blocks yourself once you've
+provisioned them (see Step 4 below for why). Without them, the workflow
+produces unsigned installers, which trigger Gatekeeper (macOS) / SmartScreen
+(Windows) warnings for end users but are fine for testing the pipeline
+itself. Set these up, then add the env vars back, before publishing a
+release users are expected to install.
 
 ## Required secrets (repo → Settings → Secrets and variables → Actions)
 
@@ -37,9 +39,14 @@ install.
    and Security → App-Specific Passwords) for `APPLE_ID_PASSWORD` — do not
    use your real Apple ID password.
 5. `APPLE_TEAM_ID` is on the Apple Developer portal's Membership page.
-
-`tauri-action` handles signing and notarization automatically once these are
-set — no changes needed to `tauri.conf.json`.
+6. **Add the env vars back into `release.yml`'s two `tauri-action` steps**:
+   `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`,
+   `APPLE_ID`, `APPLE_ID_PASSWORD`, `APPLE_TEAM_ID` (each as
+   `${{ secrets.X }}`, same pattern as `GITHUB_TOKEN`). They were deliberately
+   removed rather than left pointing at unset secrets — see "Why these
+   aren't just always present" below. `tauri-action` handles signing and
+   notarization automatically once these are set — no changes needed to
+   `tauri.conf.json`.
 
 ## Windows: code signing
 
@@ -49,6 +56,22 @@ set — no changes needed to `tauri.conf.json`.
    `[Convert]::ToBase64String([IO.File]::ReadAllBytes("cert.pfx")) | Set-Clipboard`)
    → `WINDOWS_CERTIFICATE`.
 3. Its password → `WINDOWS_CERTIFICATE_PASSWORD`.
+4. Add `WINDOWS_CERTIFICATE` / `WINDOWS_CERTIFICATE_PASSWORD` back into
+   `release.yml`'s two `tauri-action` steps, same as the Apple vars above.
+
+## Why these aren't just always present in `release.yml`
+
+`${{ secrets.X }}` evaluates to an **empty string**, not "unset", when a
+secret doesn't exist in the repo. Tauri's macOS bundler checks whether
+`APPLE_CERTIFICATE` is _present_ (`Ok("")`), not whether it's _non-empty_ —
+so leaving `APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}` in the
+workflow with no secret configured makes it attempt to import an empty
+string as a keychain certificate and hard-fail with
+`SecKeychainItemImport: One or more parameters passed to a function were not
+valid` — confirmed, this is exactly what broke the `macos-latest` leg on the
+first real tag-push test. Since no signing secrets are configured in this
+repo yet, the env vars are omitted entirely for now rather than left
+pointing at empty secrets. Add them back only once the actual secrets exist.
 
 ## Linux
 
@@ -81,7 +104,10 @@ find-or-create a release for the same tag is a real create/create race —
 `releaseId` sidesteps it. Each OS job also stamps `tauri.conf.json`'s
 `version` field from the pushed tag before building (it's `0.1.0` in the
 repo by default; without this every release would ship installers and app
-metadata labeled `0.1.0` regardless of the tag).
+metadata labeled `0.1.0` regardless of the tag) — any semver pre-release
+suffix (e.g. `-test`) is stripped before writing it, since MSI's
+`ProductVersion` field is strictly numeric `major.minor.build` and hard-fails
+on a suffix like `-test` (confirmed on the first real test run).
 
 ## Known limitations of the current workflow
 
@@ -97,9 +123,10 @@ metadata labeled `0.1.0` regardless of the tag).
 - No Docker/GHCR publishing yet for the hosted `app-directory-server`
   binary — that's [Plan 07](plans/07-deployment-and-hosting.md) Issue 07-B,
   not yet implemented.
-- The whole workflow — including the `create-release` → matrix `releaseId`
-  handoff and the version-sync step — has been validated for YAML/schema
-  correctness and had its individual pieces tested locally (version-sync
-  script, App Directory build, sidecar embedding), but has **not** been run
-  end-to-end against a real tag push. Test with a draft tag (e.g.
-  `v0.0.1-test`) before relying on it for a real release.
+- Tested against a real `v0.0.1-test` tag push: found and fixed the MSI
+  version-format bug and the empty-secret codesigning bug documented above.
+  The `create-release` → matrix `releaseId` handoff itself (does it actually
+  avoid the cross-job race) hasn't been specifically confirmed yet — re-test
+  with a fresh tag after these fixes and check the release ends up with all
+  six assets (two apps × three platforms) rather than duplicates or a
+  partial set.

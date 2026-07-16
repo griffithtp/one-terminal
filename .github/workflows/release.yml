@@ -114,16 +114,19 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseDraft: true
           args: --target ${{ matrix.target }}
+        # Signing env vars (APPLE_CERTIFICATE, WINDOWS_CERTIFICATE, etc.) are
+        # deliberately NOT set here. `${{ secrets.X }}` resolves to an empty
+        # string (not "unset") when a secret doesn't exist, and Tauri's macOS
+        # bundler checks env var *presence* (Ok("")), not non-emptiness — an
+        # empty-but-present APPLE_CERTIFICATE makes it attempt to import ""
+        # as a keychain certificate and hard-fail (confirmed: this broke the
+        # macos-latest leg on the first real run). Since no real Apple/
+        # Windows signing secrets are configured in this repo yet, omitting
+        # these vars entirely gets a genuinely unsigned build instead of a
+        # broken one. Add them back (see docs/signing.md) once real secrets
+        # are provisioned.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
-          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
 
       - name: Release desktop-agent (single-download bundle — embeds one-terminal + App Directory)
         # desktop-agent's own `build` script (apps/desktop-agent/package.json)
@@ -140,13 +143,16 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseDraft: true
           args: --target ${{ matrix.target }}
+        # Signing env vars (APPLE_CERTIFICATE, WINDOWS_CERTIFICATE, etc.) are
+        # deliberately NOT set here. `${{ secrets.X }}` resolves to an empty
+        # string (not "unset") when a secret doesn't exist, and Tauri's macOS
+        # bundler checks env var *presence* (Ok("")), not non-emptiness — an
+        # empty-but-present APPLE_CERTIFICATE makes it attempt to import ""
+        # as a keychain certificate and hard-fail (confirmed: this broke the
+        # macos-latest leg on the first real run). Since no real Apple/
+        # Windows signing secrets are configured in this repo yet, omitting
+        # these vars entirely gets a genuinely unsigned build instead of a
+        # broken one. Add them back (see docs/signing.md) once real secrets
+        # are provisioned.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_ID_PASSWORD: ${{ secrets.APPLE_ID_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
-          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
