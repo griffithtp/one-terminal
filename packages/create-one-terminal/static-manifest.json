@@ -289,6 +289,10 @@
       "overlay": "shared"
     },
     {
+      "path": "apps/one-terminal/src-tauri/src/sample_widget.rs",
+      "overlay": "shared"
+    },
+    {
       "path": "apps/one-terminal/src-tauri/src/terminal/manager.rs",
       "overlay": "shared"
     },
@@ -662,6 +666,10 @@
     },
     {
       "path": "packages/ot-appdirectory/src/router.rs",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "packages/ot-appdirectory/src/samples.rs",
       "overlay": "enterprise"
     },
     {
