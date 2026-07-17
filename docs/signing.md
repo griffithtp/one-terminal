@@ -14,6 +14,23 @@ produces unsigned installers, which trigger Gatekeeper (macOS) / SmartScreen
 itself. Set these up, then add the env vars back, before publishing a
 release users are expected to install.
 
+**Confirmed on macOS:** downloading the unsigned `.dmg`, dragging
+`desktop-agent.app` to `/Applications`, and double-clicking it produces
+`"desktop-agent" is damaged and can't be opened. You should move it to the
+Trash` — not actual corruption. Modern macOS (Ventura+) shows this specific
+message, rather than the older "unidentified developer, open anyway"
+prompt, for a quarantined (downloaded-via-browser) app with no valid
+signature at all. Ad-hoc/self-signing does not satisfy Gatekeeper's
+quarantine check here — real notarization (the Apple secrets below) is the
+only fix. For local testing only, strip the quarantine attribute:
+
+```sh
+xattr -cr /Applications/desktop-agent.app
+```
+
+Do not tell end users to run this — it's a local workaround, not something
+to put in release notes.
+
 ## Required secrets (repo → Settings → Secrets and variables → Actions)
 
 | Secret                         | Purpose                                            |

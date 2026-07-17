@@ -55,7 +55,33 @@ console.log(
   `[build-terminal-sidecar] building one-terminal (release, ${triple}${crossCompiling ? `, cross-compiled from ${host}` : ""})…`
 );
 
-const cargoArgs = ["build", "--release", "-p", "one-terminal"];
+// `cargo build` alone won't run one-terminal's own `beforeBuildCommand`
+// (that only fires under `tauri build`) — without this, whatever happens to
+// already be sitting in apps/one-terminal/dist gets embedded, silently
+// producing a sidecar binary with a blank/stale frontend if dist is missing
+// or out of date.
+console.log("[build-terminal-sidecar] building one-terminal frontend…");
+execFileSync("npm", ["-w", "@one-terminal/one-terminal", "run", "build"], {
+  cwd: repoRoot,
+  stdio: "inherit",
+});
+
+// `tauri/custom-protocol` is what makes `generate_context!()` embed and serve
+// the built frontend in production — it's part of the `tauri build` CLI's
+// injected flags, not part of the tauri crate's own `default` features, so a
+// bare `cargo build` (as used here to produce the sidecar) never gets it.
+// Without it, the compiled binary always falls back to loading `devUrl`
+// (e.g. http://localhost:1422), which nothing serves in a packaged release —
+// confirmed via `strings` on the resulting binary: the built asset filenames
+// (assets/index-*.js/css) are only present when this feature is passed.
+const cargoArgs = [
+  "build",
+  "--release",
+  "-p",
+  "one-terminal",
+  "--features",
+  "tauri/custom-protocol",
+];
 if (crossCompiling) {
   cargoArgs.push("--target", triple);
 }
