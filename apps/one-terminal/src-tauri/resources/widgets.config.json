@@ -5,7 +5,7 @@
       "appId": "sample-widget",
       "title": "Sample Widget",
       "description": "Local-only widget served from apps/sample-widget (npm run dev:sample-widget).",
-      "url": "http://localhost:3012",
+      "url": "bundled:sample-widget",
       "categories": ["sample"]
     }
   ]

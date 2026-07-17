@@ -23,7 +23,10 @@ fn seed_apps() -> Vec<AppD> {
             name: "Ticker-Plant".into(),
             app_type: AppType::Web,
             details: AppDetails {
-                url: "http://localhost:3010".into(),
+                // Served by the embedded App Directory itself (samples.rs) so
+                // this panel renders in a packaged build, not just under
+                // `npm run dev:sample-ticker` (which binds :3010 separately).
+                url: "http://localhost:3005/apps/ticker-plant/".into(),
             },
 
             title: Some("Market Data Ticker Plant".into()),
@@ -132,7 +135,10 @@ fn seed_apps() -> Vec<AppD> {
             name: "Chart-Viewer".into(),
             app_type: AppType::Web,
             details: AppDetails {
-                url: "http://localhost:3011".into(),
+                // Served by the embedded App Directory itself (samples.rs) so
+                // this panel renders in a packaged build, not just under
+                // `npm run dev:sample-chart` (which binds :3011 separately).
+                url: "http://localhost:3005/apps/chart-viewer/".into(),
             },
 
             title: Some("FX Candlestick Chart Viewer".into()),
