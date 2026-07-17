@@ -61,9 +61,15 @@ console.log(
 // producing a sidecar binary with a blank/stale frontend if dist is missing
 // or out of date.
 console.log("[build-terminal-sidecar] building one-terminal frontend…");
+// On Windows, `npm` resolves to `npm.cmd` — a batch file. `execFileSync`
+// without `shell: true` calls CreateProcess directly, which can only launch
+// real executables (this is why `cargo`, a genuine .exe, doesn't need it
+// below); without the shell it fails with ENOENT even though `npm` is on
+// PATH. Confirmed on the `windows-latest` release runner.
 execFileSync("npm", ["-w", "@one-terminal/one-terminal", "run", "build"], {
   cwd: repoRoot,
   stdio: "inherit",
+  shell: process.platform === "win32",
 });
 
 // `tauri/custom-protocol` is what makes `generate_context!()` embed and serve
