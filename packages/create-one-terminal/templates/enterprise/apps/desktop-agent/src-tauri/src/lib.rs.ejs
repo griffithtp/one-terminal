@@ -228,10 +228,13 @@ fn cda_raise_intent_from_dashboard(
 
 // ── App Directory commands ─────────────────────────────────────────────────────
 
-/// Spawn a fresh Terminal (one-terminal) window with no prior session restored.
+/// Open a Terminal (one-terminal) window, restoring the previously saved
+/// session. This is the launcher's "Open" action — Terminal no longer
+/// auto-launches at Desktop Agent startup, so this is the primary entry
+/// point users have to reach it.
 #[tauri::command]
 fn cda_open_terminal(registry: State<'_, TerminalRegistry>) {
-    spawn_wm_instance_fresh(&registry);
+    spawn_wm_instance(&registry);
 }
 
 /// Quit the Desktop Agent, preserving all Terminal state on disk.
@@ -580,7 +583,7 @@ impl TerminalRegistry {
 }
 
 /// Spawn a Window Manager instance that restores previously saved terminals.
-/// Called once at Desktop Agent startup.
+/// Called from the launcher's "Open" action (`cda_open_terminal`).
 fn spawn_wm_instance(registry: &TerminalRegistry) {
     match locate_wm_binary() {
         Ok(bin) => match std::process::Command::new(&bin).spawn() {
@@ -936,10 +939,9 @@ pub fn run() {
                 }
             });
 
-            // ── Auto-launch one-terminal ───────────────────────────────────────
-            // Restore previously open Terminal windows. one-terminal's own startup
-            // handles restoring all saved non-main terminals via load_persisted_terminals.
-            spawn_wm_instance(app.state::<TerminalRegistry>().inner());
+            // Terminal is no longer auto-launched at startup — it opens only when
+            // the user clicks "Open" on the launcher's Terminal card (cda_open_terminal)
+            // or "Open New Terminal" in the tray menu, both below.
 
             // ── System tray ────────────────────────────────────────────────────
             // Initial menu: apps list is empty until the App Directory fetch completes.
