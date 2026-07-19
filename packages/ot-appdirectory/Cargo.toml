@@ -10,7 +10,7 @@ serde_json = { workspace = true }
 tokio      = { workspace = true }
 axum       = { workspace = true }
 ot-core     = { workspace = true }
-rust-embed = { version = "8", features = ["mime-guess"] }
+rust-embed = { version = "8", features = ["mime-guess", "include-exclude"] }
 
 [dev-dependencies]
 tower = { version = "0.4", features = ["util"] }

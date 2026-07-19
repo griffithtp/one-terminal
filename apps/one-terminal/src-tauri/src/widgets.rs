@@ -198,16 +198,36 @@ fn resolve_path(path: &str, resource_dir: Option<&Path>) -> Option<PathBuf> {
     None
 }
 
+/// `widgets.config.json` uses this sentinel instead of a literal URL for the
+/// bundled `sample-widget` demo, since the registered `sample-widget://` URI
+/// scheme's Origin differs by platform (see `register_uri_scheme_protocol`'s
+/// docs): `<scheme>://localhost/` on macOS/iOS/Linux vs
+/// `http://<scheme>.localhost/` on Windows/Android. Resolving it here keeps
+/// the JSON config platform-agnostic.
+const BUNDLED_SAMPLE_WIDGET_URL: &str = "bundled:sample-widget";
+
+fn resolve_widget_url(url: String) -> String {
+    if url != BUNDLED_SAMPLE_WIDGET_URL {
+        return url;
+    }
+    if cfg!(any(target_os = "windows", target_os = "android")) {
+        "http://sample-widget.localhost/".into()
+    } else {
+        "sample-widget://localhost/".into()
+    }
+}
+
 fn local_widget_to_value(w: LocalWidget) -> Value {
     let app_id = w.app_id.clone();
     let title = w.title.clone().unwrap_or_else(|| app_id.clone());
     let name = w.name.unwrap_or_else(|| app_id.clone());
+    let url = resolve_widget_url(w.url);
     serde_json::json!({
         "appId": app_id,
         "name": name,
         "title": title,
         "description": w.description,
-        "details": { "url": w.url },
+        "details": { "url": url },
         "categories": w.categories,
         "icons": w.icon.map(|i| vec![serde_json::json!({ "src": i })]),
         "source": "local",
@@ -234,6 +254,21 @@ mod tests {
         assert_eq!(v["appId"], "my-widget");
         assert_eq!(v["source"], "local");
         assert_eq!(v["catalogId"], "local:my-widget");
+    }
+
+    #[test]
+    fn bundled_sample_widget_sentinel_resolves_to_registered_scheme() {
+        let resolved = resolve_widget_url(BUNDLED_SAMPLE_WIDGET_URL.into());
+        assert_ne!(resolved, BUNDLED_SAMPLE_WIDGET_URL);
+        assert!(resolved.contains("sample-widget"));
+    }
+
+    #[test]
+    fn non_sentinel_urls_pass_through_unchanged() {
+        assert_eq!(
+            resolve_widget_url("https://example.test".into()),
+            "https://example.test"
+        );
     }
 
     #[test]

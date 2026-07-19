@@ -228,43 +228,21 @@ fn cda_raise_intent_from_dashboard(
 
 // ── App Directory commands ─────────────────────────────────────────────────────
 
-/// Spawn a fresh Terminal (one-terminal) window with no prior session restored.
+/// Open a Terminal (one-terminal) window, restoring the previously saved
+/// session. This is the launcher's "Open" action — Terminal no longer
+/// auto-launches at Desktop Agent startup, so this is the primary entry
+/// point users have to reach it.
 #[tauri::command]
-fn cda_open_terminal() {
-    spawn_wm_instance_fresh();
-}
-
-/// Best-effort signal all running one-terminal processes.  `force = true`
-/// sends SIGKILL/taskkill /F for immediate termination; `force = false`
-/// sends SIGTERM/taskkill (graceful) so the Tauri runtime can flush any
-/// in-flight state writes before exiting.
-fn signal_terminals(force: bool) {
-    #[cfg(target_os = "windows")]
-    {
-        let mut cmd = std::process::Command::new("taskkill");
-        cmd.args(["/IM", "one-terminal.exe"]);
-        if force {
-            cmd.arg("/F");
-        }
-        let _ = cmd.output();
-    }
-    #[cfg(not(target_os = "windows"))]
-    {
-        let mut cmd = std::process::Command::new("killall");
-        if force {
-            cmd.arg("-KILL");
-        }
-        cmd.arg("one-terminal");
-        let _ = cmd.output();
-    }
+fn cda_open_terminal(registry: State<'_, TerminalRegistry>) {
+    spawn_wm_instance(&registry);
 }
 
 /// Quit the Desktop Agent, preserving all Terminal state on disk.
 /// One-terminal's auto-save has already persisted the current layout, and
 /// SIGTERM lets it flush any pending writes before this process exits.
 #[tauri::command]
-fn cda_quit(app: AppHandle) {
-    signal_terminals(false);
+fn cda_quit(app: AppHandle, registry: State<'_, TerminalRegistry>) {
+    registry.kill_all(false);
     app.exit(0);
 }
 
@@ -273,8 +251,8 @@ fn cda_quit(app: AppHandle) {
 /// (so they can't re-save state mid-deletion), then deletes every directory
 /// under the `com.one-terminal.one-terminal/terminals/` data folder, then exits.
 #[tauri::command]
-fn cda_quit_discard(app: AppHandle) -> Result<(), String> {
-    signal_terminals(true);
+fn cda_quit_discard(app: AppHandle, registry: State<'_, TerminalRegistry>) -> Result<(), String> {
+    registry.kill_all(true);
 
     // Derive one-terminal's data directory by stepping one level above the
     // Desktop Agent's own app_data_dir, then descending into the Window Manager
@@ -534,32 +512,175 @@ fn locate_wm_binary() -> Result<std::path::PathBuf, String> {
     Ok(candidate)
 }
 
-/// Spawn a Window Manager instance that restores previously saved terminals.
-/// Called once at Desktop Agent startup.
-fn spawn_wm_instance() {
-    match locate_wm_binary() {
-        Ok(bin) => {
-            if let Err(e) = std::process::Command::new(&bin).spawn() {
-                eprintln!("[cda/tray] Failed to spawn window-manager: {e}");
+/// Tracks the PIDs of `one-terminal` instances this `desktop-agent` process
+/// spawned, so quit can kill precisely those processes instead of every
+/// `one-terminal` on the machine (a bare `killall`/`taskkill` by name would
+/// also kill an unrelated, independently-launched standalone `one-terminal`
+/// install). Also watches each child so an unexpected exit (crash) gets
+/// logged — previously the spawned `Child` handle was dropped immediately,
+/// so `desktop-agent` had no visibility into whether its Terminal windows
+/// were still alive.
+#[derive(Clone, Default)]
+struct TerminalRegistry {
+    pids: std::sync::Arc<std::sync::Mutex<std::collections::HashSet<u32>>>,
+    /// Set just before an intentional kill so the watcher thread doesn't log
+    /// the resulting exit as an unexpected crash.
+    quitting: std::sync::Arc<std::sync::atomic::AtomicBool>,
+}
+
+impl TerminalRegistry {
+    /// Record a freshly spawned child and start a background thread that
+    /// waits on it, removing it from the registry and logging on unexpected
+    /// exit (skipped during an intentional `kill_all`, and for a clean exit
+    /// status — closing all Terminal windows normally exits the process
+    /// with success, which isn't a crash).
+    fn track(&self, mut child: std::process::Child) {
+        let pid = child.id();
+        self.pids.lock().unwrap().insert(pid);
+
+        let pids = self.pids.clone();
+        let quitting = self.quitting.clone();
+        std::thread::spawn(move || {
+            let status = child.wait();
+            pids.lock().unwrap().remove(&pid);
+            if quitting.load(std::sync::atomic::Ordering::SeqCst) {
+                return;
+            }
+            match status {
+                Ok(s) if s.success() => {}
+                Ok(s) => eprintln!("[cda] one-terminal (pid {pid}) exited unexpectedly: {s}"),
+                Err(e) => eprintln!("[cda] one-terminal (pid {pid}) wait() failed: {e}"),
+            }
+        });
+    }
+
+    /// Kill every tracked instance by PID. `force` sends SIGKILL/`taskkill
+    /// /F` for immediate termination; otherwise SIGTERM/`taskkill` (graceful,
+    /// lets the Tauri runtime flush pending state writes before exiting).
+    fn kill_all(&self, force: bool) {
+        self.quitting
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        let pids: Vec<u32> = self.pids.lock().unwrap().iter().copied().collect();
+        for pid in pids {
+            #[cfg(target_os = "windows")]
+            {
+                let mut cmd = std::process::Command::new("taskkill");
+                cmd.args(["/PID", &pid.to_string()]);
+                if force {
+                    cmd.arg("/F");
+                }
+                let _ = cmd.output();
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                let sig = if force { "-KILL" } else { "-TERM" };
+                let _ = std::process::Command::new("kill")
+                    .args([sig, &pid.to_string()])
+                    .output();
             }
         }
+    }
+}
+
+/// Spawn a Window Manager instance that restores previously saved terminals.
+/// Called from the launcher's "Open" action (`cda_open_terminal`).
+fn spawn_wm_instance(registry: &TerminalRegistry) {
+    match locate_wm_binary() {
+        Ok(bin) => match std::process::Command::new(&bin).spawn() {
+            Ok(child) => registry.track(child),
+            Err(e) => eprintln!("[cda/tray] Failed to spawn window-manager: {e}"),
+        },
         Err(e) => eprintln!("[cda/tray] {e}"),
+    }
+}
+
+#[cfg(all(test, unix))]
+mod terminal_registry_tests {
+    use super::TerminalRegistry;
+    use std::process::Command;
+    use std::time::Duration;
+
+    fn is_alive(pid: u32) -> bool {
+        Command::new("kill")
+            .args(["-0", &pid.to_string()])
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+    }
+
+    /// Regression test for the bug `TerminalRegistry` replaced: a bare
+    /// `killall one-terminal` / `taskkill /IM one-terminal.exe` kills every
+    /// process with that name on the machine, including an unrelated,
+    /// independently-launched standalone `one-terminal` — not just the
+    /// instance(s) this `desktop-agent` process spawned. `kill_all` must
+    /// only touch tracked PIDs.
+    #[test]
+    fn kill_all_only_kills_tracked_pids() {
+        let registry = TerminalRegistry::default();
+
+        // Stand-in for a Terminal instance desktop-agent spawned itself.
+        let tracked_child = Command::new("sleep").arg("30").spawn().unwrap();
+        let tracked_pid = tracked_child.id();
+        registry.track(tracked_child);
+
+        // Stand-in for an unrelated, independently-launched one-terminal —
+        // must survive `kill_all`.
+        let mut unrelated_child = Command::new("sleep").arg("30").spawn().unwrap();
+        let unrelated_pid = unrelated_child.id();
+
+        std::thread::sleep(Duration::from_millis(100));
+        assert!(is_alive(tracked_pid), "tracked child should be running");
+        assert!(is_alive(unrelated_pid), "unrelated child should be running");
+
+        registry.kill_all(true);
+        std::thread::sleep(Duration::from_millis(300));
+
+        assert!(
+            !is_alive(tracked_pid),
+            "tracked child should have been killed"
+        );
+        assert!(
+            is_alive(unrelated_pid),
+            "unrelated child must survive kill_all — this is the bug being fixed"
+        );
+
+        let _ = unrelated_child.kill();
+        let _ = unrelated_child.wait();
+    }
+
+    /// `track()`'s watcher thread must remove the PID from the registry once
+    /// the child exits on its own (e.g. the user closed all Terminal
+    /// windows) — otherwise the registry accumulates dead PIDs forever.
+    #[test]
+    fn track_removes_pid_after_natural_exit() {
+        let registry = TerminalRegistry::default();
+        let child = Command::new("sleep").arg("0.2").spawn().unwrap();
+        let pid = child.id();
+        registry.track(child);
+
+        assert!(registry.pids.lock().unwrap().contains(&pid));
+
+        std::thread::sleep(Duration::from_millis(600));
+
+        assert!(
+            !registry.pids.lock().unwrap().contains(&pid),
+            "watcher thread should have pruned the PID after natural exit"
+        );
     }
 }
 
 /// Spawn a Window Manager instance that starts fresh with zero dashboards.
 /// Called from the tray "Open New Terminal" action so the user always gets a
 /// clean slate rather than a restoration of a previous session.
-fn spawn_wm_instance_fresh() {
+fn spawn_wm_instance_fresh(registry: &TerminalRegistry) {
     match locate_wm_binary() {
-        Ok(bin) => {
-            if let Err(e) = std::process::Command::new(&bin)
-                .env("OT_FRESH_START", "1")
-                .spawn()
-            {
-                eprintln!("[cda/tray] Failed to spawn fresh window-manager: {e}");
-            }
-        }
+        Ok(bin) => match std::process::Command::new(&bin)
+            .env("OT_FRESH_START", "1")
+            .spawn()
+        {
+            Ok(child) => registry.track(child),
+            Err(e) => eprintln!("[cda/tray] Failed to spawn fresh window-manager: {e}"),
+        },
         Err(e) => eprintln!("[cda/tray] {e}"),
     }
 }
@@ -716,6 +837,7 @@ pub fn run() {
         .manage(app_dir_cache.clone())
         .manage(engine_catalog.clone())
         .manage(cfg.clone())
+        .manage(TerminalRegistry::default())
         .setup(|app| {
             let wm = app.state::<WindowManager>().inner().clone();
             let cm = app.state::<ChannelManager>().inner().clone();
@@ -817,10 +939,9 @@ pub fn run() {
                 }
             });
 
-            // ── Auto-launch one-terminal ───────────────────────────────────────
-            // Restore previously open Terminal windows. one-terminal's own startup
-            // handles restoring all saved non-main terminals via load_persisted_terminals.
-            spawn_wm_instance();
+            // Terminal is no longer auto-launched at startup — it opens only when
+            // the user clicks "Open" on the launcher's Terminal card (cda_open_terminal)
+            // or "Open New Terminal" in the tray menu, both below.
 
             // ── System tray ────────────────────────────────────────────────────
             // Initial menu: apps list is empty until the App Directory fetch completes.
@@ -855,7 +976,7 @@ pub fn run() {
                         }
                     }
                     "terminal" => {
-                        spawn_wm_instance_fresh();
+                        spawn_wm_instance_fresh(app.state::<TerminalRegistry>().inner());
                     }
                     "exit" => {
                         // Show the dashboard window and ask the user whether to

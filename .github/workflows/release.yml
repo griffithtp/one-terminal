@@ -1,0 +1,156 @@
+name: Release
+
+on:
+  push:
+    tags: ["v[0-9]*"]
+
+permissions:
+  contents: write
+
+jobs:
+  # Creates the (draft) release once, up front. Each matrix leg below attaches
+  # its assets to this same release via `releaseId` rather than each
+  # independently finding-or-creating a release by tag name — with parallel
+  # OS jobs all hitting the GitHub Releases API for the same tag at roughly
+  # the same time, tag-based lookup is a real create/create race.
+  # `releaseId` sidesteps it entirely (see tauri-apps/tauri-action's docs).
+  create-release:
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.create.outputs.id }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: create
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data } = await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: context.ref.replace('refs/tags/', ''),
+              name: `OneTerminal ${context.ref.replace('refs/tags/', '')}`,
+              draft: true,
+              prerelease: context.ref.includes('-'),
+            });
+            core.setOutput('id', data.id);
+
+      # Uploaded once here (not per matrix leg) so it appears exactly once in
+      # the release's asset list, regardless of how many OS legs run. Warns
+      # downloaders about the Gatekeeper/SmartScreen prompts unsigned builds
+      # trigger — see docs/signing.md for why these builds aren't signed yet.
+      - name: Upload code-signing warning README
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload ${{ github.ref_name }} docs/release-notes-README.md --clobber
+
+  release:
+    needs: create-release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+          - os: macos-latest
+            # Apple Silicon only for now, not `universal-apple-darwin` — a
+            # universal build needs the one-terminal sidecar cross-compiled
+            # for both aarch64 and x86_64 before desktop-agent embeds it,
+            # which is unverified. See docs/plans/07-deployment-and-hosting.md
+            # Issue 07-A.
+            target: aarch64-apple-darwin
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: actions/setup-node@v4
+        with: { node-version: "22", cache: "npm" }
+
+      - run: npm ci
+
+      - name: Sync app version from tag
+        # tauri.conf.json's "version" is a static 0.1.0 in the repo — without
+        # this, every release would ship installers/app metadata stamped
+        # 0.1.0 regardless of which tag triggered the build. Any semver
+        # pre-release suffix (e.g. the "-test" in v0.0.1-test) is stripped:
+        # MSI's ProductVersion field is strictly major.minor.build, all
+        # numeric, each component <= 65535 — WiX hard-fails on a suffix like
+        # "-test" (confirmed: this broke the windows-latest leg on the first
+        # real run). The GitHub Release's own `prerelease` flag (set from
+        # `contains(tag, '-')` in the create-release job) already carries
+        # the pre-release semantics; the installer's internal version number
+        # doesn't need to duplicate it.
+        shell: bash
+        run: |
+          node -e "
+            const fs = require('fs');
+            const version = process.env.GITHUB_REF_NAME.replace(/^v/, '').split('-')[0];
+            for (const p of ['apps/one-terminal/src-tauri/tauri.conf.json', 'apps/desktop-agent/src-tauri/tauri.conf.json']) {
+              const conf = JSON.parse(fs.readFileSync(p, 'utf-8'));
+              conf.version = version;
+              fs.writeFileSync(p, JSON.stringify(conf, null, 2) + '\n');
+            }
+          "
+
+      - name: Build App Directory admin UI
+        # packages/ot-appdirectory embeds apps/app-directory/ui/dist/ via
+        # rust-embed at compile time — must exist before any cargo build
+        # below, or desktop-agent/app-directory-server ship the build.rs
+        # placeholder instead of the real admin UI.
+        run: npm run build:app-directory
+
+      - name: Release one-terminal (standalone installer)
+        uses: tauri-apps/tauri-action@v0
+        with:
+          projectPath: apps/one-terminal
+          releaseId: ${{ needs.create-release.outputs.release_id }}
+          tagName: ${{ github.ref_name }}
+          releaseDraft: true
+          args: --target ${{ matrix.target }}
+        # Signing env vars (APPLE_CERTIFICATE, WINDOWS_CERTIFICATE, etc.) are
+        # deliberately NOT set here. `${{ secrets.X }}` resolves to an empty
+        # string (not "unset") when a secret doesn't exist, and Tauri's macOS
+        # bundler checks env var *presence* (Ok("")), not non-emptiness — an
+        # empty-but-present APPLE_CERTIFICATE makes it attempt to import ""
+        # as a keychain certificate and hard-fail (confirmed: this broke the
+        # macos-latest leg on the first real run). Since no real Apple/
+        # Windows signing secrets are configured in this repo yet, omitting
+        # these vars entirely gets a genuinely unsigned build instead of a
+        # broken one. Add them back (see docs/signing.md) once real secrets
+        # are provisioned.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Release desktop-agent (single-download bundle — embeds one-terminal + App Directory)
+        # desktop-agent's own `build` script (apps/desktop-agent/package.json)
+        # runs scripts/build-terminal-sidecar.ts as part of beforeBuildCommand.
+        # In this matrix every target matches its runner's native arch, so
+        # the script's TAURI_ENV_TARGET_TRIPLE cross-compile path is not
+        # actually exercised here (host-triple fallback is what runs) —
+        # that path is unverified until a genuinely cross-compiling target
+        # (e.g. universal macOS) is added.
+        uses: tauri-apps/tauri-action@v0
+        with:
+          projectPath: apps/desktop-agent
+          releaseId: ${{ needs.create-release.outputs.release_id }}
+          tagName: ${{ github.ref_name }}
+          releaseDraft: true
+          args: --target ${{ matrix.target }}
+        # Signing env vars (APPLE_CERTIFICATE, WINDOWS_CERTIFICATE, etc.) are
+        # deliberately NOT set here. `${{ secrets.X }}` resolves to an empty
+        # string (not "unset") when a secret doesn't exist, and Tauri's macOS
+        # bundler checks env var *presence* (Ok("")), not non-emptiness — an
+        # empty-but-present APPLE_CERTIFICATE makes it attempt to import ""
+        # as a keychain certificate and hard-fail (confirmed: this broke the
+        # macos-latest leg on the first real run). Since no real Apple/
+        # Windows signing secrets are configured in this repo yet, omitting
+        # these vars entirely gets a genuinely unsigned build instead of a
+        # broken one. Add them back (see docs/signing.md) once real secrets
+        # are provisioned.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

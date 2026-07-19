@@ -2,6 +2,7 @@ mod config;
 mod engine;
 mod engines;
 mod layout;
+mod sample_widget;
 mod terminal;
 mod webview_pool;
 mod widgets;
@@ -1163,6 +1164,7 @@ pub fn run() {
                 })
                 .build(),
         )
+        .register_uri_scheme_protocol("sample-widget", sample_widget::handle)
         .manage(identity.clone())
         .manage(manager.clone())
         .manage(cfg.clone())
