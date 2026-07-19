@@ -19,6 +19,8 @@ jobs:
     outputs:
       release_id: ${{ steps.create.outputs.id }}
     steps:
+      - uses: actions/checkout@v4
+
       - id: create
         uses: actions/github-script@v7
         with:
@@ -32,6 +34,15 @@ jobs:
               prerelease: context.ref.includes('-'),
             });
             core.setOutput('id', data.id);
+
+      # Uploaded once here (not per matrix leg) so it appears exactly once in
+      # the release's asset list, regardless of how many OS legs run. Warns
+      # downloaders about the Gatekeeper/SmartScreen prompts unsigned builds
+      # trigger — see docs/signing.md for why these builds aren't signed yet.
+      - name: Upload code-signing warning README
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload ${{ github.ref_name }} docs/release-notes-README.md --clobber
 
   release:
     needs: create-release

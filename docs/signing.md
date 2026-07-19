@@ -14,6 +14,12 @@ produces unsigned installers, which trigger Gatekeeper (macOS) / SmartScreen
 itself. Set these up, then add the env vars back, before publishing a
 release users are expected to install.
 
+Until then, `release.yml`'s `create-release` job uploads
+[`docs/release-notes-README.md`](release-notes-README.md) as a release
+asset so downloaders see the mitigation steps below instead of a bare
+Gatekeeper/SmartScreen prompt with no explanation. Keep that file in sync
+with the platform-specific steps documented here if either changes.
+
 **Confirmed on macOS:** downloading the unsigned `.dmg`, dragging
 `desktop-agent.app` to `/Applications`, and double-clicking it produces
 `"desktop-agent" is damaged and can't be opened. You should move it to the
@@ -22,14 +28,18 @@ message, rather than the older "unidentified developer, open anyway"
 prompt, for a quarantined (downloaded-via-browser) app with no valid
 signature at all. Ad-hoc/self-signing does not satisfy Gatekeeper's
 quarantine check here — real notarization (the Apple secrets below) is the
-only fix. For local testing only, strip the quarantine attribute:
+only fix. The workaround (strip the quarantine attribute):
 
 ```sh
 xattr -cr /Applications/desktop-agent.app
 ```
 
-Do not tell end users to run this — it's a local workaround, not something
-to put in release notes.
+This is now documented for end users too, in
+[`docs/release-notes-README.md`](release-notes-README.md) (shipped as a
+release asset) — since until real signing is set up, telling downloaders
+nothing is worse than telling them what the prompt means and how to get
+past it, for a source they've already chosen to trust. Revisit this once
+real signing lands and the warning no longer applies.
 
 ## Required secrets (repo → Settings → Secrets and variables → Actions)
 
