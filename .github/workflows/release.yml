@@ -10,9 +10,9 @@ permissions:
 jobs:
   # Creates the (draft) release once, up front. Each matrix leg below attaches
   # its assets to this same release via `releaseId` rather than each
-  # independently finding-or-creating a release by tag name — with three
-  # parallel OS jobs all hitting the GitHub Releases API for the same tag at
-  # roughly the same time, tag-based lookup is a real create/create race.
+  # independently finding-or-creating a release by tag name — with parallel
+  # OS jobs all hitting the GitHub Releases API for the same tag at roughly
+  # the same time, tag-based lookup is a real create/create race.
   # `releaseId` sidesteps it entirely (see tauri-apps/tauri-action's docs).
   create-release:
     runs-on: ubuntu-latest
@@ -39,8 +39,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-22.04
-            target: x86_64-unknown-linux-gnu
           - os: windows-latest
             target: x86_64-pc-windows-msvc
           - os: macos-latest
@@ -54,17 +52,6 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install Tauri system dependencies (Linux)
-        if: matrix.os == 'ubuntu-22.04'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            libgtk-3-dev \
-            libwebkit2gtk-4.1-dev \
-            libappindicator3-dev \
-            librsvg2-dev \
-            patchelf
 
       - uses: dtolnay/rust-toolchain@stable
         with:
