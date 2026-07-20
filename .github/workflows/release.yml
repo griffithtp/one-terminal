@@ -39,10 +39,24 @@ jobs:
       # the release's asset list, regardless of how many OS legs run. Warns
       # downloaders about the Gatekeeper/SmartScreen prompts unsigned builds
       # trigger — see docs/signing.md for why these builds aren't signed yet.
+      #
+      # Uses the REST API directly via release_id rather than `gh release
+      # upload <tag>`: GitHub's "get release by tag" endpoint (which `gh`
+      # resolves the tag argument through) explicitly excludes drafts, so
+      # `gh release upload` fails with "release not found" for the draft
+      # release created above (confirmed on a real v0.0.5 tag push).
       - name: Upload code-signing warning README
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload ${{ github.ref_name }} docs/release-notes-README.md --clobber
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            await github.rest.repos.uploadReleaseAsset({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: ${{ steps.create.outputs.id }},
+              name: 'release-notes-README.md',
+              data: fs.readFileSync('docs/release-notes-README.md'),
+            });
 
   release:
     needs: create-release
