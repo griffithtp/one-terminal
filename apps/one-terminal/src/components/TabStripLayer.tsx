@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { StackHeader } from "../types";
 import { headerContentFor } from "./panelHeaders";
+import { FDC3_CHANNELS } from "./fdc3Channels";
 
 interface TabStripLayerProps {
   stacks: StackHeader[];
@@ -205,6 +206,7 @@ function TabStrip({ stack, onTabPointerDown }: TabStripProps) {
                 appId: tab.appId,
                 displayName: tab.displayName ?? null,
                 zoomFactor: tab.zoomFactor,
+                fdc3Channel: tab.fdc3Channel ?? null,
                 kind: "tab",
                 maximized: stack.maximized,
               }).catch(console.error);
@@ -241,6 +243,17 @@ function TabStrip({ stack, onTabPointerDown }: TabStripProps) {
                   setEditing({ label: tab.label, draft: displayLabel });
                 }}
               >
+                {tab.fdc3Channel && (
+                  <span
+                    className="wm-tab__channel-dot"
+                    style={{
+                      background:
+                        FDC3_CHANNELS.find((c) => c.id === tab.fdc3Channel)?.color ?? "transparent",
+                    }}
+                    title={FDC3_CHANNELS.find((c) => c.id === tab.fdc3Channel)?.name}
+                    aria-hidden
+                  />
+                )}
                 {headerContentFor(tab.appId)({ appId: tab.appId, title: displayLabel })}
               </span>
             )}
@@ -263,6 +276,7 @@ function TabStrip({ stack, onTabPointerDown }: TabStripProps) {
                     appId: tab.appId,
                     displayName: tab.displayName ?? null,
                     zoomFactor: tab.zoomFactor,
+                    fdc3Channel: tab.fdc3Channel ?? null,
                     kind: "tab",
                     maximized: stack.maximized,
                     anchor: "right",

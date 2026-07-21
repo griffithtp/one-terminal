@@ -10,6 +10,21 @@ use super::dashboard::DashboardsSnapshot;
 use super::docking::DropZone;
 use super::node::LayoutNode;
 
+/// The 8 standard FDC3 2.2 system channel ids. Mirrors `FDC3_CHANNELS` in
+/// `Header.tsx` / `OverlayApp.tsx` — kept as a fixed allowlist since
+/// `wm_set_panel_fdc3_channel` interpolates the id into a JS snippet
+/// evaluated in the target panel's webview.
+const SYSTEM_CHANNEL_IDS: [&str; 8] = [
+    "fdc3.channel.1",
+    "fdc3.channel.2",
+    "fdc3.channel.3",
+    "fdc3.channel.4",
+    "fdc3.channel.5",
+    "fdc3.channel.6",
+    "fdc3.channel.7",
+    "fdc3.channel.8",
+];
+
 // ── Helper ────────────────────────────────────────────────────────────────────
 
 /// Resolve the calling window's terminal, returning a descriptive error if the
@@ -301,6 +316,75 @@ pub async fn wm_set_zoom(
     Ok(())
 }
 
+/// Return the FDC3 channel currently joined by the panel identified by
+/// `label`, or `None` if it's on no channel (or doesn't exist).
+#[tauri::command]
+pub fn wm_get_panel_fdc3_channel(
+    label: String,
+    window: Window,
+    manager: State<'_, TerminalManager>,
+) -> Option<String> {
+    manager
+        .get(window.label())
+        .and_then(|t| t.layout_tree.fdc3_channel(&label))
+}
+
+/// Join (or leave) the FDC3 user channel for the panel identified by `label`.
+///
+/// Unlike the Terminal-wide channel pill this replaces, this actually joins
+/// the panel's own `fdc3-plugin.js` connection to the broker: the channel
+/// choice is persisted on the panel's `LeafMeta`, then pushed into the
+/// panel's live webview via `wv.eval` (there is no native Tauri API for this,
+/// unlike `wm_set_zoom`'s `wv.set_zoom` — only the panel's own JS knows how
+/// to speak the FDC3 join protocol). `channel_id` must be one of the 8 fixed
+/// system-channel ids; it is validated before being interpolated into the
+/// evaluated script.
+#[tauri::command]
+pub fn wm_set_panel_fdc3_channel(
+    label: String,
+    channel_id: Option<String>,
+    window: Window,
+    manager: State<'_, TerminalManager>,
+    app: AppHandle,
+) -> Result<(), String> {
+    if let Some(id) = &channel_id {
+        if !SYSTEM_CHANNEL_IDS.contains(&id.as_str()) {
+            return Err(format!("unknown FDC3 channel id '{id}'"));
+        }
+    }
+
+    let terminal = get_terminal!(manager, window);
+    if !terminal
+        .layout_tree
+        .set_fdc3_channel(&label, channel_id.clone())
+    {
+        return Err(format!("no panel with label '{label}'"));
+    }
+
+    let script = match &channel_id {
+        Some(id) => {
+            let encoded = serde_json::to_string(id).map_err(|e| e.to_string())?;
+            format!(
+                "window.fdc3Ready && window.fdc3Ready.then(function(c) {{ c.joinUserChannel({encoded}); }});"
+            )
+        }
+        None => "window.fdc3Ready && window.fdc3Ready.then(function(c) { c.leaveCurrentChannel(); });"
+            .to_string(),
+    };
+    if let Some(wv) = app.get_webview(&label) {
+        wv.eval(&script).map_err(|e| e.to_string())?;
+    }
+
+    terminal.layout_tree.emit_host(&app);
+    if let Some(snap) = terminal.layout_tree.snapshot() {
+        let chrome = format!("{}-chrome", window.label());
+        if let Some(wv) = app.get_webview(&chrome) {
+            let _ = wv.emit("wm:layout", &snap);
+        }
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub fn wm_end_tab_drag(
     source_label: String,
@@ -422,12 +506,13 @@ pub async fn wm_delete_dashboard(
     name: String,
     window: Window,
     manager: State<'_, TerminalManager>,
+    cfg: State<'_, crate::config::TerminalConfig>,
     app: AppHandle,
 ) -> Result<bool, String> {
     let terminal = get_terminal!(manager, window);
     let deleted = terminal
         .layout_tree
-        .delete_dashboard(&name, &window, &app)
+        .delete_dashboard(&name, &window, &app, &cfg.panel_init_script())
         .map_err(|e| format!("{e:?}"))?;
     if deleted {
         terminal.layout_tree.persist_dashboards();

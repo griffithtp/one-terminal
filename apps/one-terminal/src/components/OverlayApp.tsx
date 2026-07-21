@@ -18,31 +18,7 @@ import type {
   LayoutSnapshot,
   OverflowMenuPayload,
 } from "../types";
-
-// ── FDC3 channel picker types ─────────────────────────────────────────────────
-
-interface ChannelPickerPayload {
-  x: number;
-  y: number;
-  channelId: string | null;
-}
-
-interface FdcChannel {
-  id: string;
-  name: string;
-  color: string;
-}
-
-const FDC3_CHANNELS: FdcChannel[] = [
-  { id: "fdc3.channel.1", name: "Channel 1", color: "#e11d48" },
-  { id: "fdc3.channel.2", name: "Channel 2", color: "#ea580c" },
-  { id: "fdc3.channel.3", name: "Channel 3", color: "#ca8a04" },
-  { id: "fdc3.channel.4", name: "Channel 4", color: "#16a34a" },
-  { id: "fdc3.channel.5", name: "Channel 5", color: "#0891b2" },
-  { id: "fdc3.channel.6", name: "Channel 6", color: "#2563eb" },
-  { id: "fdc3.channel.7", name: "Channel 7", color: "#7c3aed" },
-  { id: "fdc3.channel.8", name: "Channel 8", color: "#db2777" },
-];
+import { FDC3_CHANNELS } from "./fdc3Channels";
 
 // ── Context-menu types ─────────────────────────────────────────────────────────
 
@@ -55,6 +31,8 @@ interface CtxMenuPayload {
   appId?: string;
   displayName?: string;
   zoomFactor?: number;
+  /** FDC3 user channel the tab is currently joined to; absent = no channel. */
+  fdc3Channel?: string;
   /**
    * Menu shape selector:
    * - `"tab"` — per-widget kebab + per-tab right-click. Renders Add Widget,
@@ -146,6 +124,10 @@ export function OverlayApp() {
   // ── Context menu state ───────────────────────────────────────────────────
   const [menu, setMenu] = useState<CtxMenuPayload | null>(null);
   const [zoomOpen, setZoomOpen] = useState(false);
+  /** "Set channel" submenu — lists the 8 FDC3 system channels + "No channel"
+   *  for the tab the menu was opened on. Mutually exclusive with Zoom /
+   *  Add Widget (only one submenu open at a time). */
+  const [channelOpen, setChannelOpen] = useState(false);
   /** "Add Widget" submenu — when open, the ctx menu shows an app list and a
    *  "View all widgets" footer beneath that item. Mutually exclusive with
    *  the Zoom submenu so opening one closes the other. */
@@ -175,9 +157,6 @@ export function OverlayApp() {
   // ── Overflow menu state ──────────────────────────────────────────────────
   const [overflowMenu, setOverflowMenu] = useState<OverflowMenuPayload | null>(null);
 
-  // ── Channel picker state ─────────────────────────────────────────────────
-  const [channelPicker, setChannelPicker] = useState<ChannelPickerPayload | null>(null);
-
   // ── Palette state ────────────────────────────────────────────────────────
   const [paletteCommands, setPaletteCommands] = useState<SerializableCommand[] | null>(null);
   const [paletteQuery, setPaletteQuery] = useState("");
@@ -198,76 +177,47 @@ export function OverlayApp() {
     let cancelled = false;
 
     (async () => {
-      const [
-        unCtxMenu,
-        unPalette,
-        unLayout,
-        unHostLayout,
-        unOverflow,
-        unChannelPicker,
-        unEnginePicker,
-      ] = await Promise.all([
-        listen<CtxMenuPayload>("wm:ctx-menu", (e) => {
-          setMenu(e.payload);
-          setZoomOpen(false);
-          setAddWidgetOpen(false);
-          setOverflowMenu(null);
-          setChannelPicker(null);
-        }),
-        listen<SerializableCommand[]>("wm:palette-open", (e) => {
-          setPaletteCommands(e.payload);
-          setPaletteQuery("");
-          setPaletteSelectedIdx(0);
-          setOverflowMenu(null);
-          setChannelPicker(null);
-          requestAnimationFrame(() => paletteInputRef.current?.focus());
-        }),
-        listen<LayoutSnapshot>("wm:layout", (e) => setLayout(e.payload)),
-        listen<HostLayout>("wm:host-layout", (e) => setHostLayout(e.payload)),
-        listen<OverflowMenuPayload>("wm:overflow-menu", (e) => {
-          setOverflowMenu(e.payload);
-          setMenu(null);
-          setChannelPicker(null);
-        }),
-        listen<ChannelPickerPayload>("wm:channel-picker", (e) => {
-          setChannelPicker(e.payload);
-          setMenu(null);
-          setOverflowMenu(null);
-        }),
-        listen<{ app: AppRecord; engines: EngineBinding[]; target: string | null }>(
-          "wm:engine-picker-open",
-          (e) => {
-            setEnginePicker(e.payload);
-            setMenu(null);
+      const [unCtxMenu, unPalette, unLayout, unHostLayout, unOverflow, unEnginePicker] =
+        await Promise.all([
+          listen<CtxMenuPayload>("wm:ctx-menu", (e) => {
+            setMenu(e.payload);
+            setZoomOpen(false);
+            setChannelOpen(false);
+            setAddWidgetOpen(false);
             setOverflowMenu(null);
-            setChannelPicker(null);
-            setPaletteCommands(null);
-            setAllWidgets(null);
-          }
-        ),
-      ]);
+          }),
+          listen<SerializableCommand[]>("wm:palette-open", (e) => {
+            setPaletteCommands(e.payload);
+            setPaletteQuery("");
+            setPaletteSelectedIdx(0);
+            setOverflowMenu(null);
+            requestAnimationFrame(() => paletteInputRef.current?.focus());
+          }),
+          listen<LayoutSnapshot>("wm:layout", (e) => setLayout(e.payload)),
+          listen<HostLayout>("wm:host-layout", (e) => setHostLayout(e.payload)),
+          listen<OverflowMenuPayload>("wm:overflow-menu", (e) => {
+            setOverflowMenu(e.payload);
+            setMenu(null);
+          }),
+          listen<{ app: AppRecord; engines: EngineBinding[]; target: string | null }>(
+            "wm:engine-picker-open",
+            (e) => {
+              setEnginePicker(e.payload);
+              setMenu(null);
+              setOverflowMenu(null);
+              setPaletteCommands(null);
+              setAllWidgets(null);
+            }
+          ),
+        ]);
 
       if (cancelled) {
-        [
-          unCtxMenu,
-          unPalette,
-          unLayout,
-          unHostLayout,
-          unOverflow,
-          unChannelPicker,
-          unEnginePicker,
-        ].forEach((fn) => fn());
+        [unCtxMenu, unPalette, unLayout, unHostLayout, unOverflow, unEnginePicker].forEach((fn) =>
+          fn()
+        );
         return;
       }
-      unlisteners = [
-        unCtxMenu,
-        unPalette,
-        unLayout,
-        unHostLayout,
-        unOverflow,
-        unChannelPicker,
-        unEnginePicker,
-      ];
+      unlisteners = [unCtxMenu, unPalette, unLayout, unHostLayout, unOverflow, unEnginePicker];
       invoke("wm_overlay_ready").catch(console.error);
     })();
 
@@ -333,16 +283,17 @@ export function OverlayApp() {
     invoke("wm_ctx_menu_close").catch(console.error);
   }
 
-  // ── Channel picker actions ───────────────────────────────────────────────
-
-  function dismissChannelPicker() {
-    setChannelPicker(null);
-    invoke("wm_ctx_menu_close").catch(console.error);
-  }
+  // ── Set-channel submenu actions ──────────────────────────────────────────
+  // Joins/leaves the FDC3 channel for the tab the ctx menu was opened on
+  // (`menu.tabLabel`) — per-widget, not per-Terminal. See
+  // `wm_set_panel_fdc3_channel` in layout/commands.rs.
 
   function selectChannel(id: string | null) {
-    invoke("wm_set_terminal_fdc3_channel", { channelId: id }).catch(console.error);
-    dismissChannelPicker();
+    if (!menu?.tabLabel) return;
+    invoke("wm_set_panel_fdc3_channel", { label: menu.tabLabel, channelId: id }).catch(
+      console.error
+    );
+    dismiss();
   }
 
   // ── Context menu actions ─────────────────────────────────────────────────
@@ -350,6 +301,7 @@ export function OverlayApp() {
   function dismiss() {
     setMenu(null);
     setZoomOpen(false);
+    setChannelOpen(false);
     setAddWidgetOpen(false);
     invoke("wm_ctx_menu_close").catch(console.error);
   }
@@ -360,6 +312,7 @@ export function OverlayApp() {
   function dismissForOverlaySwap() {
     setMenu(null);
     setZoomOpen(false);
+    setChannelOpen(false);
     setAddWidgetOpen(false);
   }
 
@@ -543,50 +496,6 @@ export function OverlayApp() {
         </>
       )}
 
-      {/* ── FDC3 channel picker ── */}
-      {channelPicker && (
-        <>
-          <div style={{ position: "fixed", inset: 0 }} onPointerDown={dismissChannelPicker} />
-          <ul
-            className="wm-channel-picker-menu"
-            role="listbox"
-            aria-label="FDC3 channel"
-            style={{ position: "fixed", left: channelPicker.x, top: channelPicker.y }}
-            onPointerDown={(e) => e.stopPropagation()}
-          >
-            <li role="option" aria-selected={channelPicker.channelId === null}>
-              <button
-                type="button"
-                className={`wm-channel-picker-menu__item${channelPicker.channelId === null ? " wm-channel-picker-menu__item--active" : ""}`}
-                onClick={() => selectChannel(null)}
-              >
-                <span
-                  className="wm-channel-picker-menu__dot wm-channel-picker-menu__dot--none"
-                  aria-hidden
-                />
-                No channel
-              </button>
-            </li>
-            {FDC3_CHANNELS.map((ch) => (
-              <li key={ch.id} role="option" aria-selected={channelPicker.channelId === ch.id}>
-                <button
-                  type="button"
-                  className={`wm-channel-picker-menu__item${channelPicker.channelId === ch.id ? " wm-channel-picker-menu__item--active" : ""}`}
-                  onClick={() => selectChannel(ch.id)}
-                >
-                  <span
-                    className="wm-channel-picker-menu__dot"
-                    style={{ background: ch.color }}
-                    aria-hidden
-                  />
-                  {ch.name}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
-
       {/* ── Tab / group context menu ── */}
       {menu &&
         (() => {
@@ -696,6 +605,7 @@ export function OverlayApp() {
                         onClick={() => {
                           setAddWidgetOpen((o) => !o);
                           setZoomOpen(false);
+                          setChannelOpen(false);
                         }}
                       >
                         Add Widget
@@ -828,7 +738,10 @@ export function OverlayApp() {
                             className="wm-tab-ctx-menu__item wm-tab-ctx-menu__item--submenu"
                             aria-haspopup="true"
                             aria-expanded={zoomOpen}
-                            onClick={() => setZoomOpen((o) => !o)}
+                            onClick={() => {
+                              setZoomOpen((o) => !o);
+                              setChannelOpen(false);
+                            }}
                           >
                             Zoom
                             <span className="wm-tab-ctx-menu__submenu-arrow">›</span>
@@ -877,6 +790,70 @@ export function OverlayApp() {
                         >
                           Reset zoom
                         </button>
+
+                        <div className="wm-tab-ctx-menu__separator" role="separator" />
+
+                        <div className="wm-tab-ctx-menu__submenu-wrap">
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className="wm-tab-ctx-menu__item wm-tab-ctx-menu__item--submenu"
+                            aria-haspopup="true"
+                            aria-expanded={channelOpen}
+                            onClick={() => {
+                              setChannelOpen((o) => !o);
+                              setZoomOpen(false);
+                            }}
+                          >
+                            <span className="wm-tab-ctx-menu__item-label">
+                              <span
+                                className="wm-tab-ctx-menu__channel-dot"
+                                style={{
+                                  background:
+                                    FDC3_CHANNELS.find((c) => c.id === menu.fdc3Channel)?.color ??
+                                    "transparent",
+                                }}
+                                aria-hidden
+                              />
+                              Set channel
+                            </span>
+                            <span className="wm-tab-ctx-menu__submenu-arrow">›</span>
+                          </button>
+                          {channelOpen && (
+                            <div className="wm-tab-ctx-menu__submenu" role="menu">
+                              <button
+                                type="button"
+                                role="menuitemradio"
+                                aria-checked={!menu.fdc3Channel}
+                                className="wm-tab-ctx-menu__item wm-tab-ctx-menu__item--channel"
+                                onClick={() => selectChannel(null)}
+                              >
+                                <span
+                                  className="wm-tab-ctx-menu__channel-dot wm-tab-ctx-menu__channel-dot--none"
+                                  aria-hidden
+                                />
+                                No channel
+                              </button>
+                              {FDC3_CHANNELS.map((ch) => (
+                                <button
+                                  key={ch.id}
+                                  type="button"
+                                  role="menuitemradio"
+                                  aria-checked={menu.fdc3Channel === ch.id}
+                                  className="wm-tab-ctx-menu__item wm-tab-ctx-menu__item--channel"
+                                  onClick={() => selectChannel(ch.id)}
+                                >
+                                  <span
+                                    className="wm-tab-ctx-menu__channel-dot"
+                                    style={{ background: ch.color }}
+                                    aria-hidden
+                                  />
+                                  {ch.name}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
 
                         {customItems.length > 0 && (
                           <>

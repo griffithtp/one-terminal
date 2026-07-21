@@ -233,8 +233,6 @@ fn spawn_or_restore(
         .map(|p| p.window.clone())
         .unwrap_or_default();
 
-    let saved_fdc3 = persist.as_ref().and_then(|p| p.fdc3_channel.clone());
-
     // ── OS window ─────────────────────────────────────────────────────────────
     let win = tauri::WindowBuilder::new(app, label)
         .title(format!("OneTerminal — {display_name}"))
@@ -344,10 +342,16 @@ fn spawn_or_restore(
     // ── Restore persisted panel webviews ─────────────────────────────────────
     let panels_to_restore = tree.panels_for_restore();
     if !panels_to_restore.is_empty() {
-        for (panel_label, url) in &panels_to_restore {
+        let base_init_script = app.state::<crate::config::TerminalConfig>().panel_init_script();
+        for (panel_label, url, channel) in &panels_to_restore {
             if let Ok(parsed_url) = url.parse::<tauri::Url>() {
+                let script = crate::config::append_initial_channel(
+                    &base_init_script,
+                    channel.as_deref(),
+                );
                 if let Err(e) = win.add_child(
-                    WebviewBuilder::new(panel_label, WebviewUrl::External(parsed_url)),
+                    WebviewBuilder::new(panel_label, WebviewUrl::External(parsed_url))
+                        .initialization_script(&script),
                     LogicalPosition::new(0.0, 0.0),
                     LogicalSize::new(1.0, 1.0),
                 ) {
@@ -383,7 +387,6 @@ fn spawn_or_restore(
         layout_tree: tree,
         overlay,
         pool,
-        fdc3_channel: Arc::new(RwLock::new(saved_fdc3)),
         window_config,
     });
     manager.register(state);

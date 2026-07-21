@@ -45,8 +45,6 @@ pub struct TerminalState {
     pub overlay: OverlayState,
     /// Pre-warmed blank webviews ready for immediate navigation.
     pub pool: WebviewPool,
-    /// Currently selected FDC3 context channel (`None` = no channel / global).
-    pub fdc3_channel: Arc<RwLock<Option<String>>>,
     /// Last-known OS window position and size (logical pixels). Updated by the
     /// window move/resize listener; persisted with 500 ms debounce.
     /// Commands that need the current geometry (e.g. `wm_reset_terminal_position`)

@@ -34,6 +34,8 @@ struct LeafMeta {
     display_name: Option<String>,
     /// Webview zoom multiplier. Default `1.0`; valid range `0.5..=2.0`.
     zoom_factor: f64,
+    /// FDC3 user channel this panel is joined to. `None` = no channel.
+    fdc3_channel: Option<String>,
 }
 
 /// Content metadata for a new panel, passed as a unit to [`LayoutTree::add_panel`]
@@ -147,6 +149,7 @@ impl LayoutTree {
                                 engine_binding: pm.engine_binding,
                                 display_name: pm.display_name,
                                 zoom_factor: pm.zoom_factor,
+                                fdc3_channel: pm.fdc3_channel,
                             },
                         )
                     })
@@ -161,9 +164,10 @@ impl LayoutTree {
         Ok(())
     }
 
-    /// Return every (label, url) pair for leaves currently in the tree so
-    /// the startup path can recreate webviews for a restored layout.
-    pub fn panels_for_restore(&self) -> Vec<(String, String)> {
+    /// Return every (label, url, fdc3_channel) triple for leaves currently in
+    /// the tree so the startup path can recreate webviews for a restored
+    /// layout, re-joining each panel to its previously-selected channel.
+    pub fn panels_for_restore(&self) -> Vec<(String, String, Option<String>)> {
         let g = self.inner.read().unwrap();
         let Some(root) = g.root.as_ref() else {
             return Vec::new();
@@ -320,6 +324,11 @@ impl LayoutTree {
             .iter()
             .map(|(k, v)| (k.clone(), v.zoom_factor))
             .collect();
+        let fdc3_channels: HashMap<String, Option<String>> = g
+            .meta
+            .iter()
+            .map(|(k, v)| (k.clone(), v.fdc3_channel.clone()))
+            .collect();
         let mut max_path_buf = Vec::new();
         let max_path = g
             .maximized_stack_id
@@ -343,6 +352,7 @@ impl LayoutTree {
             &app_ids,
             &display_names,
             &zoom_factors,
+            &fdc3_channels,
         )
     }
 
@@ -408,6 +418,37 @@ impl LayoutTree {
         } else {
             None
         }
+    }
+
+    /// Return the FDC3 channel currently joined by `label`, if any. Returns
+    /// `None` both when the panel doesn't exist and when it exists but has
+    /// no channel — callers that need to distinguish should check panel
+    /// existence separately (e.g. via `labels_in_stack` or a tree walk).
+    pub fn fdc3_channel(&self, label: &str) -> Option<String> {
+        self.inner
+            .read()
+            .unwrap()
+            .meta
+            .get(label)
+            .and_then(|m| m.fdc3_channel.clone())
+    }
+
+    /// Set (or clear) the FDC3 channel for the panel identified by `label`.
+    /// Returns `false` if no panel with that label exists.
+    pub fn set_fdc3_channel(&self, label: &str, channel_id: Option<String>) -> bool {
+        let found = {
+            let mut g = self.inner.write().unwrap();
+            let Some(meta) = g.meta.get_mut(label) else {
+                return false;
+            };
+            meta.fdc3_channel = channel_id;
+            true
+        };
+        if found {
+            // Infrequent, user-driven — write immediately, no debounce.
+            self.schedule_save(0);
+        }
+        found
     }
 
     /// Synthesize a `LayoutSnapshot` for the legacy `wm:layout` event. Only
@@ -498,6 +539,7 @@ impl LayoutTree {
                     engine_binding: spec.engine_binding,
                     display_name: None,
                     zoom_factor: 1.0,
+                    fdc3_channel: None,
                 },
             );
 
@@ -803,8 +845,16 @@ impl LayoutTree {
 
     /// Reload the saved active dashboard snapshot into `Inner`, discarding all
     /// unsaved live changes, and reconcile panel webviews on the main thread.
-    /// Clears the dirty flag. `win` is required to create any missing webviews.
-    pub fn discard_dashboard(&self, win: &Window, app: &AppHandle) -> Result<(), DashboardError> {
+    /// Clears the dirty flag. `win` is required to create any missing
+    /// webviews; `panel_init_script` is injected into each recreated panel
+    /// (base FDC3 agent config + a per-panel channel rejoin, see
+    /// [`TerminalConfig::panel_init_script`](crate::config::TerminalConfig::panel_init_script)).
+    pub fn discard_dashboard(
+        &self,
+        win: &Window,
+        app: &AppHandle,
+        panel_init_script: &str,
+    ) -> Result<(), DashboardError> {
         // Collect what's currently alive so we can diff.
         let current_labels: Vec<String> = {
             let g = self.inner.read().unwrap();
@@ -824,7 +874,7 @@ impl LayoutTree {
         let panels_to_create = self.apply_layout_to_inner(clean_layout);
 
         // Reconcile webviews on the main thread.
-        self.reconcile_panel_webviews(current_labels, panels_to_create, win, app)?;
+        self.reconcile_panel_webviews(current_labels, panels_to_create, win, app, panel_init_script)?;
 
         self.reflow(app);
         self.emit_host(app);
@@ -848,6 +898,7 @@ impl LayoutTree {
         name: &str,
         win: &Window,
         app: &AppHandle,
+        panel_init_script: &str,
     ) -> Result<(), DashboardError> {
         // Validate and check dirty state without holding any write lock.
         {
@@ -892,7 +943,7 @@ impl LayoutTree {
         let panels_to_create = self.apply_layout_to_inner(new_layout);
 
         // Destroy old webviews + create new ones on the main thread.
-        self.reconcile_panel_webviews(current_labels, panels_to_create, win, app)?;
+        self.reconcile_panel_webviews(current_labels, panels_to_create, win, app, panel_init_script)?;
 
         // Persist the updated store (new active + snapshot of outgoing dashboard).
         self.schedule_save(0);
@@ -917,6 +968,7 @@ impl LayoutTree {
         name: &str,
         win: &Window,
         app: &AppHandle,
+        panel_init_script: &str,
     ) -> Result<bool, DashboardError> {
         // Check existence and whether this is the active dashboard.
         let (is_active, current_labels) = {
@@ -947,7 +999,7 @@ impl LayoutTree {
         // Deleted the active dashboard — load whatever is now active (or None).
         let new_layout = self.dashboard_store.read().unwrap().load_active();
         let panels_to_create = self.apply_layout_to_inner(new_layout);
-        self.reconcile_panel_webviews(current_labels, panels_to_create, win, app)?;
+        self.reconcile_panel_webviews(current_labels, panels_to_create, win, app, panel_init_script)?;
 
         self.reflow(app);
         self.emit_host(app);
@@ -964,9 +1016,12 @@ impl LayoutTree {
     }
 
     /// Load a `PersistedLayout` (or empty layout when `None`) into `Inner`.
-    /// Returns the `(label, url)` pairs of all panels in the new layout,
-    /// ordered depth-first.
-    fn apply_layout_to_inner(&self, layout: Option<PersistedLayout>) -> Vec<(String, String)> {
+    /// Returns the `(label, url, fdc3_channel)` triples of all panels in the
+    /// new layout, ordered depth-first.
+    fn apply_layout_to_inner(
+        &self,
+        layout: Option<PersistedLayout>,
+    ) -> Vec<(String, String, Option<String>)> {
         match layout {
             Some(l) => {
                 let mut panels = Vec::new();
@@ -985,6 +1040,7 @@ impl LayoutTree {
                                 engine_binding: pm.engine_binding,
                                 display_name: pm.display_name,
                                 zoom_factor: pm.zoom_factor,
+                                fdc3_channel: pm.fdc3_channel,
                             };
                             (label, meta)
                         })
@@ -1011,18 +1067,24 @@ impl LayoutTree {
     }
 
     /// Close all webviews whose label is in `to_destroy`, then open fresh
-    /// webviews for each `(label, url)` pair in `to_create`. Dispatched on
-    /// the main thread because `add_child` requires it on Windows/macOS.
+    /// webviews for each `(label, url, fdc3_channel)` triple in `to_create`.
+    /// Dispatched on the main thread because `add_child` requires it on
+    /// Windows/macOS. `panel_init_script` is the base script (FDC3 agent URL,
+    /// etc.); when a panel has a saved channel, `OT_FDC3_INITIAL_CHANNEL` is
+    /// appended so `fdc3-plugin.js` rejoins it once the recreated webview's
+    /// handshake completes.
     fn reconcile_panel_webviews(
         &self,
         to_destroy: Vec<String>,
-        to_create: Vec<(String, String)>,
+        to_create: Vec<(String, String, Option<String>)>,
         win: &Window,
         app: &AppHandle,
+        panel_init_script: &str,
     ) -> Result<(), DashboardError> {
         let (tx, rx) = std::sync::mpsc::channel::<Result<(), String>>();
         let app_for_main = app.clone();
         let win_for_main = win.clone();
+        let base_script = panel_init_script.to_string();
 
         app.run_on_main_thread(move || {
             let result = (|| -> Result<(), String> {
@@ -1031,11 +1093,16 @@ impl LayoutTree {
                         wv.close().map_err(|e| e.to_string())?;
                     }
                 }
-                for (label, url) in &to_create {
+                for (label, url, channel) in &to_create {
                     if let Ok(parsed) = url.parse::<tauri::Url>() {
+                        let script = crate::config::append_initial_channel(
+                            &base_script,
+                            channel.as_deref(),
+                        );
                         win_for_main
                             .add_child(
-                                WebviewBuilder::new(label, WebviewUrl::External(parsed)),
+                                WebviewBuilder::new(label, WebviewUrl::External(parsed))
+                                    .initialization_script(&script),
                                 LogicalPosition::new(0.0, 0.0),
                                 LogicalSize::new(1.0, 1.0),
                             )
@@ -1077,6 +1144,7 @@ fn snapshot_for_persist(inner: &Inner) -> PersistedLayout {
                     engine_binding: m.engine_binding.clone(),
                     display_name: m.display_name.clone(),
                     zoom_factor: m.zoom_factor,
+                    fdc3_channel: m.fdc3_channel.clone(),
                 },
             )
         })
@@ -1163,12 +1231,12 @@ fn collect_leaf_labels(node: &LayoutNode, out: &mut Vec<String>) {
 fn collect_panel_urls(
     node: &LayoutNode,
     meta: &HashMap<String, LeafMeta>,
-    out: &mut Vec<(String, String)>,
+    out: &mut Vec<(String, String, Option<String>)>,
 ) {
     match node {
         LayoutNode::Leaf { label, .. } => {
             if let Some(m) = meta.get(label) {
-                out.push((label.clone(), m.url.clone()));
+                out.push((label.clone(), m.url.clone(), m.fdc3_channel.clone()));
             }
         }
         LayoutNode::Splitter { children, .. } | LayoutNode::Stack { children, .. } => {
@@ -1301,6 +1369,7 @@ fn walk_for_snapshot(
                 engine_binding: m.and_then(|m| m.engine_binding.clone()),
                 display_name: m.and_then(|m| m.display_name.clone()),
                 zoom_factor: m.map(|m| m.zoom_factor).unwrap_or(1.0),
+                fdc3_channel: m.and_then(|m| m.fdc3_channel.clone()),
             });
         }
         LayoutNode::Splitter {

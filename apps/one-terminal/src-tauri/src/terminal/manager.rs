@@ -32,7 +32,6 @@ pub struct TerminalListItem {
     pub name: String,
     pub active_dashboard: String,
     pub dashboard_count: usize,
-    pub fdc3_channel: Option<String>,
 }
 
 // ── TerminalManager ───────────────────────────────────────────────────────────
@@ -101,13 +100,11 @@ impl TerminalManager {
             .map(|t| {
                 let name = t.name.read().unwrap().clone();
                 let ds = t.layout_tree.dashboards_snapshot();
-                let fdc3 = t.fdc3_channel.read().unwrap().clone();
                 TerminalListItem {
                     id: t.id.clone(),
                     name,
                     active_dashboard: ds.active,
                     dashboard_count: ds.dashboards.len(),
-                    fdc3_channel: fdc3,
                 }
             })
             .collect();

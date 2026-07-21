@@ -63,6 +63,9 @@ pub struct PanelBounds {
     /// Webview zoom multiplier; `1.0` is 100 %.
     #[serde(default = "default_zoom")]
     pub zoom_factor: f64,
+    /// FDC3 user channel this panel is joined to. `None` = no channel.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fdc3_channel: Option<String>,
 }
 
 fn default_zoom() -> f64 {

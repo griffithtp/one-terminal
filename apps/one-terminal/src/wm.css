@@ -243,99 +243,6 @@ body,
   min-width: 0;
 }
 
-/* ── FDC3 channel selector pill (chrome webview) ────────────────────────── */
-
-.wm-channel-selector__pill {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 8px;
-  background: var(--ot-bg-elevated);
-  border: 1px solid var(--ot-border-default);
-  border-radius: 12px;
-  color: var(--ot-text-primary);
-  cursor: pointer;
-  font-size: 12px;
-  white-space: nowrap;
-  flex-shrink: 0;
-  transition:
-    background 120ms,
-    border-color 120ms;
-}
-.wm-channel-selector__pill:hover {
-  background: var(--ot-bg-elevated-hover);
-  border-color: var(--ot-border-strong);
-}
-
-.wm-channel-selector__dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.wm-channel-selector__dot--none {
-  background: transparent;
-  border: 1.5px solid var(--ot-border-strong);
-}
-
-.wm-channel-selector__label {
-  max-width: 90px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.wm-channel-selector__caret {
-  font-size: 10px;
-  opacity: 0.7;
-}
-
-/* ── FDC3 channel picker dropdown (overlay webview) ─────────────────────── */
-
-.wm-channel-picker-menu {
-  background: var(--ot-bg-surface);
-  border: 1px solid var(--ot-border-default);
-  border-radius: 6px;
-  padding: 4px;
-  list-style: none;
-  box-shadow: var(--ot-elev-popover);
-  min-width: 160px;
-  z-index: 200;
-}
-
-.wm-channel-picker-menu__item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  padding: 6px 10px;
-  background: transparent;
-  border: none;
-  border-radius: 4px;
-  color: var(--ot-text-primary);
-  cursor: pointer;
-  font-size: 12px;
-  text-align: left;
-  transition: background 100ms;
-}
-.wm-channel-picker-menu__item:hover {
-  background: var(--ot-bg-elevated);
-}
-.wm-channel-picker-menu__item--active {
-  color: var(--ot-text-strongest);
-  font-weight: 500;
-}
-
-.wm-channel-picker-menu__dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-.wm-channel-picker-menu__dot--none {
-  background: transparent;
-  border: 1.5px solid var(--ot-border-strong);
-}
-
 .wm-header__app-group {
   display: flex;
   gap: 1px;
@@ -763,12 +670,21 @@ body,
   border-bottom: 2px solid var(--ot-accent);
 }
 .wm-tab__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   user-select: none;
   -webkit-user-select: none;
+}
+.wm-tab__channel-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
 }
 .wm-tab__label-input {
   flex: 1 1 auto;
@@ -960,6 +876,26 @@ body,
   margin-left: 8px;
   opacity: 0.6;
   font-size: 13px;
+}
+.wm-tab-ctx-menu__item-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.wm-tab-ctx-menu__item--channel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.wm-tab-ctx-menu__channel-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.wm-tab-ctx-menu__channel-dot--none {
+  background: transparent;
+  border: 1.5px solid var(--ot-border-strong);
 }
 .wm-tab-ctx-menu__submenu {
   position: absolute;

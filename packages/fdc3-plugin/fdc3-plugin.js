@@ -429,6 +429,16 @@ if (typeof window !== 'undefined') {
     .then((client) => {
       window.fdc3 = client;
       window.dispatchEvent(new CustomEvent('fdc3Ready', { detail: client }));
+      // window.OT_FDC3_INITIAL_CHANNEL is injected by the Terminal host at
+      // webview-creation time (see one-terminal's `config::append_initial_channel`)
+      // when this panel was previously joined to a channel — re-join it now
+      // that the connection is live, so a webview reload/dashboard-switch/
+      // restart doesn't silently drop the panel off its channel.
+      if (window.OT_FDC3_INITIAL_CHANNEL) {
+        client.joinUserChannel(window.OT_FDC3_INITIAL_CHANNEL).catch((err) => {
+          console.warn('[fdc3-plugin] Could not rejoin initial channel:', err.message);
+        });
+      }
       return client;
     })
     .catch((err) => {

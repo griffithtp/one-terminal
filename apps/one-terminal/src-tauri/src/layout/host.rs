@@ -57,6 +57,9 @@ pub struct StackTab {
     pub display_name: Option<String>,
     /// Webview zoom multiplier; `1.0` is 100 %.
     pub zoom_factor: f64,
+    /// FDC3 user channel this tab is joined to. `None` = no channel.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fdc3_channel: Option<String>,
 }
 
 #[derive(Clone, Serialize)]
@@ -85,6 +88,7 @@ pub fn compute_host_layout(
     app_ids: &HashMap<String, String>,
     display_names: &HashMap<String, Option<String>>,
     zoom_factors: &HashMap<String, f64>,
+    fdc3_channels: &HashMap<String, Option<String>>,
 ) -> HostLayout {
     let mut stacks = Vec::new();
     let mut splitters = Vec::new();
@@ -97,7 +101,14 @@ pub fn compute_host_layout(
                 active, children, ..
             }) = resolve(root, path)
             {
-                let tabs = stack_tabs(children, titles, app_ids, display_names, zoom_factors);
+                let tabs = stack_tabs(
+                    children,
+                    titles,
+                    app_ids,
+                    display_names,
+                    zoom_factors,
+                    fdc3_channels,
+                );
                 stacks.push(StackHeader {
                     path: path.to_vec(),
                     x: origin_x,
@@ -124,6 +135,7 @@ pub fn compute_host_layout(
                 app_ids,
                 display_names,
                 zoom_factors,
+                fdc3_channels,
             );
         }
     }
@@ -154,6 +166,7 @@ fn stack_tabs(
     app_ids: &HashMap<String, String>,
     display_names: &HashMap<String, Option<String>>,
     zoom_factors: &HashMap<String, f64>,
+    fdc3_channels: &HashMap<String, Option<String>>,
 ) -> Vec<StackTab> {
     children
         .iter()
@@ -167,12 +180,14 @@ fn stack_tabs(
                 let app_id = app_ids.get(label).cloned().unwrap_or_default();
                 let display_name = display_names.get(label).and_then(|v| v.clone());
                 let zoom_factor = zoom_factors.get(label).copied().unwrap_or(1.0);
+                let fdc3_channel = fdc3_channels.get(label).and_then(|v| v.clone());
                 Some(StackTab {
                     label: label.clone(),
                     title,
                     app_id,
                     display_name,
                     zoom_factor,
+                    fdc3_channel,
                 })
             }
             _ => None,
@@ -194,6 +209,7 @@ fn walk(
     app_ids: &HashMap<String, String>,
     display_names: &HashMap<String, Option<String>>,
     zoom_factors: &HashMap<String, f64>,
+    fdc3_channels: &HashMap<String, Option<String>>,
 ) {
     match node {
         LayoutNode::Leaf { .. } => {}
@@ -241,6 +257,7 @@ fn walk(
                     app_ids,
                     display_names,
                     zoom_factors,
+                    fdc3_channels,
                 );
                 path.pop();
                 offset += axis_share;
@@ -269,7 +286,14 @@ fn walk(
         } => {
             // `simplify()` guarantees a Stack's children are all Leaves, so
             // non-Leaf cases are unreachable here.
-            let tabs = stack_tabs(children, titles, app_ids, display_names, zoom_factors);
+            let tabs = stack_tabs(
+                children,
+                titles,
+                app_ids,
+                display_names,
+                zoom_factors,
+                fdc3_channels,
+            );
 
             stacks.push(StackHeader {
                 path: path.clone(),
@@ -299,6 +323,7 @@ fn walk(
                     app_ids,
                     display_names,
                     zoom_factors,
+                    fdc3_channels,
                 );
                 path.pop();
             }
