@@ -15,6 +15,8 @@ export interface PanelBounds {
   displayName?: string;
   /** Webview zoom multiplier; `1.0` is 100 %. */
   zoomFactor: number;
+  /** FDC3 user channel this panel is joined to; absent means no channel. */
+  fdc3Channel?: string;
 }
 
 export interface DividerBounds {
@@ -47,6 +49,8 @@ export interface StackTab {
   displayName?: string;
   /** Webview zoom multiplier; `1.0` is 100 %. */
   zoomFactor: number;
+  /** FDC3 user channel this tab is joined to; absent means no channel. */
+  fdc3Channel?: string;
 }
 
 export interface StackHeader {

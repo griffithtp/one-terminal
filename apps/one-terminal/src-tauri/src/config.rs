@@ -226,3 +226,21 @@ impl TerminalConfig {
         format!("window.OT_FDC3_AGENT_URL = {encoded};")
     }
 }
+
+/// Append a `window.OT_FDC3_INITIAL_CHANNEL` assignment to `base_script` when
+/// `channel_id` is `Some`; returns `base_script` unchanged otherwise.
+/// `fdc3-plugin.js` reads this once its handshake completes, to auto-rejoin
+/// a panel's previously-selected FDC3 channel after the webview is destroyed
+/// and recreated (dashboard switch, restart). Used at every panel-webview
+/// creation site: `lib.rs`'s cold-start restore loop, `terminal/spawn.rs`'s
+/// secondary-Terminal restore, and `LayoutTree::reconcile_panel_webviews`
+/// (dashboard switch/discard/delete).
+pub fn append_initial_channel(base_script: &str, channel_id: Option<&str>) -> String {
+    match channel_id {
+        Some(id) => {
+            let encoded = serde_json::to_string(id).unwrap_or_else(|_| "\"\"".to_string());
+            format!("{base_script}\nwindow.OT_FDC3_INITIAL_CHANNEL = {encoded};")
+        }
+        None => base_script.to_string(),
+    }
+}

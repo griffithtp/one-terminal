@@ -11,9 +11,10 @@ use config::TerminalConfig;
 use engine::WmHostIdentity;
 use layout::commands::{
     close_tab, update_layout, wm_begin_tab_drag, wm_close_leaf, wm_close_stack,
-    wm_create_dashboard, wm_delete_dashboard, wm_end_tab_drag, wm_list_dashboards,
-    wm_rename_dashboard, wm_rename_panel, wm_rename_tab, wm_reorder_dashboards, wm_save_dashboard,
-    wm_set_active_tab, wm_set_auto_save, wm_set_zoom, wm_splitter_drag, wm_toggle_maximize_stack,
+    wm_create_dashboard, wm_delete_dashboard, wm_end_tab_drag, wm_get_panel_fdc3_channel,
+    wm_list_dashboards, wm_rename_dashboard, wm_rename_panel, wm_rename_tab, wm_reorder_dashboards,
+    wm_save_dashboard, wm_set_active_tab, wm_set_auto_save, wm_set_panel_fdc3_channel, wm_set_zoom,
+    wm_splitter_drag, wm_toggle_maximize_stack,
 };
 use layout::dashboard::DashboardError;
 use layout::drag::wm_drag_move;
@@ -654,6 +655,7 @@ async fn wm_ctx_menu_open(
     app_id: Option<String>,
     display_name: Option<String>,
     zoom_factor: Option<f64>,
+    fdc3_channel: Option<String>,
     kind: Option<String>,
     maximized: Option<bool>,
     anchor: Option<String>,
@@ -677,6 +679,7 @@ async fn wm_ctx_menu_open(
                 "appId": app_id,
                 "displayName": display_name,
                 "zoomFactor": zoom_factor,
+                "fdc3Channel": fdc3_channel,
                 "kind": kind.unwrap_or_else(|| "tab".to_string()),
                 "maximized": maximized.unwrap_or(false),
                 "anchor": anchor.unwrap_or_else(|| "left".to_string()),
@@ -868,6 +871,7 @@ async fn wm_switch_dashboard(
     name: String,
     window: Window,
     manager: State<'_, TerminalManager>,
+    cfg: State<'_, TerminalConfig>,
     app: AppHandle,
 ) -> Result<(), DashboardError> {
     let terminal = manager
@@ -877,7 +881,7 @@ async fn wm_switch_dashboard(
         })?;
     terminal
         .layout_tree
-        .switch_dashboard(&name, &window, &app)?;
+        .switch_dashboard(&name, &window, &app, &cfg.panel_init_script())?;
     {
         let mut inner = terminal.overlay.lock().unwrap();
         inner.stale = true;
@@ -895,6 +899,7 @@ async fn wm_switch_dashboard(
 async fn wm_discard_dashboard(
     window: Window,
     manager: State<'_, TerminalManager>,
+    cfg: State<'_, TerminalConfig>,
     app: AppHandle,
 ) -> Result<(), DashboardError> {
     let terminal = manager
@@ -902,7 +907,9 @@ async fn wm_discard_dashboard(
         .ok_or_else(|| DashboardError::Other {
             message: format!("terminal '{}' not found", window.label()),
         })?;
-    terminal.layout_tree.discard_dashboard(&window, &app)?;
+    terminal
+        .layout_tree
+        .discard_dashboard(&window, &app, &cfg.panel_init_script())?;
     {
         let mut inner = terminal.overlay.lock().unwrap();
         inner.stale = true;
@@ -952,80 +959,6 @@ fn wm_unpark_panels(
 #[tauri::command]
 fn wm_config(cfg: State<'_, TerminalConfig>) -> TerminalConfig {
     cfg.inner().clone()
-}
-
-/// Return the FDC3 context channel currently selected for the invoking Terminal.
-/// `None` means the Terminal is on no channel (global / unfiltered context).
-#[tauri::command]
-fn wm_get_terminal_fdc3_channel(
-    window: Window,
-    manager: State<'_, TerminalManager>,
-) -> Option<String> {
-    manager
-        .get(window.label())
-        .and_then(|t| t.fdc3_channel.read().unwrap().clone())
-}
-
-/// Raise the overlay webview and emit `wm:channel-picker` so the overlay can
-/// render the channel dropdown above all panel webviews.
-///
-/// `x` / `y` are the logical-pixel coordinates of the pill button's bottom-left
-/// corner in the chrome's coordinate space — the overlay positions its dropdown
-/// relative to these.
-#[tauri::command]
-async fn wm_channel_picker_open(
-    x: f64,
-    y: f64,
-    channel_id: Option<String>,
-    window: Window,
-    manager: State<'_, TerminalManager>,
-    app: AppHandle,
-) -> Result<(), String> {
-    let terminal = get_terminal!(manager, window);
-    overlay_raise(Arc::clone(&terminal.overlay), window.label(), &app).await?;
-    let overlay = format!("{}-overlay", window.label());
-    app.get_webview(&overlay)
-        .ok_or("overlay not found".to_string())?
-        .emit(
-            "wm:channel-picker",
-            serde_json::json!({ "x": x, "y": y, "channelId": channel_id }),
-        )
-        .map_err(|e| e.to_string())
-}
-
-/// Set (or clear) the FDC3 context channel for the invoking Terminal.
-///
-/// Persists the selection immediately and emits `wm:terminal-channel` on the
-/// Terminal's own chrome webview so the header can reflect the change.
-/// Also emits the global `wm:terminals` event so the switcher stays in sync.
-#[tauri::command]
-fn wm_set_terminal_fdc3_channel(
-    channel_id: Option<String>,
-    window: Window,
-    manager: State<'_, TerminalManager>,
-    app: AppHandle,
-) -> Result<(), String> {
-    let terminal = get_terminal!(manager, window);
-    *terminal.fdc3_channel.write().unwrap() = channel_id.clone();
-
-    if let Ok(data_dir) = app.path().app_data_dir() {
-        if let Err(e) =
-            layout_persist::update_fdc3_channel(window.label(), channel_id.as_deref(), &data_dir)
-        {
-            eprintln!("[wm_set_terminal_fdc3_channel] persist: {e}");
-        }
-    }
-
-    let chrome_label = format!("{}-chrome", window.label());
-    if let Some(wv) = app.get_webview(&chrome_label) {
-        let _ = wv.emit(
-            "wm:terminal-channel",
-            serde_json::json!({ "channelId": channel_id }),
-        );
-    }
-
-    manager.emit_terminals(&app);
-    Ok(())
 }
 
 /// Copy the current Terminal's active dashboard snapshot to another Terminal's
@@ -1287,11 +1220,13 @@ pub fn run() {
             // wm_ctx_menu_open knows to push it to the back of the z-order.
             let panels_to_restore = tree.panels_for_restore();
             if !panels_to_restore.is_empty() {
-                for (label, url) in &panels_to_restore {
+                for (label, url, channel) in &panels_to_restore {
                     if let Ok(parsed_url) = url.parse::<tauri::Url>() {
+                        let script =
+                            config::append_initial_channel(&panel_init_script, channel.as_deref());
                         if let Err(e) = win.add_child(
                             WebviewBuilder::new(label, WebviewUrl::External(parsed_url))
-                                .initialization_script(&panel_init_script),
+                                .initialization_script(&script),
                             LogicalPosition::new(0.0, 0.0),
                             LogicalSize::new(1.0, 1.0),
                         ) {
@@ -1325,7 +1260,6 @@ pub fn run() {
                     layout_tree: tree.clone(),
                     overlay: overlay_state.clone(),
                     pool: pool.clone(),
-                    fdc3_channel: Arc::new(std::sync::RwLock::new(None)),
                     window_config: Arc::clone(&main_window_config),
                 });
                 manager.register(main_state);
@@ -1374,6 +1308,8 @@ pub fn run() {
             wm_engine_install,
             wm_rename_panel,
             wm_set_zoom,
+            wm_get_panel_fdc3_channel,
+            wm_set_panel_fdc3_channel,
             wm_park_panels,
             wm_unpark_panels,
             wm_overlay_ready,
@@ -1395,9 +1331,6 @@ pub fn run() {
             wm_delete_dashboard,
             wm_reorder_dashboards,
             wm_set_auto_save,
-            wm_get_terminal_fdc3_channel,
-            wm_set_terminal_fdc3_channel,
-            wm_channel_picker_open,
             wm_duplicate_dashboard_to,
             wm_spawn_terminal,
             wm_list_saved_terminals,

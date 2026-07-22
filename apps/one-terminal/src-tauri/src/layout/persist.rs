@@ -31,6 +31,9 @@ pub struct PersistedLeafMeta {
     /// Webview zoom multiplier. Default `1.0`.
     #[serde(default = "default_zoom")]
     pub zoom_factor: f64,
+    /// FDC3 user channel this panel is joined to. `None` = no channel.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fdc3_channel: Option<String>,
 }
 
 fn default_zoom() -> f64 {
@@ -86,9 +89,6 @@ pub struct TerminalPersist {
     pub active_dashboard: String,
     #[serde(default = "default_auto_save")]
     pub auto_save: bool,
-    /// Currently selected FDC3 context channel; `None` = no active channel.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub fdc3_channel: Option<String>,
     pub dashboards: Vec<PersistedDashboard>,
     /// Saved OS window position and size; zeroed = use OS default.
     #[serde(default)]
@@ -101,7 +101,6 @@ impl Default for TerminalPersist {
             name: String::new(),
             active_dashboard: "Default".to_string(),
             auto_save: true,
-            fdc3_channel: None,
             dashboards: vec![],
             window: PersistedWindowConfig::default(),
         }
@@ -154,7 +153,7 @@ pub fn save_terminal(persist: &TerminalPersist, data_dir: &Path) -> Result<(), S
 }
 
 /// Update only the dashboard fields (active_dashboard, auto_save, dashboards),
-/// preserving `name`, `fdc3_channel`, and `window` from the existing file.
+/// preserving `name` and `window` from the existing file.
 ///
 /// Used by `LayoutTree::schedule_save` so layout auto-saves don't overwrite the
 /// terminal name or window position that were written by other commands.
@@ -182,17 +181,6 @@ pub fn update_window_config(
 ) -> Result<(), String> {
     let mut existing = load_terminal_for(terminal_id, data_dir).unwrap_or_default();
     existing.window = window.clone();
-    save_terminal_for(terminal_id, &existing, data_dir)
-}
-
-/// Update only the `fdc3_channel` field, preserving all other fields.
-pub fn update_fdc3_channel(
-    terminal_id: &str,
-    channel_id: Option<&str>,
-    data_dir: &Path,
-) -> Result<(), String> {
-    let mut existing = load_terminal_for(terminal_id, data_dir).unwrap_or_default();
-    existing.fdc3_channel = channel_id.map(str::to_string);
     save_terminal_for(terminal_id, &existing, data_dir)
 }
 
