@@ -2,6 +2,7 @@ import { useCallback, useMemo, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { PanelBounds } from "../types";
 import { headerContentFor } from "./panelHeaders";
+import { FDC3_CHANNELS } from "./fdc3Channels";
 
 /** Height of the chrome-drawn per-panel header. Must match
  *  `PANEL_HEADER_HEIGHT` in src-tauri/src/layout/mod.rs. */
@@ -80,12 +81,13 @@ function PanelHeader({ panel }: { panel: PanelBounds }) {
         appId: panel.appId,
         displayName: null,
         zoomFactor: null,
+        fdc3Channel: panel.fdc3Channel ?? null,
         kind: "tab",
         maximized: false,
         anchor: "right",
       }).catch(console.error);
     },
-    [panel.id, panel.appId]
+    [panel.id, panel.appId, panel.fdc3Channel]
   );
 
   const Content = useMemo(() => headerContentFor(panel.appId), [panel.appId]);
@@ -116,11 +118,22 @@ function PanelHeader({ panel }: { panel: PanelBounds }) {
           appId: panel.appId,
           displayName: null,
           zoomFactor: null,
+          fdc3Channel: panel.fdc3Channel ?? null,
           kind: "tab",
           maximized: false,
         }).catch(console.error);
       }}
     >
+      {panel.fdc3Channel && (
+        <span
+          className="wm-panel-header__channel-dot"
+          style={{
+            background: FDC3_CHANNELS.find((c) => c.id === panel.fdc3Channel)?.color ?? "transparent",
+          }}
+          title={FDC3_CHANNELS.find((c) => c.id === panel.fdc3Channel)?.name}
+          aria-hidden
+        />
+      )}
       <Content appId={panel.appId} title={panel.title} />
       <button
         type="button"
