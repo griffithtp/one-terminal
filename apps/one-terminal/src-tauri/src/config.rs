@@ -225,7 +225,6 @@ impl TerminalConfig {
             serde_json::to_string(&self.fdc3.agent_url).unwrap_or_else(|_| "\"\"".to_string());
         format!("window.OT_FDC3_AGENT_URL = {encoded};")
     }
-
 }
 
 /// Append a `window.OT_FDC3_INITIAL_CHANNEL` assignment to `base_script` when

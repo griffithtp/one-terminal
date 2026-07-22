@@ -368,8 +368,10 @@ pub fn wm_set_panel_fdc3_channel(
                 "window.fdc3Ready && window.fdc3Ready.then(function(c) {{ c.joinUserChannel({encoded}); }});"
             )
         }
-        None => "window.fdc3Ready && window.fdc3Ready.then(function(c) { c.leaveCurrentChannel(); });"
-            .to_string(),
+        None => {
+            "window.fdc3Ready && window.fdc3Ready.then(function(c) { c.leaveCurrentChannel(); });"
+                .to_string()
+        }
     };
     if let Some(wv) = app.get_webview(&label) {
         wv.eval(&script).map_err(|e| e.to_string())?;

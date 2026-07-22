@@ -441,6 +441,10 @@
       "overlay": "shared"
     },
     {
+      "path": "apps/one-terminal/src/components/fdc3Channels.ts",
+      "overlay": "shared"
+    },
+    {
       "path": "apps/one-terminal/src/components/panelHeaders.tsx",
       "overlay": "shared"
     },

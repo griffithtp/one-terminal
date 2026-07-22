@@ -128,7 +128,8 @@ function PanelHeader({ panel }: { panel: PanelBounds }) {
         <span
           className="wm-panel-header__channel-dot"
           style={{
-            background: FDC3_CHANNELS.find((c) => c.id === panel.fdc3Channel)?.color ?? "transparent",
+            background:
+              FDC3_CHANNELS.find((c) => c.id === panel.fdc3Channel)?.color ?? "transparent",
           }}
           title={FDC3_CHANNELS.find((c) => c.id === panel.fdc3Channel)?.name}
           aria-hidden

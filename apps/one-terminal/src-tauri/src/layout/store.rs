@@ -874,7 +874,13 @@ impl LayoutTree {
         let panels_to_create = self.apply_layout_to_inner(clean_layout);
 
         // Reconcile webviews on the main thread.
-        self.reconcile_panel_webviews(current_labels, panels_to_create, win, app, panel_init_script)?;
+        self.reconcile_panel_webviews(
+            current_labels,
+            panels_to_create,
+            win,
+            app,
+            panel_init_script,
+        )?;
 
         self.reflow(app);
         self.emit_host(app);
@@ -943,7 +949,13 @@ impl LayoutTree {
         let panels_to_create = self.apply_layout_to_inner(new_layout);
 
         // Destroy old webviews + create new ones on the main thread.
-        self.reconcile_panel_webviews(current_labels, panels_to_create, win, app, panel_init_script)?;
+        self.reconcile_panel_webviews(
+            current_labels,
+            panels_to_create,
+            win,
+            app,
+            panel_init_script,
+        )?;
 
         // Persist the updated store (new active + snapshot of outgoing dashboard).
         self.schedule_save(0);
@@ -999,7 +1011,13 @@ impl LayoutTree {
         // Deleted the active dashboard — load whatever is now active (or None).
         let new_layout = self.dashboard_store.read().unwrap().load_active();
         let panels_to_create = self.apply_layout_to_inner(new_layout);
-        self.reconcile_panel_webviews(current_labels, panels_to_create, win, app, panel_init_script)?;
+        self.reconcile_panel_webviews(
+            current_labels,
+            panels_to_create,
+            win,
+            app,
+            panel_init_script,
+        )?;
 
         self.reflow(app);
         self.emit_host(app);
@@ -1095,10 +1113,8 @@ impl LayoutTree {
                 }
                 for (label, url, channel) in &to_create {
                     if let Ok(parsed) = url.parse::<tauri::Url>() {
-                        let script = crate::config::append_initial_channel(
-                            &base_script,
-                            channel.as_deref(),
-                        );
+                        let script =
+                            crate::config::append_initial_channel(&base_script, channel.as_deref());
                         win_for_main
                             .add_child(
                                 WebviewBuilder::new(label, WebviewUrl::External(parsed))
