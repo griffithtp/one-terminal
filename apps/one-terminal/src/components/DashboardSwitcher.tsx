@@ -41,7 +41,7 @@ interface CtxMenu {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function DashboardSwitcher({ ds, onManageDashboards }: Props) {
-  const { dashboards, switchTo } = ds;
+  const { dashboards, switchTo, parkedCount } = ds;
 
   const [ctxMenu, setCtxMenu] = useState<CtxMenu | null>(null);
 
@@ -111,6 +111,14 @@ export function DashboardSwitcher({ ds, onManageDashboards }: Props) {
             ))
           )}
         </div>
+        {parkedCount > 0 && (
+          <span
+            className="wm-ds__parked"
+            title={`${parkedCount} widget${parkedCount === 1 ? "" : "s"} running in the background`}
+          >
+            {parkedCount} running
+          </span>
+        )}
         <button
           type="button"
           className="wm-ds__add"

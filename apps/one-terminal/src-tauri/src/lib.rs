@@ -12,9 +12,10 @@ use engine::WmHostIdentity;
 use layout::commands::{
     close_tab, update_layout, wm_begin_tab_drag, wm_close_leaf, wm_close_stack,
     wm_create_dashboard, wm_delete_dashboard, wm_end_tab_drag, wm_get_panel_fdc3_channel,
-    wm_list_dashboards, wm_rename_dashboard, wm_rename_panel, wm_rename_tab, wm_reorder_dashboards,
-    wm_save_dashboard, wm_set_active_tab, wm_set_auto_save, wm_set_panel_fdc3_channel, wm_set_zoom,
-    wm_splitter_drag, wm_toggle_maximize_stack,
+    wm_get_panel_keep_alive, wm_list_dashboards, wm_rename_dashboard, wm_rename_panel,
+    wm_rename_tab, wm_reorder_dashboards, wm_save_dashboard, wm_set_active_tab, wm_set_auto_save,
+    wm_set_panel_fdc3_channel, wm_set_panel_keep_alive, wm_set_zoom, wm_splitter_drag,
+    wm_toggle_maximize_stack,
 };
 use layout::dashboard::DashboardError;
 use layout::drag::wm_drag_move;
@@ -656,6 +657,7 @@ async fn wm_ctx_menu_open(
     display_name: Option<String>,
     zoom_factor: Option<f64>,
     fdc3_channel: Option<String>,
+    keep_alive: Option<bool>,
     kind: Option<String>,
     maximized: Option<bool>,
     anchor: Option<String>,
@@ -680,6 +682,7 @@ async fn wm_ctx_menu_open(
                 "displayName": display_name,
                 "zoomFactor": zoom_factor,
                 "fdc3Channel": fdc3_channel,
+                "keepAlive": keep_alive.unwrap_or(false),
                 "kind": kind.unwrap_or_else(|| "tab".to_string()),
                 "maximized": maximized.unwrap_or(false),
                 "anchor": anchor.unwrap_or_else(|| "left".to_string()),
@@ -1310,6 +1313,8 @@ pub fn run() {
             wm_set_zoom,
             wm_get_panel_fdc3_channel,
             wm_set_panel_fdc3_channel,
+            wm_get_panel_keep_alive,
+            wm_set_panel_keep_alive,
             wm_park_panels,
             wm_unpark_panels,
             wm_overlay_ready,

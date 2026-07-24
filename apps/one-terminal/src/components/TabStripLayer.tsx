@@ -207,6 +207,7 @@ function TabStrip({ stack, onTabPointerDown }: TabStripProps) {
                 displayName: tab.displayName ?? null,
                 zoomFactor: tab.zoomFactor,
                 fdc3Channel: tab.fdc3Channel ?? null,
+                keepAlive: tab.keepAlive,
                 kind: "tab",
                 maximized: stack.maximized,
               }).catch(console.error);
@@ -254,6 +255,15 @@ function TabStrip({ stack, onTabPointerDown }: TabStripProps) {
                     aria-hidden
                   />
                 )}
+                {tab.keepAlive && (
+                  <span
+                    className="wm-tab__keep-alive-badge"
+                    title="Keeps running in the background across dashboard switches"
+                    aria-label="Keeps running in the background"
+                  >
+                    ⏺
+                  </span>
+                )}
                 {headerContentFor(tab.appId)({ appId: tab.appId, title: displayLabel })}
               </span>
             )}
@@ -277,6 +287,7 @@ function TabStrip({ stack, onTabPointerDown }: TabStripProps) {
                     displayName: tab.displayName ?? null,
                     zoomFactor: tab.zoomFactor,
                     fdc3Channel: tab.fdc3Channel ?? null,
+                    keepAlive: tab.keepAlive,
                     kind: "tab",
                     maximized: stack.maximized,
                     anchor: "right",

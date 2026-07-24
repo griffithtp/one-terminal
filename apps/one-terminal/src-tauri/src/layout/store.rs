@@ -16,7 +16,9 @@ use super::docking::{add_leaf_as_sibling, append_to_stack_at, is_stack_at, move_
 use super::host::{compute_host_layout, HostLayout};
 use super::node::{Direction, LayoutNode};
 use super::persist::{self, PersistedLayout, PersistedLeafMeta};
-use super::reflow::{park_offscreen, reflow_layout, SPLITTER_THICKNESS, TAB_STRIP_HEIGHT};
+use super::reflow::{
+    park_label_offscreen, park_offscreen, reflow_layout, SPLITTER_THICKNESS, TAB_STRIP_HEIGHT,
+};
 use super::{LayoutSnapshot, PanelBounds, SplitDir, HEADER_HEIGHT};
 
 /// Content metadata per Leaf — webviews are positioned by label, but the
@@ -36,6 +38,10 @@ struct LeafMeta {
     zoom_factor: f64,
     /// FDC3 user channel this panel is joined to. `None` = no channel.
     fdc3_channel: Option<String>,
+    /// When `true`, switching away from this panel's Dashboard parks its
+    /// webview off-screen instead of closing it, so it keeps running and
+    /// reappears instantly when the Dashboard becomes active again.
+    keep_alive: bool,
 }
 
 /// Content metadata for a new panel, passed as a unit to [`LayoutTree::add_panel`]
@@ -83,6 +89,14 @@ pub struct LayoutTree {
     /// all panel labels (`<terminal_id>-panel-<uuid>`) so that multiple
     /// Terminals can coexist without label collisions.
     terminal_id: Arc<str>,
+    /// Webview labels that are alive but not part of the active Dashboard's
+    /// tree — parked off-screen (see `reflow::park_label_offscreen`) rather
+    /// than closed when their `keep_alive`-flagged owning panel's Dashboard
+    /// was switched away from. Keyed by label, value is the name of the
+    /// Dashboard that owns the panel. Switching back to that Dashboard
+    /// reuses the still-running webview instead of recreating it; deleting
+    /// that Dashboard closes it.
+    parked: Arc<RwLock<HashMap<String, String>>>,
 }
 
 impl LayoutTree {
@@ -100,6 +114,7 @@ impl LayoutTree {
             app: Arc::new(OnceLock::new()),
             save_handle: Arc::new(Mutex::new(None)),
             terminal_id: Arc::from(terminal_id),
+            parked: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -150,6 +165,7 @@ impl LayoutTree {
                                 display_name: pm.display_name,
                                 zoom_factor: pm.zoom_factor,
                                 fdc3_channel: pm.fdc3_channel,
+                                keep_alive: pm.keep_alive,
                             },
                         )
                     })
@@ -329,6 +345,11 @@ impl LayoutTree {
             .iter()
             .map(|(k, v)| (k.clone(), v.fdc3_channel.clone()))
             .collect();
+        let keep_alives: HashMap<String, bool> = g
+            .meta
+            .iter()
+            .map(|(k, v)| (k.clone(), v.keep_alive))
+            .collect();
         let mut max_path_buf = Vec::new();
         let max_path = g
             .maximized_stack_id
@@ -353,6 +374,7 @@ impl LayoutTree {
             &display_names,
             &zoom_factors,
             &fdc3_channels,
+            &keep_alives,
         )
     }
 
@@ -451,6 +473,37 @@ impl LayoutTree {
         found
     }
 
+    /// Return whether the panel identified by `label` is flagged to keep
+    /// running in the background across Dashboard switches. `false` both
+    /// when the panel doesn't exist and when the flag is unset.
+    pub fn keep_alive(&self, label: &str) -> bool {
+        self.inner
+            .read()
+            .unwrap()
+            .meta
+            .get(label)
+            .map(|m| m.keep_alive)
+            .unwrap_or(false)
+    }
+
+    /// Set (or clear) the keep-alive flag for the panel identified by
+    /// `label`. Returns `false` if no panel with that label exists.
+    pub fn set_keep_alive(&self, label: &str, keep_alive: bool) -> bool {
+        let found = {
+            let mut g = self.inner.write().unwrap();
+            let Some(meta) = g.meta.get_mut(label) else {
+                return false;
+            };
+            meta.keep_alive = keep_alive;
+            true
+        };
+        if found {
+            // Infrequent, user-driven — write immediately, no debounce.
+            self.schedule_save(0);
+        }
+        found
+    }
+
     /// Synthesize a `LayoutSnapshot` for the legacy `wm:layout` event. Only
     /// leaves *not* inside a Stack are surfaced as panels — Stack members get
     /// their headers from the tab strip (`wm:host-layout`) instead.
@@ -540,6 +593,7 @@ impl LayoutTree {
                     display_name: None,
                     zoom_factor: 1.0,
                     fdc3_channel: None,
+                    keep_alive: false,
                 },
             );
 
@@ -773,7 +827,12 @@ impl LayoutTree {
 
     /// Emit the current dashboard list state as `wm:dashboards`.
     pub fn emit_dashboards(&self, app: &AppHandle) {
-        let snapshot = self.dashboard_store.read().unwrap().as_snapshot();
+        let parked_count = self.parked.read().unwrap().len();
+        let snapshot = self
+            .dashboard_store
+            .read()
+            .unwrap()
+            .as_snapshot(parked_count);
         let chrome = format!("{}-chrome", self.terminal_id);
         if let Some(wv) = app.get_webview(&chrome) {
             let _ = wv.emit("wm:dashboards", &snapshot);
@@ -782,7 +841,11 @@ impl LayoutTree {
 
     /// Return the current dashboard list state without emitting an event.
     pub fn dashboards_snapshot(&self) -> DashboardsSnapshot {
-        self.dashboard_store.read().unwrap().as_snapshot()
+        let parked_count = self.parked.read().unwrap().len();
+        self.dashboard_store
+            .read()
+            .unwrap()
+            .as_snapshot(parked_count)
     }
 
     /// Write the current `DashboardStore` to disk immediately without touching
@@ -873,9 +936,11 @@ impl LayoutTree {
         };
         let panels_to_create = self.apply_layout_to_inner(clean_layout);
 
-        // Reconcile webviews on the main thread.
+        // Reconcile webviews on the main thread. No cross-dashboard parking
+        // here — discard stays within the active Dashboard.
         self.reconcile_panel_webviews(
             current_labels,
+            Vec::new(),
             panels_to_create,
             win,
             app,
@@ -920,15 +985,30 @@ impl LayoutTree {
             }
         }
 
-        // Collect current panel labels (to destroy later).
-        let current_labels: Vec<String> = {
+        // Capture the outgoing dashboard's name — it owns any panels we park.
+        let outgoing_name = {
+            let ds = self.dashboard_store.read().unwrap();
+            ds.active.clone()
+        };
+
+        // Collect current panel labels, split into those to destroy and
+        // those flagged `keep_alive` to park off-screen instead.
+        let (to_destroy, to_park): (Vec<String>, Vec<String>) = {
             let g = self.inner.read().unwrap();
             let mut labels = Vec::new();
             if let Some(root) = &g.root {
                 collect_leaf_labels(root, &mut labels);
             }
             labels
+                .into_iter()
+                .partition(|label| !g.meta.get(label).map(|m| m.keep_alive).unwrap_or(false))
         };
+        if !to_park.is_empty() {
+            let mut parked = self.parked.write().unwrap();
+            for label in &to_park {
+                parked.insert(label.clone(), outgoing_name.clone());
+            }
+        }
 
         // Snapshot outgoing dashboard if auto_save is on, then switch active.
         let new_layout = {
@@ -945,12 +1025,23 @@ impl LayoutTree {
             ds.load_active()
         };
 
-        // Load new dashboard into Inner and collect panels to create.
+        // Load new dashboard into Inner and collect panels to create. Any
+        // label already parked (typically because we're returning to a
+        // Dashboard whose kept-alive panels we parked earlier) is reused —
+        // its webview never gets destroyed, so skip recreating it.
         let panels_to_create = self.apply_layout_to_inner(new_layout);
+        let panels_to_create: Vec<(String, String, Option<String>)> = {
+            let mut parked = self.parked.write().unwrap();
+            panels_to_create
+                .into_iter()
+                .filter(|(label, _, _)| parked.remove(label).is_none())
+                .collect()
+        };
 
-        // Destroy old webviews + create new ones on the main thread.
+        // Destroy/park old webviews + create new ones on the main thread.
         self.reconcile_panel_webviews(
-            current_labels,
+            to_destroy,
+            to_park,
             panels_to_create,
             win,
             app,
@@ -1004,6 +1095,11 @@ impl LayoutTree {
 
         self.with_dashboard_store_mut(|ds| ds.delete(name));
 
+        // The deleted Dashboard may own panels parked off-screen (kept alive
+        // while some other Dashboard was active) — there's no home for them
+        // to return to, so close them now instead of leaking the webviews.
+        self.close_parked_for_dashboard(name, app)?;
+
         if !is_active {
             return Ok(true);
         }
@@ -1013,6 +1109,7 @@ impl LayoutTree {
         let panels_to_create = self.apply_layout_to_inner(new_layout);
         self.reconcile_panel_webviews(
             current_labels,
+            Vec::new(),
             panels_to_create,
             win,
             app,
@@ -1059,6 +1156,7 @@ impl LayoutTree {
                                 display_name: pm.display_name,
                                 zoom_factor: pm.zoom_factor,
                                 fdc3_channel: pm.fdc3_channel,
+                                keep_alive: pm.keep_alive,
                             };
                             (label, meta)
                         })
@@ -1094,6 +1192,7 @@ impl LayoutTree {
     fn reconcile_panel_webviews(
         &self,
         to_destroy: Vec<String>,
+        to_park: Vec<String>,
         to_create: Vec<(String, String, Option<String>)>,
         win: &Window,
         app: &AppHandle,
@@ -1111,6 +1210,12 @@ impl LayoutTree {
                         wv.close().map_err(|e| e.to_string())?;
                     }
                 }
+                // Kept-alive panels: don't close, just move off-screen so the
+                // webview (and its JS state / running requests) survives
+                // until its owning Dashboard becomes active again.
+                for label in &to_park {
+                    park_label_offscreen(&app_for_main, label);
+                }
                 for (label, url, channel) in &to_create {
                     if let Ok(parsed) = url.parse::<tauri::Url>() {
                         let script =
@@ -1125,6 +1230,72 @@ impl LayoutTree {
                             .map_err(|e| e.to_string())?;
                     } else {
                         eprintln!("[layout] switch: invalid url '{url}' for panel '{label}'");
+                    }
+                }
+                Ok(())
+            })();
+            let _ = tx.send(result);
+        })
+        .map_err(|e| DashboardError::Other {
+            message: e.to_string(),
+        })?;
+
+        rx.recv()
+            .map_err(|e| DashboardError::Other {
+                message: e.to_string(),
+            })?
+            .map_err(DashboardError::from)
+    }
+
+    /// Repoint every `parked` entry owned by `old_name` to `new_name`. Must
+    /// be called whenever a Dashboard is renamed — the `parked` registry
+    /// tracks ownership by name, so without this a rename would silently
+    /// orphan any panels parked while that Dashboard was in the background:
+    /// `close_parked_for_dashboard` would never find them by the old name on
+    /// delete (leaking the webview), and switching back under the new name
+    /// still works (matched by label, not owner) but the stale owner would
+    /// permanently inflate `parked_count`.
+    pub fn rename_parked_owner(&self, old_name: &str, new_name: &str) {
+        let mut parked = self.parked.write().unwrap();
+        for owner in parked.values_mut() {
+            if owner == old_name {
+                *owner = new_name.to_string();
+            }
+        }
+    }
+
+    /// Close every parked (kept-alive) webview owned by `dashboard_name` and
+    /// remove them from the `parked` registry. Called when that Dashboard is
+    /// deleted — there is no home left for the panel to be reused by, so it
+    /// must be torn down instead of leaking a hidden webview forever.
+    fn close_parked_for_dashboard(
+        &self,
+        dashboard_name: &str,
+        app: &AppHandle,
+    ) -> Result<(), DashboardError> {
+        let labels: Vec<String> = {
+            let mut parked = self.parked.write().unwrap();
+            let labels: Vec<String> = parked
+                .iter()
+                .filter(|(_, owner)| owner.as_str() == dashboard_name)
+                .map(|(label, _)| label.clone())
+                .collect();
+            for label in &labels {
+                parked.remove(label);
+            }
+            labels
+        };
+        if labels.is_empty() {
+            return Ok(());
+        }
+
+        let (tx, rx) = std::sync::mpsc::channel::<Result<(), String>>();
+        let app_for_main = app.clone();
+        app.run_on_main_thread(move || {
+            let result = (|| -> Result<(), String> {
+                for label in &labels {
+                    if let Some(wv) = app_for_main.get_webview(label) {
+                        wv.close().map_err(|e| e.to_string())?;
                     }
                 }
                 Ok(())
@@ -1161,6 +1332,7 @@ fn snapshot_for_persist(inner: &Inner) -> PersistedLayout {
                     display_name: m.display_name.clone(),
                     zoom_factor: m.zoom_factor,
                     fdc3_channel: m.fdc3_channel.clone(),
+                    keep_alive: m.keep_alive,
                 },
             )
         })
@@ -1386,6 +1558,7 @@ fn walk_for_snapshot(
                 display_name: m.and_then(|m| m.display_name.clone()),
                 zoom_factor: m.map(|m| m.zoom_factor).unwrap_or(1.0),
                 fdc3_channel: m.and_then(|m| m.fdc3_channel.clone()),
+                keep_alive: m.map(|m| m.keep_alive).unwrap_or(false),
             });
         }
         LayoutNode::Splitter {

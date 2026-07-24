@@ -11,6 +11,9 @@ interface DashboardsPayload {
   autoSave: boolean;
   dirty: boolean;
   dashboards: string[];
+  /** Total panels across all dashboards parked off-screen (kept alive)
+   *  instead of closed, because their owning dashboard isn't active. */
+  parkedCount: number;
 }
 
 type DashboardError =
@@ -34,6 +37,8 @@ export interface DashboardInfo {
 export interface UseDashboardsResult {
   dashboards: DashboardInfo[];
   autoSave: boolean;
+  /** Total panels currently parked (kept alive) in background dashboards. */
+  parkedCount: number;
   /**
    * Try to switch to `name`. On NeedsConfirm (auto-save off + dirty active
    * layout) the hook invokes `wm_dashboard_confirm_open` so the overlay
@@ -201,6 +206,7 @@ export function useDashboards(): UseDashboardsResult {
   return {
     dashboards,
     autoSave: payload?.autoSave ?? true,
+    parkedCount: payload?.parkedCount ?? 0,
     switchTo,
     create,
     save,

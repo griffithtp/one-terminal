@@ -17,6 +17,9 @@ export interface PanelBounds {
   zoomFactor: number;
   /** FDC3 user channel this panel is joined to; absent means no channel. */
   fdc3Channel?: string;
+  /** True when this panel keeps running in the background (parked
+   *  off-screen instead of destroyed) across Dashboard switches. */
+  keepAlive: boolean;
 }
 
 export interface DividerBounds {
@@ -51,6 +54,9 @@ export interface StackTab {
   zoomFactor: number;
   /** FDC3 user channel this tab is joined to; absent means no channel. */
   fdc3Channel?: string;
+  /** True when this panel keeps running in the background (parked
+   *  off-screen instead of destroyed) across Dashboard switches. */
+  keepAlive: boolean;
 }
 
 export interface StackHeader {

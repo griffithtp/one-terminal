@@ -78,6 +78,11 @@ pub struct DashboardsSnapshot {
     /// persisted active dashboard.
     pub dirty: bool,
     pub dashboards: Vec<String>,
+    /// Total count of panels across all Dashboards that are currently
+    /// parked off-screen (kept alive) instead of closed, because their
+    /// owning Dashboard isn't the active one. Surfaced so the switcher UI
+    /// can hint at background resource usage.
+    pub parked_count: usize,
 }
 
 // ── Error type ────────────────────────────────────────────────────────────────
@@ -176,12 +181,15 @@ impl DashboardStore {
     }
 
     /// Snapshot of the full dashboard state for the `wm:dashboards` event.
-    pub fn as_snapshot(&self) -> DashboardsSnapshot {
+    /// `parked_count` comes from the owning `LayoutTree`, which tracks
+    /// kept-alive panels parked outside the active Dashboard's tree.
+    pub fn as_snapshot(&self, parked_count: usize) -> DashboardsSnapshot {
         DashboardsSnapshot {
             active: self.active.clone(),
             auto_save: self.auto_save,
             dirty: self.dirty,
             dashboards: self.list(),
+            parked_count,
         }
     }
 

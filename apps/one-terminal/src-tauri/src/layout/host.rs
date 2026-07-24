@@ -60,6 +60,10 @@ pub struct StackTab {
     /// FDC3 user channel this tab is joined to. `None` = no channel.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fdc3_channel: Option<String>,
+    /// `true` when this tab is flagged to keep running in the background
+    /// across Dashboard switches instead of being destroyed/recreated.
+    #[serde(default)]
+    pub keep_alive: bool,
 }
 
 #[derive(Clone, Serialize)]
@@ -89,6 +93,7 @@ pub fn compute_host_layout(
     display_names: &HashMap<String, Option<String>>,
     zoom_factors: &HashMap<String, f64>,
     fdc3_channels: &HashMap<String, Option<String>>,
+    keep_alives: &HashMap<String, bool>,
 ) -> HostLayout {
     let mut stacks = Vec::new();
     let mut splitters = Vec::new();
@@ -108,6 +113,7 @@ pub fn compute_host_layout(
                     display_names,
                     zoom_factors,
                     fdc3_channels,
+                    keep_alives,
                 );
                 stacks.push(StackHeader {
                     path: path.to_vec(),
@@ -136,6 +142,7 @@ pub fn compute_host_layout(
                 display_names,
                 zoom_factors,
                 fdc3_channels,
+                keep_alives,
             );
         }
     }
@@ -167,6 +174,7 @@ fn stack_tabs(
     display_names: &HashMap<String, Option<String>>,
     zoom_factors: &HashMap<String, f64>,
     fdc3_channels: &HashMap<String, Option<String>>,
+    keep_alives: &HashMap<String, bool>,
 ) -> Vec<StackTab> {
     children
         .iter()
@@ -181,6 +189,7 @@ fn stack_tabs(
                 let display_name = display_names.get(label).and_then(|v| v.clone());
                 let zoom_factor = zoom_factors.get(label).copied().unwrap_or(1.0);
                 let fdc3_channel = fdc3_channels.get(label).and_then(|v| v.clone());
+                let keep_alive = keep_alives.get(label).copied().unwrap_or(false);
                 Some(StackTab {
                     label: label.clone(),
                     title,
@@ -188,6 +197,7 @@ fn stack_tabs(
                     display_name,
                     zoom_factor,
                     fdc3_channel,
+                    keep_alive,
                 })
             }
             _ => None,
@@ -210,6 +220,7 @@ fn walk(
     display_names: &HashMap<String, Option<String>>,
     zoom_factors: &HashMap<String, f64>,
     fdc3_channels: &HashMap<String, Option<String>>,
+    keep_alives: &HashMap<String, bool>,
 ) {
     match node {
         LayoutNode::Leaf { .. } => {}
@@ -258,6 +269,7 @@ fn walk(
                     display_names,
                     zoom_factors,
                     fdc3_channels,
+                    keep_alives,
                 );
                 path.pop();
                 offset += axis_share;
@@ -293,6 +305,7 @@ fn walk(
                 display_names,
                 zoom_factors,
                 fdc3_channels,
+                keep_alives,
             );
 
             stacks.push(StackHeader {
@@ -324,6 +337,7 @@ fn walk(
                     display_names,
                     zoom_factors,
                     fdc3_channels,
+                    keep_alives,
                 );
                 path.pop();
             }
