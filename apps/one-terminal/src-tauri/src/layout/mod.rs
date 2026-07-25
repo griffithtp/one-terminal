@@ -66,6 +66,10 @@ pub struct PanelBounds {
     /// FDC3 user channel this panel is joined to. `None` = no channel.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fdc3_channel: Option<String>,
+    /// `true` when this panel is flagged to keep running in the background
+    /// across Dashboard switches instead of being destroyed/recreated.
+    #[serde(default)]
+    pub keep_alive: bool,
 }
 
 fn default_zoom() -> f64 {

@@ -33,6 +33,9 @@ interface CtxMenuPayload {
   zoomFactor?: number;
   /** FDC3 user channel the tab is currently joined to; absent = no channel. */
   fdc3Channel?: string;
+  /** True when the tab keeps running in the background across dashboard
+   *  switches instead of being destroyed/recreated. */
+  keepAlive?: boolean;
   /**
    * Menu shape selector:
    * - `"tab"` — per-widget kebab + per-tab right-click. Renders Add Widget,
@@ -854,6 +857,25 @@ export function OverlayApp() {
                             </div>
                           )}
                         </div>
+
+                        <button
+                          type="button"
+                          role="menuitemcheckbox"
+                          aria-checked={!!menu.keepAlive}
+                          className="wm-tab-ctx-menu__item"
+                          onClick={() => {
+                            invoke("wm_set_panel_keep_alive", {
+                              label: menu.tabLabel,
+                              keepAlive: !menu.keepAlive,
+                            }).catch(console.error);
+                            dismiss();
+                          }}
+                        >
+                          <span className="wm-tab-ctx-menu__zoom-check">
+                            {menu.keepAlive ? "✓" : ""}
+                          </span>
+                          Keep running in background
+                        </button>
 
                         {customItems.length > 0 && (
                           <>

@@ -110,6 +110,20 @@ function rebuildInstanceCommands(): void {
     });
 
     registry.register({
+      id: `widget-instance.keep-alive-${p.id}`,
+      label: `${p.keepAlive ? "Stop" : "Keep"} "${name}" running in background`,
+      keywords: ["keep", "alive", "background", "dashboard", nameKw, appKw],
+      group: "widget-instances",
+      widgetLabel: p.id,
+      action: () => {
+        const current = panelState.get(p.id)?.keepAlive ?? false;
+        invoke("wm_set_panel_keep_alive", { label: p.id, keepAlive: !current }).catch(
+          console.error
+        );
+      },
+    });
+
+    registry.register({
       id: `widget-instance.reload-${p.id}`,
       label: `Reload "${name}"`,
       keywords: ["reload", "refresh", nameKw, appKw],

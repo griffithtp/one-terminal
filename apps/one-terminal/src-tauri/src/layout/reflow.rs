@@ -138,3 +138,10 @@ pub fn park_offscreen(node: &LayoutNode, app: &AppHandle) {
         }
     }
 }
+
+/// Park a single webview label offscreen by its label directly (no tree
+/// walk) — used when a panel is kept alive across a Dashboard switch and is
+/// no longer present in the live tree at all.
+pub fn park_label_offscreen(app: &AppHandle, label: &str) {
+    place(app, label, OFFSCREEN_X, OFFSCREEN_Y, 1.0, 1.0);
+}

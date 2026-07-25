@@ -387,6 +387,47 @@ pub fn wm_set_panel_fdc3_channel(
     Ok(())
 }
 
+/// Return whether the panel identified by `label` is flagged to keep
+/// running in the background across Dashboard switches.
+#[tauri::command]
+pub fn wm_get_panel_keep_alive(
+    label: String,
+    window: Window,
+    manager: State<'_, TerminalManager>,
+) -> bool {
+    manager
+        .get(window.label())
+        .map(|t| t.layout_tree.keep_alive(&label))
+        .unwrap_or(false)
+}
+
+/// Set (or clear) the "keep running in background" flag for the panel
+/// identified by `label`. Unlike `wm_set_panel_fdc3_channel`, this is pure
+/// metadata — no live webview action is needed here; the flag only changes
+/// what happens the *next* time the panel's Dashboard is switched away from.
+#[tauri::command]
+pub fn wm_set_panel_keep_alive(
+    label: String,
+    keep_alive: bool,
+    window: Window,
+    manager: State<'_, TerminalManager>,
+    app: AppHandle,
+) -> Result<(), String> {
+    let terminal = get_terminal!(manager, window);
+    if !terminal.layout_tree.set_keep_alive(&label, keep_alive) {
+        return Err(format!("no panel with label '{label}'"));
+    }
+
+    terminal.layout_tree.emit_host(&app);
+    if let Some(snap) = terminal.layout_tree.snapshot() {
+        let chrome = format!("{}-chrome", window.label());
+        if let Some(wv) = app.get_webview(&chrome) {
+            let _ = wv.emit("wm:layout", &snap);
+        }
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub fn wm_end_tab_drag(
     source_label: String,
@@ -429,6 +470,7 @@ pub fn wm_list_dashboards(
                 auto_save: true,
                 dirty: false,
                 dashboards: vec![],
+                parked_count: 0,
             }
         }
     }
@@ -492,8 +534,14 @@ pub fn wm_rename_dashboard(
     let terminal = get_terminal!(manager, window);
     let renamed = terminal
         .layout_tree
-        .with_dashboard_store_mut(|ds| ds.rename(&old_name, new_trimmed));
+        .with_dashboard_store_mut(|ds| ds.rename(&old_name, new_trimmed.clone()));
     if renamed {
+        // Keep the `parked` registry's ownership in sync — otherwise panels
+        // kept alive under the old name become unreachable by
+        // `wm_delete_dashboard` (leaked webview) once the rename lands.
+        terminal
+            .layout_tree
+            .rename_parked_owner(&old_name, &new_trimmed);
         terminal.layout_tree.persist_dashboards();
         terminal.layout_tree.emit_dashboards(&app);
     }

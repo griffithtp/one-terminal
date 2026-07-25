@@ -82,12 +82,13 @@ function PanelHeader({ panel }: { panel: PanelBounds }) {
         displayName: null,
         zoomFactor: null,
         fdc3Channel: panel.fdc3Channel ?? null,
+        keepAlive: panel.keepAlive,
         kind: "tab",
         maximized: false,
         anchor: "right",
       }).catch(console.error);
     },
-    [panel.id, panel.appId, panel.fdc3Channel]
+    [panel.id, panel.appId, panel.fdc3Channel, panel.keepAlive]
   );
 
   const Content = useMemo(() => headerContentFor(panel.appId), [panel.appId]);
@@ -119,6 +120,7 @@ function PanelHeader({ panel }: { panel: PanelBounds }) {
           displayName: null,
           zoomFactor: null,
           fdc3Channel: panel.fdc3Channel ?? null,
+          keepAlive: panel.keepAlive,
           kind: "tab",
           maximized: false,
         }).catch(console.error);
@@ -134,6 +136,15 @@ function PanelHeader({ panel }: { panel: PanelBounds }) {
           title={FDC3_CHANNELS.find((c) => c.id === panel.fdc3Channel)?.name}
           aria-hidden
         />
+      )}
+      {panel.keepAlive && (
+        <span
+          className="wm-panel-header__keep-alive-badge"
+          title="Keeps running in the background across dashboard switches"
+          aria-label="Keeps running in the background"
+        >
+          ⏺
+        </span>
       )}
       <Content appId={panel.appId} title={panel.title} />
       <button

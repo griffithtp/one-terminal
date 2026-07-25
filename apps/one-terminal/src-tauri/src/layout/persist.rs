@@ -34,6 +34,11 @@ pub struct PersistedLeafMeta {
     /// FDC3 user channel this panel is joined to. `None` = no channel.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub fdc3_channel: Option<String>,
+    /// When `true`, switching away from this panel's Dashboard parks its
+    /// webview off-screen instead of closing it, so it keeps running and
+    /// reappears instantly when the Dashboard becomes active again.
+    #[serde(default)]
+    pub keep_alive: bool,
 }
 
 fn default_zoom() -> f64 {

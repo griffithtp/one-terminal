@@ -118,6 +118,16 @@
   padding: 0 4px;
 }
 
+/* ── Parked (kept-alive) widget count ───────────────────────────────────── */
+.wm-ds__parked {
+  font-size: 11px;
+  color: var(--ot-text-muted);
+  white-space: nowrap;
+  user-select: none;
+  padding: 0 4px;
+  flex-shrink: 0;
+}
+
 /* ── Add button ──────────────────────────────────────────────────────────── */
 .wm-ds__add {
   padding: 3px 7px;
