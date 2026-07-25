@@ -46,11 +46,12 @@ pub fn reflow_layout(
 /// per-panel header, matching the binary-tree `apply()` pass in `lib.rs`.
 ///
 /// `address_bar_extra` maps a leaf's label to any additional height it
-/// reserves below the title header for its own address-bar row (currently
-/// only Generic Web Widget panels with `show_address_bar` set; `0.0`
-/// otherwise). Precomputed by the caller (`LayoutTree::reflow`) since only
-/// it has access to `LeafMeta`. Only applied outside a Stack — matching the
-/// scope of the chrome-drawn header itself.
+/// reserves below its header for its own address-bar row (currently only
+/// Generic Web Widget panels with `show_address_bar` set; `0.0` otherwise).
+/// Precomputed by the caller (`LayoutTree::reflow`) since only it has access
+/// to `LeafMeta`. Applied both inside and outside a Stack — a stacked
+/// leaf's active-tab content still needs the row even though it has no
+/// standalone chrome header (the tab strip fills that role instead).
 fn reflow_inner(
     node: &LayoutNode,
     app: &AppHandle,
@@ -63,10 +64,16 @@ fn reflow_inner(
 ) {
     match node {
         LayoutNode::Leaf { label, .. } => {
+            // Address-bar reservation applies whether or not this leaf is a
+            // Stack's active tab — unlike PANEL_HEADER_HEIGHT (whose chrome
+            // header is only drawn outside a Stack; inside one, the tab strip
+            // takes its place), the address bar has no equivalent "already
+            // have a header" case inside a Stack, so it always reserves its
+            // own space when the panel opts in.
+            let extra = address_bar_extra.get(label).copied().unwrap_or(0.0);
             let (py, ph) = if in_stack {
-                (y, height)
+                (y + extra, (height - extra).max(0.0))
             } else {
-                let extra = address_bar_extra.get(label).copied().unwrap_or(0.0);
                 let reserved = PANEL_HEADER_HEIGHT + extra;
                 (y + reserved, (height - reserved).max(0.0))
             };

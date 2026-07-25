@@ -27,10 +27,10 @@ pub const HEADER_HEIGHT: f64 = 40.0;
 /// reserved at the top of every `PanelBounds` rect.
 pub const PANEL_HEADER_HEIGHT: f64 = 28.0;
 /// Height of the read-only address-bar row a Generic Web Widget panel can
-/// show directly below its title header. Reserved in the panel's own
-/// content area (not the shared chrome header), so only panels that opt in
-/// (`app_id == GENERIC_WEB_WIDGET_APP_ID && show_address_bar`) pay for it.
-/// Standalone panels only — see `reflow::reflow_inner`'s `in_stack` check.
+/// show directly below its title header (or, for a stacked tab, directly
+/// below the shared tab strip). Reserved in the panel's own content area,
+/// so only panels that opt in (`app_id == GENERIC_WEB_WIDGET_APP_ID &&
+/// show_address_bar`) pay for it. See `reflow::reflow_inner`.
 pub const ADDRESS_BAR_HEIGHT: f64 = 22.0;
 /// Fixed `appId` for the built-in "Custom Web Widget" pseudo-app — a
 /// user-entered URL launched without an App Directory registration. Single

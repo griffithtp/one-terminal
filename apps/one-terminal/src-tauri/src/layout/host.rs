@@ -49,6 +49,9 @@ pub struct StackTab {
     pub label: String,
     /// App-provided title (from the App Directory record or `wm_open` arg).
     pub title: String,
+    /// The panel's URL — used by the tab strip to render the Generic Web
+    /// Widget address-bar row for the active tab.
+    pub url: String,
     /// FDC3 App Directory identifier — lets the tab strip render the same
     /// custom header content as the single-panel overlay (e.g. LIVE badge).
     pub app_id: String,
@@ -93,6 +96,7 @@ pub fn compute_host_layout(
     content_w: f64,
     content_h: f64,
     titles: &HashMap<String, String>,
+    urls: &HashMap<String, String>,
     app_ids: &HashMap<String, String>,
     display_names: &HashMap<String, Option<String>>,
     zoom_factors: &HashMap<String, f64>,
@@ -114,6 +118,7 @@ pub fn compute_host_layout(
                 let tabs = stack_tabs(
                     children,
                     titles,
+                    urls,
                     app_ids,
                     display_names,
                     zoom_factors,
@@ -144,6 +149,7 @@ pub fn compute_host_layout(
                 &mut stacks,
                 &mut splitters,
                 titles,
+                urls,
                 app_ids,
                 display_names,
                 zoom_factors,
@@ -175,9 +181,11 @@ fn resolve<'a>(root: &'a LayoutNode, path: &[usize]) -> Option<&'a LayoutNode> {
 }
 
 #[allow(clippy::too_many_arguments)]
+#[allow(clippy::too_many_arguments)]
 fn stack_tabs(
     children: &[LayoutNode],
     titles: &HashMap<String, String>,
+    urls: &HashMap<String, String>,
     app_ids: &HashMap<String, String>,
     display_names: &HashMap<String, Option<String>>,
     zoom_factors: &HashMap<String, f64>,
@@ -194,6 +202,7 @@ fn stack_tabs(
                     .cloned()
                     .filter(|t| !t.is_empty())
                     .unwrap_or_else(|| label.clone());
+                let url = urls.get(label).cloned().unwrap_or_default();
                 let app_id = app_ids.get(label).cloned().unwrap_or_default();
                 let display_name = display_names.get(label).and_then(|v| v.clone());
                 let zoom_factor = zoom_factors.get(label).copied().unwrap_or(1.0);
@@ -203,6 +212,7 @@ fn stack_tabs(
                 Some(StackTab {
                     label: label.clone(),
                     title,
+                    url,
                     app_id,
                     display_name,
                     zoom_factor,
@@ -227,6 +237,7 @@ fn walk(
     stacks: &mut Vec<StackHeader>,
     splitters: &mut Vec<SplitterHandle>,
     titles: &HashMap<String, String>,
+    urls: &HashMap<String, String>,
     app_ids: &HashMap<String, String>,
     display_names: &HashMap<String, Option<String>>,
     zoom_factors: &HashMap<String, f64>,
@@ -277,6 +288,7 @@ fn walk(
                     stacks,
                     splitters,
                     titles,
+                    urls,
                     app_ids,
                     display_names,
                     zoom_factors,
@@ -314,6 +326,7 @@ fn walk(
             let tabs = stack_tabs(
                 children,
                 titles,
+                urls,
                 app_ids,
                 display_names,
                 zoom_factors,
@@ -347,6 +360,7 @@ fn walk(
                     stacks,
                     splitters,
                     titles,
+                    urls,
                     app_ids,
                     display_names,
                     zoom_factors,

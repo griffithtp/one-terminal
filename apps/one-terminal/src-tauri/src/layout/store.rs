@@ -350,6 +350,11 @@ impl LayoutTree {
             .iter()
             .map(|(k, v)| (k.clone(), v.title.clone()))
             .collect();
+        let urls: HashMap<String, String> = g
+            .meta
+            .iter()
+            .map(|(k, v)| (k.clone(), v.url.clone()))
+            .collect();
         let app_ids: HashMap<String, String> = g
             .meta
             .iter()
@@ -400,6 +405,7 @@ impl LayoutTree {
             g.width,
             h,
             &titles,
+            &urls,
             &app_ids,
             &display_names,
             &zoom_factors,

@@ -4,6 +4,8 @@ import { listen } from "@tauri-apps/api/event";
 import type { StackHeader } from "../types";
 import { headerContentFor } from "./panelHeaders";
 import { FDC3_CHANNELS } from "./fdc3Channels";
+import { PanelAddressBar } from "./PanelAddressBar";
+import { ADDRESS_BAR_HEIGHT, GENERIC_WEB_WIDGET_APP_ID } from "../lib/genericWebWidget";
 
 interface TabStripLayerProps {
   stacks: StackHeader[];
@@ -134,6 +136,13 @@ function TabStrip({ stack, onTabPointerDown }: TabStripProps) {
   }
   const hiddenStart = visibleCount;
 
+  const activeTab = stack.tabs[stack.active];
+  const showAddressBar =
+    !!activeTab &&
+    activeTab.appId === GENERIC_WEB_WIDGET_APP_ID &&
+    activeTab.showAddressBar &&
+    !!activeTab.url;
+
   // Commit an inline rename. Empty draft → reset display name to app title (null).
   // Unchanged → no-op. Otherwise set the user override via wm_rename_panel.
   const commitRename = useCallback((label: string, draft: string, originalDisplay: string) => {
@@ -147,206 +156,222 @@ function TabStrip({ stack, onTabPointerDown }: TabStripProps) {
   }, []);
 
   return (
-    <div
-      ref={stripRef}
-      className="wm-tabstrip"
-      data-stack-path={stack.path.join(".")}
-      onContextMenu={(e) => {
-        // Strip-level right-click — same menu as the group kebab.
-        e.preventDefault();
-        const activeTab = stack.tabs[stack.active];
-        invoke("wm_ctx_menu_open", {
-          x: e.clientX,
-          y: e.clientY,
-          stackPath: stack.path,
-          nTabs: stack.tabs.length,
-          tabLabel: activeTab?.label ?? null,
-          appId: activeTab?.appId ?? null,
-          displayName: null,
-          zoomFactor: null,
-          kind: "stack-kebab",
-          maximized: stack.maximized,
-        }).catch(console.error);
-      }}
-      style={{
-        position: "absolute",
-        left: stack.x,
-        top: stack.y,
-        width: stack.width,
-        height: stack.tabStripHeight,
-      }}
-    >
-      {stack.tabs.slice(0, visibleCount).map((tab, i) => {
-        const isEditing = editing?.label === tab.label;
-        // Effective display label: user override first, then app-provided title.
-        const displayLabel = tab.displayName ?? tab.title;
-        return (
-          <div
-            key={tab.label}
-            className={`wm-tab${i === stack.active ? " wm-tab--active" : ""}`}
-            title={displayLabel}
-            data-tab-index={i}
-            onPointerDown={(e) => {
-              if (isEditing) {
+    <>
+      <div
+        ref={stripRef}
+        className="wm-tabstrip"
+        data-stack-path={stack.path.join(".")}
+        onContextMenu={(e) => {
+          // Strip-level right-click — same menu as the group kebab.
+          e.preventDefault();
+          const activeTab = stack.tabs[stack.active];
+          invoke("wm_ctx_menu_open", {
+            x: e.clientX,
+            y: e.clientY,
+            stackPath: stack.path,
+            nTabs: stack.tabs.length,
+            tabLabel: activeTab?.label ?? null,
+            appId: activeTab?.appId ?? null,
+            displayName: null,
+            zoomFactor: null,
+            kind: "stack-kebab",
+            maximized: stack.maximized,
+          }).catch(console.error);
+        }}
+        style={{
+          position: "absolute",
+          left: stack.x,
+          top: stack.y,
+          width: stack.width,
+          height: stack.tabStripHeight,
+        }}
+      >
+        {stack.tabs.slice(0, visibleCount).map((tab, i) => {
+          const isEditing = editing?.label === tab.label;
+          // Effective display label: user override first, then app-provided title.
+          const displayLabel = tab.displayName ?? tab.title;
+          return (
+            <div
+              key={tab.label}
+              className={`wm-tab${i === stack.active ? " wm-tab--active" : ""}`}
+              title={displayLabel}
+              data-tab-index={i}
+              onPointerDown={(e) => {
+                if (isEditing) {
+                  e.stopPropagation();
+                  return;
+                }
+                onTabPointerDown?.(e, stack, i);
+              }}
+              onContextMenu={(e) => {
+                // Per-tab right-click: pass full tab metadata to the overlay.
+                e.preventDefault();
                 e.stopPropagation();
-                return;
-              }
-              onTabPointerDown?.(e, stack, i);
-            }}
-            onContextMenu={(e) => {
-              // Per-tab right-click: pass full tab metadata to the overlay.
-              e.preventDefault();
-              e.stopPropagation();
-              invoke("wm_ctx_menu_open", {
-                x: e.clientX,
-                y: e.clientY,
-                stackPath: stack.path,
-                nTabs: stack.tabs.length,
-                tabLabel: tab.label,
-                appId: tab.appId,
-                displayName: tab.displayName ?? null,
-                zoomFactor: tab.zoomFactor,
-                fdc3Channel: tab.fdc3Channel ?? null,
-                keepAlive: tab.keepAlive,
-                showAddressBar: tab.showAddressBar,
-                kind: "tab",
-                maximized: stack.maximized,
-              }).catch(console.error);
-            }}
-            style={{ touchAction: "none" }}
-          >
-            {isEditing ? (
-              <input
-                className="wm-tab__label-input"
-                autoFocus
-                value={editing.draft}
-                onChange={(e) => setEditing({ label: tab.label, draft: e.target.value })}
-                onBlur={() => commitRename(tab.label, editing.draft, displayLabel)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    commitRename(tab.label, editing.draft, displayLabel);
-                  } else if (e.key === "Escape") {
-                    e.preventDefault();
-                    setEditing(null);
-                  }
-                }}
-                onPointerDown={(e) => e.stopPropagation()}
-                onClick={(e) => e.stopPropagation()}
-                onDoubleClick={(e) => e.stopPropagation()}
-              />
-            ) : (
-              <span
-                className="wm-tab__label"
-                onDoubleClick={(e) => {
-                  e.stopPropagation();
-                  // Pre-fill with the effective display label so the user edits
-                  // what they see, not the raw app-provided title.
-                  setEditing({ label: tab.label, draft: displayLabel });
-                }}
-              >
-                {tab.fdc3Channel && (
-                  <span
-                    className="wm-tab__channel-dot"
-                    style={{
-                      background:
-                        FDC3_CHANNELS.find((c) => c.id === tab.fdc3Channel)?.color ?? "transparent",
-                    }}
-                    title={FDC3_CHANNELS.find((c) => c.id === tab.fdc3Channel)?.name}
-                    aria-hidden
-                  />
-                )}
-                {tab.keepAlive && (
-                  <span
-                    className="wm-tab__keep-alive-badge"
-                    title="Keeps running in the background across dashboard switches"
-                    aria-label="Keeps running in the background"
-                  >
-                    ⏺
-                  </span>
-                )}
-                {headerContentFor(tab.appId)({ appId: tab.appId, title: displayLabel })}
-              </span>
-            )}
-            {!isEditing && (
-              <button
-                type="button"
-                className="wm-tab__menu"
-                aria-label={`${displayLabel} menu`}
-                title="More actions"
-                onPointerDown={(e) => e.stopPropagation()}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  invoke("wm_ctx_menu_open", {
-                    x: rect.right,
-                    y: rect.bottom,
-                    stackPath: stack.path,
-                    nTabs: stack.tabs.length,
-                    tabLabel: tab.label,
-                    appId: tab.appId,
-                    displayName: tab.displayName ?? null,
-                    zoomFactor: tab.zoomFactor,
-                    fdc3Channel: tab.fdc3Channel ?? null,
-                    keepAlive: tab.keepAlive,
-                    showAddressBar: tab.showAddressBar,
-                    kind: "tab",
-                    maximized: stack.maximized,
-                    anchor: "right",
-                  }).catch(console.error);
-                }}
-              >
-                ⋮
-              </button>
-            )}
-          </div>
-        );
-      })}
-
-      <div className="wm-tabstrip__right">
-        {hiddenStart < n && (
-          <button
-            ref={btnRef}
-            type="button"
-            className="wm-tab-overflow-btn"
-            aria-label={`${n - hiddenStart} more tabs`}
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={() => {
-              const rect = btnRef.current?.getBoundingClientRect();
-              if (!rect) return;
-              invoke("wm_overflow_menu_open", {
-                payload: {
-                  items: stack.tabs.slice(hiddenStart).map((tab, i) => ({
-                    label: tab.label,
-                    title: tab.displayName ?? tab.title,
-                    isActive: hiddenStart + i === stack.active,
-                    tabIndex: hiddenStart + i,
-                  })),
+                invoke("wm_ctx_menu_open", {
+                  x: e.clientX,
+                  y: e.clientY,
                   stackPath: stack.path,
-                  btnRight: rect.right,
-                  btnBottom: rect.bottom,
-                },
-              }).catch(console.error);
+                  nTabs: stack.tabs.length,
+                  tabLabel: tab.label,
+                  appId: tab.appId,
+                  displayName: tab.displayName ?? null,
+                  zoomFactor: tab.zoomFactor,
+                  fdc3Channel: tab.fdc3Channel ?? null,
+                  keepAlive: tab.keepAlive,
+                  showAddressBar: tab.showAddressBar,
+                  kind: "tab",
+                  maximized: stack.maximized,
+                }).catch(console.error);
+              }}
+              style={{ touchAction: "none" }}
+            >
+              {isEditing ? (
+                <input
+                  className="wm-tab__label-input"
+                  autoFocus
+                  value={editing.draft}
+                  onChange={(e) => setEditing({ label: tab.label, draft: e.target.value })}
+                  onBlur={() => commitRename(tab.label, editing.draft, displayLabel)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      commitRename(tab.label, editing.draft, displayLabel);
+                    } else if (e.key === "Escape") {
+                      e.preventDefault();
+                      setEditing(null);
+                    }
+                  }}
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => e.stopPropagation()}
+                  onDoubleClick={(e) => e.stopPropagation()}
+                />
+              ) : (
+                <span
+                  className="wm-tab__label"
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    // Pre-fill with the effective display label so the user edits
+                    // what they see, not the raw app-provided title.
+                    setEditing({ label: tab.label, draft: displayLabel });
+                  }}
+                >
+                  {tab.fdc3Channel && (
+                    <span
+                      className="wm-tab__channel-dot"
+                      style={{
+                        background:
+                          FDC3_CHANNELS.find((c) => c.id === tab.fdc3Channel)?.color ??
+                          "transparent",
+                      }}
+                      title={FDC3_CHANNELS.find((c) => c.id === tab.fdc3Channel)?.name}
+                      aria-hidden
+                    />
+                  )}
+                  {tab.keepAlive && (
+                    <span
+                      className="wm-tab__keep-alive-badge"
+                      title="Keeps running in the background across dashboard switches"
+                      aria-label="Keeps running in the background"
+                    >
+                      ⏺
+                    </span>
+                  )}
+                  {headerContentFor(tab.appId)({ appId: tab.appId, title: displayLabel })}
+                </span>
+              )}
+              {!isEditing && (
+                <button
+                  type="button"
+                  className="wm-tab__menu"
+                  aria-label={`${displayLabel} menu`}
+                  title="More actions"
+                  onPointerDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    invoke("wm_ctx_menu_open", {
+                      x: rect.right,
+                      y: rect.bottom,
+                      stackPath: stack.path,
+                      nTabs: stack.tabs.length,
+                      tabLabel: tab.label,
+                      appId: tab.appId,
+                      displayName: tab.displayName ?? null,
+                      zoomFactor: tab.zoomFactor,
+                      fdc3Channel: tab.fdc3Channel ?? null,
+                      keepAlive: tab.keepAlive,
+                      showAddressBar: tab.showAddressBar,
+                      kind: "tab",
+                      maximized: stack.maximized,
+                      anchor: "right",
+                    }).catch(console.error);
+                  }}
+                >
+                  ⋮
+                </button>
+              )}
+            </div>
+          );
+        })}
+
+        <div className="wm-tabstrip__right">
+          {hiddenStart < n && (
+            <button
+              ref={btnRef}
+              type="button"
+              className="wm-tab-overflow-btn"
+              aria-label={`${n - hiddenStart} more tabs`}
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={() => {
+                const rect = btnRef.current?.getBoundingClientRect();
+                if (!rect) return;
+                invoke("wm_overflow_menu_open", {
+                  payload: {
+                    items: stack.tabs.slice(hiddenStart).map((tab, i) => ({
+                      label: tab.label,
+                      title: tab.displayName ?? tab.title,
+                      isActive: hiddenStart + i === stack.active,
+                      tabIndex: hiddenStart + i,
+                    })),
+                    stackPath: stack.path,
+                    btnRight: rect.right,
+                    btnBottom: rect.bottom,
+                  },
+                }).catch(console.error);
+              }}
+            >
+              ⋯<span className="wm-tab-overflow-btn__badge">{n - hiddenStart}</span>
+            </button>
+          )}
+          <button
+            ref={groupMenuBtnRef}
+            type="button"
+            className="wm-tabstrip__group-menu"
+            aria-label={`Group actions (${n} ${n === 1 ? "tab" : "tabs"})`}
+            title="Group actions"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              openGroupMenu(e.currentTarget.getBoundingClientRect());
             }}
           >
-            ⋯<span className="wm-tab-overflow-btn__badge">{n - hiddenStart}</span>
+            ⋮
           </button>
-        )}
-        <button
-          ref={groupMenuBtnRef}
-          type="button"
-          className="wm-tabstrip__group-menu"
-          aria-label={`Group actions (${n} ${n === 1 ? "tab" : "tabs"})`}
-          title="Group actions"
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={(e) => {
-            e.stopPropagation();
-            openGroupMenu(e.currentTarget.getBoundingClientRect());
+        </div>
+      </div>
+      {showAddressBar && activeTab && (
+        <div
+          style={{
+            position: "absolute",
+            left: stack.x,
+            top: stack.y + stack.tabStripHeight,
+            width: stack.width,
+            height: ADDRESS_BAR_HEIGHT,
           }}
         >
-          ⋮
-        </button>
-      </div>
-    </div>
+          <PanelAddressBar url={activeTab.url} />
+        </div>
+      )}
+    </>
   );
 }
