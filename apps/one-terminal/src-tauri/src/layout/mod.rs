@@ -84,12 +84,9 @@ pub struct PanelBounds {
     /// Whether the read-only address-bar row is shown below the title
     /// header. Only rendered by the frontend for `app_id ==
     /// GENERIC_WEB_WIDGET_APP_ID` panels; harmless to carry for others.
-    #[serde(default = "default_show_address_bar")]
+    /// Defaults to hidden — the user opts in via the tab context menu.
+    #[serde(default)]
     pub show_address_bar: bool,
-}
-
-fn default_show_address_bar() -> bool {
-    true
 }
 
 fn default_zoom() -> f64 {

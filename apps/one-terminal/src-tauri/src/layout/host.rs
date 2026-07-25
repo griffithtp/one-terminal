@@ -67,9 +67,9 @@ pub struct StackTab {
     /// across Dashboard switches instead of being destroyed/recreated.
     #[serde(default)]
     pub keep_alive: bool,
-    /// Whether the read-only address-bar row is shown below the title
-    /// header (Generic Web Widget panels only). Not yet rendered by the
-    /// frontend for stacked tabs — carried here for data round-trip parity.
+    /// Whether the read-only address-bar row is shown below the tab strip
+    /// when this tab is active (Generic Web Widget panels only). Defaults
+    /// to `false` — hidden until the user opts in via the tab context menu.
     pub show_address_bar: bool,
 }
 
@@ -207,7 +207,7 @@ fn stack_tabs(
                 let zoom_factor = zoom_factors.get(label).copied().unwrap_or(1.0);
                 let fdc3_channel = fdc3_channels.get(label).and_then(|v| v.clone());
                 let keep_alive = keep_alives.get(label).copied().unwrap_or(false);
-                let show_address_bar = show_address_bars.get(label).copied().unwrap_or(true);
+                let show_address_bar = show_address_bars.get(label).copied().unwrap_or(false);
                 Some(StackTab {
                     label: label.clone(),
                     title,

@@ -40,17 +40,14 @@ pub struct PersistedLeafMeta {
     #[serde(default)]
     pub keep_alive: bool,
     /// Whether the read-only address-bar row is shown below the title
-    /// header (Generic Web Widget panels only). Default `true`.
-    #[serde(default = "default_show_address_bar")]
+    /// header (Generic Web Widget panels only). Defaults to hidden — the
+    /// user opts in via the tab context menu.
+    #[serde(default)]
     pub show_address_bar: bool,
 }
 
 fn default_zoom() -> f64 {
     1.0
-}
-
-fn default_show_address_bar() -> bool {
-    true
 }
 
 // ── Legacy top-level type (pre-dashboard era) ─────────────────────────────────

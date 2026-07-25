@@ -43,7 +43,8 @@ struct LeafMeta {
     /// reappears instantly when the Dashboard becomes active again.
     keep_alive: bool,
     /// Whether the read-only address-bar row (Generic Web Widget panels
-    /// only) is shown below the title header. Default `true`.
+    /// only) is shown below the title header. Defaults to `false` — hidden
+    /// until the user opts in via the tab context menu.
     show_address_bar: bool,
 }
 
@@ -309,8 +310,7 @@ impl LayoutTree {
             .meta
             .iter()
             .map(|(k, v)| {
-                let extra = if v.app_id == super::GENERIC_WEB_WIDGET_APP_ID && v.show_address_bar
-                {
+                let extra = if v.app_id == super::GENERIC_WEB_WIDGET_APP_ID && v.show_address_bar {
                     super::ADDRESS_BAR_HEIGHT
                 } else {
                     0.0
@@ -338,7 +338,15 @@ impl LayoutTree {
             }
         }
 
-        reflow_layout(root, app, 0.0, HEADER_HEIGHT, g.width, h, &address_bar_extra);
+        reflow_layout(
+            root,
+            app,
+            0.0,
+            HEADER_HEIGHT,
+            g.width,
+            h,
+            &address_bar_extra,
+        );
     }
 
     /// Compute the current host-shell projection (tab strips + splitter handles).
@@ -678,7 +686,7 @@ impl LayoutTree {
                     zoom_factor: 1.0,
                     fdc3_channel: None,
                     keep_alive: false,
-                    show_address_bar: true,
+                    show_address_bar: false,
                 },
             );
 
@@ -1654,7 +1662,7 @@ fn walk_for_snapshot(
                 zoom_factor: m.map(|m| m.zoom_factor).unwrap_or(1.0),
                 fdc3_channel: m.and_then(|m| m.fdc3_channel.clone()),
                 keep_alive: m.map(|m| m.keep_alive).unwrap_or(false),
-                show_address_bar: m.map(|m| m.show_address_bar).unwrap_or(true),
+                show_address_bar: m.map(|m| m.show_address_bar).unwrap_or(false),
             });
         }
         LayoutNode::Splitter {

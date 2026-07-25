@@ -21,7 +21,8 @@ export interface PanelBounds {
    *  off-screen instead of destroyed) across Dashboard switches. */
   keepAlive: boolean;
   /** Whether the read-only address-bar row is shown below the title header
-   *  (Generic Web Widget panels only). Default `true`. */
+   *  (Generic Web Widget panels only). Defaults to `false` — hidden until
+   *  the user opts in via the tab context menu. */
   showAddressBar: boolean;
 }
 
@@ -64,8 +65,8 @@ export interface StackTab {
    *  off-screen instead of destroyed) across Dashboard switches. */
   keepAlive: boolean;
   /** Whether the read-only address-bar row is shown below the tab strip
-   *  when this tab is active (Generic Web Widget panels only). Default
-   *  `true`. */
+   *  when this tab is active (Generic Web Widget panels only). Defaults to
+   *  `false` — hidden until the user opts in via the tab context menu. */
   showAddressBar: boolean;
 }
 

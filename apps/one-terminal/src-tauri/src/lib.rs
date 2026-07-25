@@ -429,7 +429,13 @@ async fn wm_open(
 
     // Replenish the pool in the background after a slot was consumed.
     // No-op on the cold path (pool not used) or when already at capacity.
-    pool.replenish(&app, overlay, window.label(), &cfg.panel_init_script(), tree);
+    pool.replenish(
+        &app,
+        overlay,
+        window.label(),
+        &cfg.panel_init_script(),
+        tree,
+    );
 
     // Reflow positions every webview (including the new/navigated one).
     tree.reflow(&app);
@@ -727,7 +733,7 @@ async fn wm_ctx_menu_open(
                 "zoomFactor": zoom_factor,
                 "fdc3Channel": fdc3_channel,
                 "keepAlive": keep_alive.unwrap_or(false),
-                "showAddressBar": show_address_bar.unwrap_or(true),
+                "showAddressBar": show_address_bar.unwrap_or(false),
                 "kind": kind.unwrap_or_else(|| "tab".to_string()),
                 "maximized": maximized.unwrap_or(false),
                 "anchor": anchor.unwrap_or_else(|| "left".to_string()),
