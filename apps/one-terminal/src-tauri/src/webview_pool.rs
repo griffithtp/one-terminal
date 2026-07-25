@@ -4,6 +4,7 @@ use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, LogicalPosition, LogicalSize, Manager, WebviewBuilder, WebviewUrl};
 use uuid::Uuid;
 
+use crate::layout::store::LayoutTree;
 use crate::terminal::state::OverlayState;
 
 /// Pool of pre-warmed blank webviews, ready for immediate navigation.
@@ -53,6 +54,7 @@ impl WebviewPool {
         overlay: &OverlayState,
         terminal_id: &str,
         init_script: &str,
+        tree: &LayoutTree,
     ) {
         let depth = self.available.lock().unwrap().len();
         if self.target_size == 0 || depth >= self.target_size {
@@ -64,6 +66,7 @@ impl WebviewPool {
         let overlay = Arc::clone(overlay);
         let terminal_id = terminal_id.to_string();
         let init_script = init_script.to_string();
+        let tree = tree.clone();
 
         tauri::async_runtime::spawn(async move {
             let label = pool_label(&terminal_id);
@@ -73,6 +76,7 @@ impl WebviewPool {
             let terminal_id_main = terminal_id.clone();
             let overlay_main = Arc::clone(&overlay);
             let init_script_main = init_script.clone();
+            let tree_main = tree.clone();
 
             if app
                 .run_on_main_thread(move || {
@@ -93,7 +97,13 @@ impl WebviewPool {
                                     "about:blank".parse().expect("about:blank is a valid URL"),
                                 ),
                             )
-                            .initialization_script(&init_script_main),
+                            .initialization_script(&init_script_main)
+                            .on_navigation(crate::address_bar_navigation_handler(
+                                app_main.clone(),
+                                terminal_id_main.clone(),
+                                label_main.clone(),
+                                tree_main.clone(),
+                            )),
                             LogicalPosition::new(-20000.0, -20000.0),
                             LogicalSize::new(w, h),
                         )

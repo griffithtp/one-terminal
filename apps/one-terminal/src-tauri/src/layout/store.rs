@@ -541,6 +541,33 @@ impl LayoutTree {
         found
     }
 
+    /// Update `LeafMeta.url` to reflect live navigation inside the panel's
+    /// own webview (link clicks, redirects, SPA route changes), so the
+    /// Generic Web Widget address-bar row tracks where the user actually is
+    /// rather than staying frozen at the launch URL. Scoped to Generic Web
+    /// Widget panels only — other app types may navigate/redirect
+    /// internally (auth flows, etc.) in ways that shouldn't silently
+    /// overwrite their `LeafMeta.url`. Returns `true` iff the field changed,
+    /// so the caller knows whether a snapshot re-emit is warranted.
+    pub fn track_navigated_url(&self, label: &str, url: &str) -> bool {
+        let changed = {
+            let mut g = self.inner.write().unwrap();
+            let Some(meta) = g.meta.get_mut(label) else {
+                return false;
+            };
+            if meta.app_id != super::GENERIC_WEB_WIDGET_APP_ID || meta.url == url {
+                return false;
+            }
+            meta.url = url.to_string();
+            true
+        };
+        if changed {
+            // Debounced — SPA route changes can fire in quick bursts.
+            self.schedule_save(500);
+        }
+        changed
+    }
+
     /// Set (or clear) the address-bar visibility flag for the panel
     /// identified by `label`. Returns `false` if no panel with that label
     /// exists. Triggers a reflow-affecting change — callers must follow up
@@ -1261,6 +1288,8 @@ impl LayoutTree {
         let app_for_main = app.clone();
         let win_for_main = win.clone();
         let base_script = panel_init_script.to_string();
+        let tree_for_main = self.clone();
+        let terminal_id_for_main = self.terminal_id.to_string();
 
         app.run_on_main_thread(move || {
             let result = (|| -> Result<(), String> {
@@ -1282,7 +1311,13 @@ impl LayoutTree {
                         win_for_main
                             .add_child(
                                 WebviewBuilder::new(label, WebviewUrl::External(parsed))
-                                    .initialization_script(&script),
+                                    .initialization_script(&script)
+                                    .on_navigation(crate::address_bar_navigation_handler(
+                                        app_for_main.clone(),
+                                        terminal_id_for_main.clone(),
+                                        label.clone(),
+                                        tree_for_main.clone(),
+                                    )),
                                 LogicalPosition::new(0.0, 0.0),
                                 LogicalSize::new(1.0, 1.0),
                             )

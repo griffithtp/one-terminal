@@ -181,7 +181,6 @@ fn resolve<'a>(root: &'a LayoutNode, path: &[usize]) -> Option<&'a LayoutNode> {
 }
 
 #[allow(clippy::too_many_arguments)]
-#[allow(clippy::too_many_arguments)]
 fn stack_tabs(
     children: &[LayoutNode],
     titles: &HashMap<String, String>,

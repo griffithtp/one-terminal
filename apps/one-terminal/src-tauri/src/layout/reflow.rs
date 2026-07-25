@@ -52,6 +52,7 @@ pub fn reflow_layout(
 /// to `LeafMeta`. Applied both inside and outside a Stack — a stacked
 /// leaf's active-tab content still needs the row even though it has no
 /// standalone chrome header (the tab strip fills that role instead).
+#[allow(clippy::too_many_arguments)]
 fn reflow_inner(
     node: &LayoutNode,
     app: &AppHandle,
