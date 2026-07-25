@@ -20,6 +20,9 @@ export interface PanelBounds {
   /** True when this panel keeps running in the background (parked
    *  off-screen instead of destroyed) across Dashboard switches. */
   keepAlive: boolean;
+  /** Whether the read-only address-bar row is shown below the title header
+   *  (Generic Web Widget panels only). Default `true`. */
+  showAddressBar: boolean;
 }
 
 export interface DividerBounds {
@@ -57,6 +60,10 @@ export interface StackTab {
   /** True when this panel keeps running in the background (parked
    *  off-screen instead of destroyed) across Dashboard switches. */
   keepAlive: boolean;
+  /** Whether the read-only address-bar row is shown below the title header
+   *  (Generic Web Widget panels only). Default `true`. Not yet rendered for
+   *  stacked tabs — carried here for data round-trip parity only. */
+  showAddressBar: boolean;
 }
 
 export interface StackHeader {

@@ -208,6 +208,7 @@ function TabStrip({ stack, onTabPointerDown }: TabStripProps) {
                 zoomFactor: tab.zoomFactor,
                 fdc3Channel: tab.fdc3Channel ?? null,
                 keepAlive: tab.keepAlive,
+                showAddressBar: tab.showAddressBar,
                 kind: "tab",
                 maximized: stack.maximized,
               }).catch(console.error);
@@ -288,6 +289,7 @@ function TabStrip({ stack, onTabPointerDown }: TabStripProps) {
                     zoomFactor: tab.zoomFactor,
                     fdc3Channel: tab.fdc3Channel ?? null,
                     keepAlive: tab.keepAlive,
+                    showAddressBar: tab.showAddressBar,
                     kind: "tab",
                     maximized: stack.maximized,
                     anchor: "right",

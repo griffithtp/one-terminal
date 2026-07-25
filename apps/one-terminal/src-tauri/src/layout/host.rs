@@ -64,6 +64,10 @@ pub struct StackTab {
     /// across Dashboard switches instead of being destroyed/recreated.
     #[serde(default)]
     pub keep_alive: bool,
+    /// Whether the read-only address-bar row is shown below the title
+    /// header (Generic Web Widget panels only). Not yet rendered by the
+    /// frontend for stacked tabs — carried here for data round-trip parity.
+    pub show_address_bar: bool,
 }
 
 #[derive(Clone, Serialize)]
@@ -94,6 +98,7 @@ pub fn compute_host_layout(
     zoom_factors: &HashMap<String, f64>,
     fdc3_channels: &HashMap<String, Option<String>>,
     keep_alives: &HashMap<String, bool>,
+    show_address_bars: &HashMap<String, bool>,
 ) -> HostLayout {
     let mut stacks = Vec::new();
     let mut splitters = Vec::new();
@@ -114,6 +119,7 @@ pub fn compute_host_layout(
                     zoom_factors,
                     fdc3_channels,
                     keep_alives,
+                    show_address_bars,
                 );
                 stacks.push(StackHeader {
                     path: path.to_vec(),
@@ -143,6 +149,7 @@ pub fn compute_host_layout(
                 zoom_factors,
                 fdc3_channels,
                 keep_alives,
+                show_address_bars,
             );
         }
     }
@@ -167,6 +174,7 @@ fn resolve<'a>(root: &'a LayoutNode, path: &[usize]) -> Option<&'a LayoutNode> {
     Some(node)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn stack_tabs(
     children: &[LayoutNode],
     titles: &HashMap<String, String>,
@@ -175,6 +183,7 @@ fn stack_tabs(
     zoom_factors: &HashMap<String, f64>,
     fdc3_channels: &HashMap<String, Option<String>>,
     keep_alives: &HashMap<String, bool>,
+    show_address_bars: &HashMap<String, bool>,
 ) -> Vec<StackTab> {
     children
         .iter()
@@ -190,6 +199,7 @@ fn stack_tabs(
                 let zoom_factor = zoom_factors.get(label).copied().unwrap_or(1.0);
                 let fdc3_channel = fdc3_channels.get(label).and_then(|v| v.clone());
                 let keep_alive = keep_alives.get(label).copied().unwrap_or(false);
+                let show_address_bar = show_address_bars.get(label).copied().unwrap_or(true);
                 Some(StackTab {
                     label: label.clone(),
                     title,
@@ -198,6 +208,7 @@ fn stack_tabs(
                     zoom_factor,
                     fdc3_channel,
                     keep_alive,
+                    show_address_bar,
                 })
             }
             _ => None,
@@ -221,6 +232,7 @@ fn walk(
     zoom_factors: &HashMap<String, f64>,
     fdc3_channels: &HashMap<String, Option<String>>,
     keep_alives: &HashMap<String, bool>,
+    show_address_bars: &HashMap<String, bool>,
 ) {
     match node {
         LayoutNode::Leaf { .. } => {}
@@ -270,6 +282,7 @@ fn walk(
                     zoom_factors,
                     fdc3_channels,
                     keep_alives,
+                    show_address_bars,
                 );
                 path.pop();
                 offset += axis_share;
@@ -306,6 +319,7 @@ fn walk(
                 zoom_factors,
                 fdc3_channels,
                 keep_alives,
+                show_address_bars,
             );
 
             stacks.push(StackHeader {
@@ -338,6 +352,7 @@ fn walk(
                     zoom_factors,
                     fdc3_channels,
                     keep_alives,
+                    show_address_bars,
                 );
                 path.pop();
             }

@@ -42,6 +42,9 @@ struct LeafMeta {
     /// webview off-screen instead of closing it, so it keeps running and
     /// reappears instantly when the Dashboard becomes active again.
     keep_alive: bool,
+    /// Whether the read-only address-bar row (Generic Web Widget panels
+    /// only) is shown below the title header. Default `true`.
+    show_address_bar: bool,
 }
 
 /// Content metadata for a new panel, passed as a unit to [`LayoutTree::add_panel`]
@@ -166,6 +169,7 @@ impl LayoutTree {
                                 zoom_factor: pm.zoom_factor,
                                 fdc3_channel: pm.fdc3_channel,
                                 keep_alive: pm.keep_alive,
+                                show_address_bar: pm.show_address_bar,
                             },
                         )
                     })
@@ -301,19 +305,40 @@ impl LayoutTree {
         let g = self.inner.read().unwrap();
         let Some(root) = g.root.as_ref() else { return };
         let h = (g.height - HEADER_HEIGHT).max(0.0);
+        let address_bar_extra: HashMap<String, f64> = g
+            .meta
+            .iter()
+            .map(|(k, v)| {
+                let extra = if v.app_id == super::GENERIC_WEB_WIDGET_APP_ID && v.show_address_bar
+                {
+                    super::ADDRESS_BAR_HEIGHT
+                } else {
+                    0.0
+                };
+                (k.clone(), extra)
+            })
+            .collect();
 
         if let Some(stack_id) = g.maximized_stack_id.as_deref() {
             let mut path = Vec::new();
             if find_stack_path_by_id(root, stack_id, &mut path) {
                 if let Some(stack_node) = node_at(root, &path) {
                     park_offscreen(root, app);
-                    reflow_layout(stack_node, app, 0.0, HEADER_HEIGHT, g.width, h);
+                    reflow_layout(
+                        stack_node,
+                        app,
+                        0.0,
+                        HEADER_HEIGHT,
+                        g.width,
+                        h,
+                        &address_bar_extra,
+                    );
                     return;
                 }
             }
         }
 
-        reflow_layout(root, app, 0.0, HEADER_HEIGHT, g.width, h);
+        reflow_layout(root, app, 0.0, HEADER_HEIGHT, g.width, h, &address_bar_extra);
     }
 
     /// Compute the current host-shell projection (tab strips + splitter handles).
@@ -350,6 +375,11 @@ impl LayoutTree {
             .iter()
             .map(|(k, v)| (k.clone(), v.keep_alive))
             .collect();
+        let show_address_bars: HashMap<String, bool> = g
+            .meta
+            .iter()
+            .map(|(k, v)| (k.clone(), v.show_address_bar))
+            .collect();
         let mut max_path_buf = Vec::new();
         let max_path = g
             .maximized_stack_id
@@ -375,6 +405,7 @@ impl LayoutTree {
             &zoom_factors,
             &fdc3_channels,
             &keep_alives,
+            &show_address_bars,
         )
     }
 
@@ -504,6 +535,26 @@ impl LayoutTree {
         found
     }
 
+    /// Set (or clear) the address-bar visibility flag for the panel
+    /// identified by `label`. Returns `false` if no panel with that label
+    /// exists. Triggers a reflow-affecting change — callers must follow up
+    /// with `reflow()` to resize the webview into the freed/reserved space.
+    pub fn set_show_address_bar(&self, label: &str, show_address_bar: bool) -> bool {
+        let found = {
+            let mut g = self.inner.write().unwrap();
+            let Some(meta) = g.meta.get_mut(label) else {
+                return false;
+            };
+            meta.show_address_bar = show_address_bar;
+            true
+        };
+        if found {
+            // Infrequent, user-driven — write immediately, no debounce.
+            self.schedule_save(0);
+        }
+        found
+    }
+
     /// Synthesize a `LayoutSnapshot` for the legacy `wm:layout` event. Only
     /// leaves *not* inside a Stack are surfaced as panels — Stack members get
     /// their headers from the tab strip (`wm:host-layout`) instead.
@@ -594,6 +645,7 @@ impl LayoutTree {
                     zoom_factor: 1.0,
                     fdc3_channel: None,
                     keep_alive: false,
+                    show_address_bar: true,
                 },
             );
 
@@ -1157,6 +1209,7 @@ impl LayoutTree {
                                 zoom_factor: pm.zoom_factor,
                                 fdc3_channel: pm.fdc3_channel,
                                 keep_alive: pm.keep_alive,
+                                show_address_bar: pm.show_address_bar,
                             };
                             (label, meta)
                         })
@@ -1333,6 +1386,7 @@ fn snapshot_for_persist(inner: &Inner) -> PersistedLayout {
                     zoom_factor: m.zoom_factor,
                     fdc3_channel: m.fdc3_channel.clone(),
                     keep_alive: m.keep_alive,
+                    show_address_bar: m.show_address_bar,
                 },
             )
         })
@@ -1559,6 +1613,7 @@ fn walk_for_snapshot(
                 zoom_factor: m.map(|m| m.zoom_factor).unwrap_or(1.0),
                 fdc3_channel: m.and_then(|m| m.fdc3_channel.clone()),
                 keep_alive: m.map(|m| m.keep_alive).unwrap_or(false),
+                show_address_bar: m.map(|m| m.show_address_bar).unwrap_or(true),
             });
         }
         LayoutNode::Splitter {

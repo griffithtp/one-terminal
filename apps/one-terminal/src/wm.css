@@ -624,6 +624,31 @@ body,
   color: var(--ot-text-strong);
 }
 
+/* ── Generic Web Widget address-bar row ───────────────────────────────────── */
+.wm-panel-address-bar {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  padding: 0 10px;
+  background: var(--ot-bg-surface);
+  border-bottom: 1px solid var(--ot-border-subtle);
+  color: var(--ot-text-secondary);
+  font-size: 11px;
+  user-select: none;
+  pointer-events: none;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.wm-panel-address-bar__text {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ── Divider drag handles ─────────────────────────────────────────────────── */
 .divider {
   position: absolute;

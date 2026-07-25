@@ -26,6 +26,17 @@ pub const HEADER_HEIGHT: f64 = 40.0;
 /// Height of the chrome-drawn per-panel header (title / drag / close),
 /// reserved at the top of every `PanelBounds` rect.
 pub const PANEL_HEADER_HEIGHT: f64 = 28.0;
+/// Height of the read-only address-bar row a Generic Web Widget panel can
+/// show directly below its title header. Reserved in the panel's own
+/// content area (not the shared chrome header), so only panels that opt in
+/// (`app_id == GENERIC_WEB_WIDGET_APP_ID && show_address_bar`) pay for it.
+/// Standalone panels only — see `reflow::reflow_inner`'s `in_stack` check.
+pub const ADDRESS_BAR_HEIGHT: f64 = 22.0;
+/// Fixed `appId` for the built-in "Custom Web Widget" pseudo-app — a
+/// user-entered URL launched without an App Directory registration. Single
+/// source of truth; mirrored in the frontend as `GENERIC_WEB_WIDGET_APP_ID`
+/// in `src/lib/genericWebWidget.ts`.
+pub const GENERIC_WEB_WIDGET_APP_ID: &str = "generic-web-widget";
 
 // ── Split direction ───────────────────────────────────────────────────────────
 
@@ -70,6 +81,15 @@ pub struct PanelBounds {
     /// across Dashboard switches instead of being destroyed/recreated.
     #[serde(default)]
     pub keep_alive: bool,
+    /// Whether the read-only address-bar row is shown below the title
+    /// header. Only rendered by the frontend for `app_id ==
+    /// GENERIC_WEB_WIDGET_APP_ID` panels; harmless to carry for others.
+    #[serde(default = "default_show_address_bar")]
+    pub show_address_bar: bool,
+}
+
+fn default_show_address_bar() -> bool {
+    true
 }
 
 fn default_zoom() -> f64 {
