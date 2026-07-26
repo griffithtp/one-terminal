@@ -6,7 +6,7 @@ use tauri::{AppHandle, Emitter, Manager, State, Window};
 
 use crate::terminal::TerminalManager;
 
-use super::dashboard::DashboardsSnapshot;
+use super::dashboard::{DashboardError, DashboardsSnapshot};
 use super::docking::DropZone;
 use super::node::LayoutNode;
 
@@ -502,6 +502,7 @@ pub fn wm_list_dashboards(
                 auto_save: true,
                 dirty: false,
                 dashboards: vec![],
+                closed_dashboards: vec![],
                 parked_count: 0,
             }
         }
@@ -580,27 +581,127 @@ pub fn wm_rename_dashboard(
     Ok(renamed)
 }
 
-/// Delete a dashboard. Deleting the active dashboard switches to the next one,
-/// or leaves the terminal empty if it was the last. Returns `false` if `name`
-/// doesn't exist.
+/// Permanently delete a dashboard — its layout is gone for good. Only
+/// **closed** dashboards can be deleted (see `wm_close_dashboard`); an open
+/// dashboard — including the active one, which is always open — must be
+/// closed first. This is enforced here, not just hidden in the UI, since a
+/// closed dashboard is guaranteed to be neither dirty nor have anything
+/// parked in the background, which is what makes it safe to skip all the
+/// webview/active-dashboard reconciliation `close_dashboard` already did.
+///
+/// This is the drawer's "Delete" action (irreversible, only reachable from
+/// the Closed section). The dashboard tab's "Close dashboard" menu item
+/// uses `wm_close_dashboard` instead, which keeps the dashboard's data
+/// around for `wm_reopen_dashboard`.
+///
+/// Returns `Err(DashboardError::Other)` if `name` is open. Returns `false`
+/// if `name` doesn't exist. Unless `force` is `true`, returns
+/// `DashboardError::NeedsConfirm` unconditionally — deletion is
+/// irreversible, so (unlike `wm_close_dashboard`) this always asks, not just
+/// when there's live state at risk — the frontend should show a confirm
+/// dialog and retry with `force: true`.
 #[tauri::command]
 pub async fn wm_delete_dashboard(
     name: String,
+    force: bool,
     window: Window,
     manager: State<'_, TerminalManager>,
     cfg: State<'_, crate::config::TerminalConfig>,
     app: AppHandle,
-) -> Result<bool, String> {
-    let terminal = get_terminal!(manager, window);
-    let deleted = terminal
+) -> Result<bool, DashboardError> {
+    let terminal = manager
+        .get(window.label())
+        .ok_or_else(|| DashboardError::Other {
+            message: format!("terminal '{}' not found", window.label()),
+        })?;
+
+    let is_closed = terminal
         .layout_tree
-        .delete_dashboard(&name, &window, &app, &cfg.panel_init_script())
-        .map_err(|e| format!("{e:?}"))?;
+        .with_dashboard_store_mut(|ds| ds.dashboards.get(&name).map(|d| d.closed));
+    match is_closed {
+        None => return Ok(false),
+        Some(false) => {
+            return Err(DashboardError::Other {
+                message: format!("'{name}' is open — close it before deleting"),
+            });
+        }
+        Some(true) => {}
+    }
+
+    if !force {
+        return Err(DashboardError::NeedsConfirm);
+    }
+
+    let deleted =
+        terminal
+            .layout_tree
+            .delete_dashboard(&name, &window, &app, &cfg.panel_init_script())?;
     if deleted {
         terminal.layout_tree.persist_dashboards();
         terminal.layout_tree.emit_dashboards(&app);
     }
     Ok(deleted)
+}
+
+/// Close a dashboard — hide it from the switcher and Manage drawer's main
+/// list, and stop any of its widgets currently running in the background,
+/// but keep its layout intact so `wm_reopen_dashboard` can bring it back
+/// exactly as it was. Closing the active dashboard switches to the next
+/// open one, or leaves the terminal empty if none remain open. Returns
+/// `false` if `name` doesn't exist.
+///
+/// Unless `force` is `true`, returns `DashboardError::NeedsConfirm` under
+/// the same conditions as `wm_delete_dashboard` (unsaved changes on the
+/// active dashboard, or keep-alive panels currently parked) — closing
+/// still discards *live, unsaved* state even though the last-saved layout
+/// survives.
+#[tauri::command]
+pub async fn wm_close_dashboard(
+    name: String,
+    force: bool,
+    window: Window,
+    manager: State<'_, TerminalManager>,
+    cfg: State<'_, crate::config::TerminalConfig>,
+    app: AppHandle,
+) -> Result<bool, DashboardError> {
+    let terminal = manager
+        .get(window.label())
+        .ok_or_else(|| DashboardError::Other {
+            message: format!("terminal '{}' not found", window.label()),
+        })?;
+
+    if !force && terminal.layout_tree.dashboard_needs_confirm_close(&name) {
+        return Err(DashboardError::NeedsConfirm);
+    }
+
+    let closed =
+        terminal
+            .layout_tree
+            .close_dashboard(&name, &window, &app, &cfg.panel_init_script())?;
+    if closed {
+        terminal.layout_tree.persist_dashboards();
+        terminal.layout_tree.emit_dashboards(&app);
+    }
+    Ok(closed)
+}
+
+/// Reopen a dashboard previously hidden via `wm_close_dashboard` — it
+/// reappears in the switcher and Manage drawer's main list, unchanged from
+/// when it was closed. Does not switch to it. Returns `false` if `name`
+/// doesn't exist.
+#[tauri::command]
+pub fn wm_reopen_dashboard(
+    name: String,
+    window: Window,
+    manager: State<'_, TerminalManager>,
+    app: AppHandle,
+) -> Result<bool, String> {
+    let terminal = get_terminal!(manager, window);
+    let reopened = terminal.layout_tree.reopen_dashboard(&name);
+    if reopened {
+        terminal.layout_tree.emit_dashboards(&app);
+    }
+    Ok(reopened)
 }
 
 /// Reorder the dashboard list to match `order`. Names not present in the
@@ -625,6 +726,152 @@ pub fn wm_reorder_dashboards(
         .with_dashboard_store_mut(|ds| ds.reorder(&order));
     terminal.layout_tree.persist_dashboards();
     terminal.layout_tree.emit_dashboards(&app);
+}
+
+/// Set (or clear) the default FDC3 channel for `dashboard_name` and apply it
+/// to every widget currently in that dashboard, whether or not it's the
+/// active one. When active, this also joins every open panel's live webview
+/// to the channel (mirroring `wm_set_panel_fdc3_channel`'s per-panel eval)
+/// and re-emits the layout snapshot so tab channel dots update immediately.
+/// Future widgets added to this dashboard inherit the channel automatically
+/// (see `LayoutTree::insert_panel`'s `default_channel` lookup).
+#[tauri::command]
+pub fn wm_set_dashboard_default_channel(
+    dashboard_name: String,
+    channel_id: Option<String>,
+    window: Window,
+    manager: State<'_, TerminalManager>,
+    app: AppHandle,
+) -> Result<(), String> {
+    if let Some(id) = &channel_id {
+        if !SYSTEM_CHANNEL_IDS.contains(&id.as_str()) {
+            return Err(format!("unknown FDC3 channel id '{id}'"));
+        }
+    }
+
+    let terminal = get_terminal!(manager, window);
+    let is_active = terminal
+        .layout_tree
+        .with_dashboard_store_mut(|ds| ds.active == dashboard_name);
+    let found = terminal
+        .layout_tree
+        .with_dashboard_store_mut(|ds| ds.set_default_channel(&dashboard_name, channel_id.clone()));
+    if !found {
+        return Err(format!("dashboard '{dashboard_name}' not found"));
+    }
+    terminal.layout_tree.persist_dashboards();
+
+    if is_active {
+        let labels = terminal
+            .layout_tree
+            .set_fdc3_channel_for_all(channel_id.clone());
+        let script = match &channel_id {
+            Some(id) => {
+                let encoded = serde_json::to_string(id).map_err(|e| e.to_string())?;
+                format!(
+                    "window.fdc3Ready && window.fdc3Ready.then(function(c) {{ c.joinUserChannel({encoded}); }});"
+                )
+            }
+            None => {
+                "window.fdc3Ready && window.fdc3Ready.then(function(c) { c.leaveCurrentChannel(); });"
+                    .to_string()
+            }
+        };
+        for label in &labels {
+            if let Some(wv) = app.get_webview(label) {
+                wv.eval(&script).map_err(|e| e.to_string())?;
+            }
+        }
+        terminal.layout_tree.emit_host(&app);
+        if let Some(snap) = terminal.layout_tree.snapshot() {
+            let chrome = format!("{}-chrome", window.label());
+            if let Some(wv) = app.get_webview(&chrome) {
+                let _ = wv.emit("wm:layout", &snap);
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Bulk-set the "keep running in background" flag for every widget currently
+/// in `dashboard_name`, whether or not it's the active dashboard. Unlike
+/// `wm_set_dashboard_default_channel`, this is a one-shot bulk action, not a
+/// sticky default — widgets added to this dashboard later still default to
+/// `keep_alive: false` regardless of this call.
+#[tauri::command]
+pub fn wm_set_dashboard_keep_alive_all(
+    dashboard_name: String,
+    keep_alive: bool,
+    window: Window,
+    manager: State<'_, TerminalManager>,
+    app: AppHandle,
+) -> Result<(), String> {
+    let terminal = get_terminal!(manager, window);
+    let is_active = terminal
+        .layout_tree
+        .with_dashboard_store_mut(|ds| ds.active == dashboard_name);
+    let found = terminal
+        .layout_tree
+        .with_dashboard_store_mut(|ds| ds.set_all_keep_alive(&dashboard_name, keep_alive));
+    if !found {
+        return Err(format!("dashboard '{dashboard_name}' not found"));
+    }
+    terminal.layout_tree.persist_dashboards();
+
+    if is_active {
+        terminal.layout_tree.set_keep_alive_for_all(keep_alive);
+        terminal.layout_tree.emit_host(&app);
+        if let Some(snap) = terminal.layout_tree.snapshot() {
+            let chrome = format!("{}-chrome", window.label());
+            if let Some(wv) = app.get_webview(&chrome) {
+                let _ = wv.emit("wm:layout", &snap);
+            }
+        }
+    }
+
+    Ok(())
+}
+
+/// Duplicate a dashboard within the same Terminal window. `name` may or may
+/// not be the active dashboard — duplicating a background dashboard reads
+/// its persisted snapshot directly and never touches the live layout tree.
+/// The new name is derived from `name` by appending " (copy)", " (copy 2)",
+/// etc. until an unused name is found. Returns the final chosen name.
+#[tauri::command]
+pub fn wm_duplicate_dashboard(
+    name: String,
+    window: Window,
+    manager: State<'_, TerminalManager>,
+    app: AppHandle,
+) -> Result<String, String> {
+    let terminal = get_terminal!(manager, window);
+
+    let snapshot = terminal
+        .layout_tree
+        .with_dashboard_store_mut(|ds| ds.dashboards.get(&name).cloned());
+    let Some(mut dashboard) = snapshot else {
+        return Err(format!("dashboard '{name}' not found"));
+    };
+    // The duplicate is always open, regardless of whether the source is
+    // closed — duplicating a closed dashboard should produce a usable copy,
+    // not another hidden one.
+    dashboard.closed = false;
+
+    let new_name = terminal.layout_tree.with_dashboard_store_mut(|ds| {
+        let mut candidate = format!("{name} (copy)");
+        let mut n = 2;
+        while ds.dashboards.contains_key(&candidate) {
+            candidate = format!("{name} (copy {n})");
+            n += 1;
+        }
+        ds.create_from(candidate.clone(), dashboard);
+        candidate
+    });
+
+    terminal.layout_tree.persist_dashboards();
+    terminal.layout_tree.emit_dashboards(&app);
+    Ok(new_name)
 }
 
 /// Enable or disable auto-save. When switching from off→on, the live layout

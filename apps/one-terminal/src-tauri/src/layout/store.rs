@@ -500,6 +500,30 @@ impl LayoutTree {
             .and_then(|m| m.fdc3_channel.clone())
     }
 
+    /// Whether closing `name` would silently discard *live* state — either
+    /// it's the active dashboard with unsaved changes (auto-save off), or it
+    /// owns panels currently parked (kept alive) in the background. Used by
+    /// `wm_close_dashboard` only — `wm_delete_dashboard` only ever operates
+    /// on already-closed dashboards, which can be neither dirty nor own
+    /// parked panels (both conditions require being open/active), so it
+    /// always confirms unconditionally instead of consulting this check.
+    /// Closing the last remaining *open* dashboard is unaffected by this
+    /// check — that's intentional, existing behavior, not a state-loss risk.
+    pub fn dashboard_needs_confirm_close(&self, name: &str) -> bool {
+        let dirty = {
+            let ds = self.dashboard_store.read().unwrap();
+            ds.active == name && ds.dirty && !ds.auto_save
+        };
+        if dirty {
+            return true;
+        }
+        self.parked
+            .read()
+            .unwrap()
+            .values()
+            .any(|owner| owner == name)
+    }
+
     /// Set (or clear) the FDC3 channel for the panel identified by `label`.
     /// Returns `false` if no panel with that label exists.
     pub fn set_fdc3_channel(&self, label: &str, channel_id: Option<String>) -> bool {
@@ -516,6 +540,44 @@ impl LayoutTree {
             self.schedule_save(0);
         }
         found
+    }
+
+    /// Set the FDC3 channel for every panel currently in the live tree (i.e.
+    /// every panel belonging to the active Dashboard). Returns the affected
+    /// labels so the caller can push the join/leave script into each
+    /// webview. Does not touch the persisted `DashboardStore` entry — the
+    /// caller (`wm_set_dashboard_default_channel`) is responsible for that.
+    pub fn set_fdc3_channel_for_all(&self, channel_id: Option<String>) -> Vec<String> {
+        let labels: Vec<String> = {
+            let mut g = self.inner.write().unwrap();
+            let labels: Vec<String> = g.meta.keys().cloned().collect();
+            for meta in g.meta.values_mut() {
+                meta.fdc3_channel = channel_id.clone();
+            }
+            labels
+        };
+        if !labels.is_empty() {
+            self.schedule_save(0);
+        }
+        labels
+    }
+
+    /// Set the keep-alive flag for every panel currently in the live tree
+    /// (i.e. every panel belonging to the active Dashboard). Returns the
+    /// affected labels.
+    pub fn set_keep_alive_for_all(&self, keep_alive: bool) -> Vec<String> {
+        let labels: Vec<String> = {
+            let mut g = self.inner.write().unwrap();
+            let labels: Vec<String> = g.meta.keys().cloned().collect();
+            for meta in g.meta.values_mut() {
+                meta.keep_alive = keep_alive;
+            }
+            labels
+        };
+        if !labels.is_empty() {
+            self.schedule_save(0);
+        }
+        labels
     }
 
     /// Return whether the panel identified by `label` is flagged to keep
@@ -673,6 +735,14 @@ impl LayoutTree {
         target: Option<&str>,
         dir: Option<SplitDir>,
     ) -> String {
+        // New panels join the active dashboard's default FDC3 channel, if
+        // one is set (see `DashboardStore::set_default_channel`).
+        let default_channel = {
+            let ds = self.dashboard_store.read().unwrap();
+            ds.dashboards
+                .get(&ds.active)
+                .and_then(|d| d.default_fdc3_channel.clone())
+        };
         {
             let mut g = self.inner.write().unwrap();
             g.meta.insert(
@@ -684,7 +754,7 @@ impl LayoutTree {
                     engine_binding: spec.engine_binding,
                     display_name: None,
                     zoom_factor: 1.0,
-                    fdc3_channel: None,
+                    fdc3_channel: default_channel,
                     keep_alive: false,
                     show_address_bar: false,
                 },
@@ -1221,6 +1291,91 @@ impl LayoutTree {
         }
 
         Ok(true)
+    }
+
+    /// Hide a dashboard from the switcher without deleting it — its layout,
+    /// per-leaf metadata, and default channel all stay intact in the
+    /// `DashboardStore` so `reopen_dashboard` can bring it back exactly as
+    /// it was. Reconciles panel webviews the same way `delete_dashboard`
+    /// does when `name` is the active dashboard (switches to the next open
+    /// one, or empties the terminal if none remain open), and closes any of
+    /// `name`'s panels currently parked in the background — a closed
+    /// dashboard doesn't keep widgets running, same as a deleted one.
+    /// Returns `false` if `name` doesn't exist.
+    pub fn close_dashboard(
+        &self,
+        name: &str,
+        win: &Window,
+        app: &AppHandle,
+        panel_init_script: &str,
+    ) -> Result<bool, DashboardError> {
+        // Check existence and whether this is the active dashboard.
+        let (is_active, current_labels) = {
+            let ds = self.dashboard_store.read().unwrap();
+            if !ds.dashboards.contains_key(name) {
+                return Ok(false);
+            }
+            let is_active = ds.active == name;
+            let labels = if is_active {
+                let g = self.inner.read().unwrap();
+                let mut out = Vec::new();
+                if let Some(root) = &g.root {
+                    collect_leaf_labels(root, &mut out);
+                }
+                out
+            } else {
+                vec![]
+            };
+            (is_active, labels)
+        };
+
+        self.with_dashboard_store_mut(|ds| ds.close(name));
+
+        // The closed Dashboard may own panels parked off-screen (kept alive
+        // while some other Dashboard was active) — it's no longer reachable
+        // until reopened, so close them now instead of leaking the webviews.
+        self.close_parked_for_dashboard(name, app)?;
+
+        if !is_active {
+            return Ok(true);
+        }
+
+        // Closed the active dashboard — load whatever is now active (or None).
+        let new_layout = self.dashboard_store.read().unwrap().load_active();
+        let panels_to_create = self.apply_layout_to_inner(new_layout);
+        self.reconcile_panel_webviews(
+            current_labels,
+            Vec::new(),
+            panels_to_create,
+            win,
+            app,
+            panel_init_script,
+        )?;
+
+        self.reflow(app);
+        self.emit_host(app);
+        let chrome = format!("{}-chrome", self.terminal_id);
+        if let Some(wv) = app.get_webview(&chrome) {
+            if let Some(snap) = self.snapshot() {
+                let _ = wv.emit("wm:layout", &snap);
+            } else {
+                let _ = wv.emit("wm:layout", serde_json::Value::Null);
+            }
+        }
+
+        Ok(true)
+    }
+
+    /// Make a closed dashboard selectable in the switcher again, without
+    /// changing which dashboard is currently active — the user picks it
+    /// from the switcher (or Manage drawer) like any other pill. Returns
+    /// `false` if `name` doesn't exist.
+    pub fn reopen_dashboard(&self, name: &str) -> bool {
+        let reopened = self.with_dashboard_store_mut(|ds| ds.reopen(name));
+        if reopened {
+            self.schedule_save(0);
+        }
+        reopened
     }
 
     /// Load a `PersistedLayout` (or empty layout when `None`) into `Inner`.

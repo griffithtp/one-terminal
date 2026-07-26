@@ -5,6 +5,9 @@ import { ctxMenuItemsFor, type CtxMenuContext } from "./contextMenuItems";
 import { PanelHighlightLayer } from "./CommandPalette";
 import { OverlayMenu } from "./OverlayMenu";
 import { OverlayConfirmDashboardSwitch } from "./OverlayConfirmDashboardSwitch";
+import { OverlayConfirmDashboardDelete } from "./OverlayConfirmDashboardDelete";
+import { OverlayConfirmDashboardClose } from "./OverlayConfirmDashboardClose";
+import { OverlayDashboardTabMenu } from "./OverlayDashboardTabMenu";
 import { OverlayCreateDashboard } from "./OverlayCreateDashboard";
 import { WidgetCatalog } from "./WidgetCatalog";
 import { EnginePickerDialog } from "./EnginePickerDialog";
@@ -400,6 +403,20 @@ export function OverlayApp() {
       {/* Unsaved-changes confirm dialog — fires when useDashboards.switchTo
           gets NeedsConfirm. Renders here (overlay) so widgets stay visible. */}
       <OverlayConfirmDashboardSwitch />
+
+      {/* "Delete dashboard" (permanent) confirm dialog — fires when
+          useDashboards.remove (Manage drawer's Delete button) gets
+          NeedsConfirm. Renders here for the same reason. */}
+      <OverlayConfirmDashboardDelete />
+
+      {/* "Close dashboard" (reopenable) confirm dialog — fires when the
+          dashboard tab context menu's Close action gets NeedsConfirm. */}
+      <OverlayConfirmDashboardClose />
+
+      {/* Dashboard tab's right-click / kebab context menu — see
+          OverlayDashboardTabMenu's header comment for why this can't render
+          in chrome (panel webviews sit above it in z-order). */}
+      <OverlayDashboardTabMenu />
 
       {/* "New dashboard" prompt — fired by the header "+" button and the
           dashboard:create palette command. Renders here so widgets stay
