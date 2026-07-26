@@ -11,6 +11,8 @@ interface DashboardsPayload {
   autoSave: boolean;
   dirty: boolean;
   dashboards: string[];
+  /** Names of dashboards closed via `close()` — hidden but not deleted. */
+  closedDashboards: string[];
   /** Total panels across all dashboards parked off-screen (kept alive)
    *  instead of closed, because their owning dashboard isn't active. */
   parkedCount: number;
@@ -36,6 +38,8 @@ export interface DashboardInfo {
 
 export interface UseDashboardsResult {
   dashboards: DashboardInfo[];
+  /** Names of dashboards closed (hidden, not deleted) — see `close`/`reopen`. */
+  closedDashboards: string[];
   autoSave: boolean;
   /** Total panels currently parked (kept alive) in background dashboards. */
   parkedCount: number;
@@ -50,7 +54,12 @@ export interface UseDashboardsResult {
   save: () => Promise<void>;
   discard: () => Promise<void>;
   rename: (oldName: string, newName: string) => Promise<void>;
+  /** Permanently delete `name` — irreversible. See `close` for the reopenable alternative. */
   remove: (name: string) => Promise<void>;
+  /** Hide `name` from the switcher/drawer and stop its background widgets, without deleting it. */
+  close: (name: string) => Promise<void>;
+  /** Bring a closed dashboard back into the switcher/drawer, unchanged. Does not switch to it. */
+  reopen: (name: string) => Promise<void>;
   reorder: (names: string[]) => Promise<void>;
   setAutoSave: (enabled: boolean) => Promise<void>;
 }
@@ -118,7 +127,31 @@ export function useDashboards(): UseDashboardsResult {
   }, []);
 
   const remove = useCallback(async (name: string) => {
-    await invoke("wm_delete_dashboard", { name });
+    try {
+      await invoke("wm_delete_dashboard", { name, force: false });
+    } catch (e) {
+      if (isNeedsConfirm(e)) {
+        invoke("wm_dashboard_confirm_delete_open", { name }).catch(console.error);
+      } else {
+        console.error("[dashboards] remove:", e);
+      }
+    }
+  }, []);
+
+  const close = useCallback(async (name: string) => {
+    try {
+      await invoke("wm_close_dashboard", { name, force: false });
+    } catch (e) {
+      if (isNeedsConfirm(e)) {
+        invoke("wm_dashboard_confirm_close_open", { name }).catch(console.error);
+      } else {
+        console.error("[dashboards] close:", e);
+      }
+    }
+  }, []);
+
+  const reopen = useCallback(async (name: string) => {
+    await invoke("wm_reopen_dashboard", { name });
   }, []);
 
   const reorder = useCallback(async (names: string[]) => {
@@ -205,6 +238,7 @@ export function useDashboards(): UseDashboardsResult {
 
   return {
     dashboards,
+    closedDashboards: payload?.closedDashboards ?? [],
     autoSave: payload?.autoSave ?? true,
     parkedCount: payload?.parkedCount ?? 0,
     switchTo,
@@ -213,6 +247,8 @@ export function useDashboards(): UseDashboardsResult {
     discard,
     rename,
     remove,
+    close,
+    reopen,
     reorder,
     setAutoSave,
   };

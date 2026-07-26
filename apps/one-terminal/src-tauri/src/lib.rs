@@ -10,12 +10,13 @@ mod widgets;
 use config::TerminalConfig;
 use engine::WmHostIdentity;
 use layout::commands::{
-    close_tab, update_layout, wm_begin_tab_drag, wm_close_leaf, wm_close_stack,
-    wm_create_dashboard, wm_delete_dashboard, wm_end_tab_drag, wm_get_panel_fdc3_channel,
-    wm_get_panel_keep_alive, wm_list_dashboards, wm_rename_dashboard, wm_rename_panel,
-    wm_rename_tab, wm_reorder_dashboards, wm_save_dashboard, wm_set_active_tab, wm_set_auto_save,
-    wm_set_panel_fdc3_channel, wm_set_panel_keep_alive, wm_set_panel_show_address_bar, wm_set_zoom,
-    wm_splitter_drag, wm_toggle_maximize_stack,
+    close_tab, update_layout, wm_begin_tab_drag, wm_close_dashboard, wm_close_leaf, wm_close_stack,
+    wm_create_dashboard, wm_delete_dashboard, wm_duplicate_dashboard, wm_end_tab_drag,
+    wm_get_panel_fdc3_channel, wm_get_panel_keep_alive, wm_list_dashboards, wm_rename_dashboard,
+    wm_rename_panel, wm_rename_tab, wm_reopen_dashboard, wm_reorder_dashboards, wm_save_dashboard,
+    wm_set_active_tab, wm_set_auto_save, wm_set_dashboard_default_channel,
+    wm_set_dashboard_keep_alive_all, wm_set_panel_fdc3_channel, wm_set_panel_keep_alive,
+    wm_set_panel_show_address_bar, wm_set_zoom, wm_splitter_drag, wm_toggle_maximize_stack,
 };
 use layout::dashboard::DashboardError;
 use layout::drag::wm_drag_move;
@@ -756,6 +757,56 @@ fn wm_request_rename(label: String, app: AppHandle) {
     }
 }
 
+/// Show the dashboard tab's context menu (Add widget, Duplicate, Rename, Set
+/// default channel…, Set background running, Close dashboard, Manage…) in
+/// the overlay webview, anchored at window position (`x`, `y`).
+///
+/// Mirrors `wm_ctx_menu_open`'s pattern (raise the overlay so the menu sits
+/// above panel webviews, which the chrome webview alone cannot do) but for
+/// the dashboard switcher's pills instead of tab strips — the menu content
+/// itself is unrelated to any Stack/tab, so it gets its own event rather
+/// than overloading `wm:ctx-menu`'s tab-shaped payload.
+#[tauri::command]
+async fn wm_dashboard_ctx_menu_open(
+    name: String,
+    x: f64,
+    y: f64,
+    window: Window,
+    manager: State<'_, TerminalManager>,
+    app: AppHandle,
+) -> Result<(), String> {
+    let terminal = get_terminal!(manager, window);
+    overlay_raise(Arc::clone(&terminal.overlay), window.label(), &app).await?;
+    let overlay = format!("{}-overlay", window.label());
+    app.get_webview(&overlay)
+        .ok_or("overlay not found".to_string())?
+        .emit(
+            "wm:dashboard-ctx-menu",
+            serde_json::json!({
+                "name": name,
+                "x": x,
+                "y": y,
+            }),
+        )
+        .map_err(|e| e.to_string())
+}
+
+/// Signal the chrome webview to enter inline rename mode for the dashboard
+/// pill named `name`. Emitted as `wm:dashboard-request-rename`, mirroring
+/// `wm_request_rename` — the dashboard tab context menu (overlay-hosted)
+/// can't render the pill's own inline `<input>` itself, since the pill lives
+/// in the chrome webview.
+#[tauri::command]
+fn wm_dashboard_request_rename(name: String, window: Window, app: AppHandle) {
+    let chrome = format!("{}-chrome", window.label());
+    if let Some(wv) = app.get_webview(&chrome) {
+        let _ = wv.emit(
+            "wm:dashboard-request-rename",
+            serde_json::json!({ "name": name }),
+        );
+    }
+}
+
 /// Hide the overlay by parking it offscreen with a 1×1 hit area. Called
 /// by the overlay itself when the user dismisses a menu or selects an
 /// action.
@@ -909,6 +960,66 @@ async fn wm_dashboard_confirm_open(
             serde_json::json!({
                 "activeName": active_name,
                 "pendingName": pending_name,
+            }),
+        )
+        .map_err(|e| e.to_string())
+}
+
+/// Show the "delete dashboard" confirm dialog in the overlay webview.
+/// Triggered by useDashboards.remove (the Manage drawer's "Delete" button,
+/// only shown for already-closed dashboards) when wm_delete_dashboard
+/// returns NeedsConfirm — which it now does unconditionally, since deletion
+/// is irreversible. No dirty/keep-alive branching here: a dashboard eligible
+/// for deletion is always closed, and a closed dashboard can be neither
+/// dirty nor own parked panels (both require being open/active), so there's
+/// nothing to offer Save/Discard for. See `wm_dashboard_confirm_close_open`
+/// for the non-destructive "close" variant, which still branches on those.
+#[tauri::command]
+async fn wm_dashboard_confirm_delete_open(
+    name: String,
+    window: Window,
+    manager: State<'_, TerminalManager>,
+    app: AppHandle,
+) -> Result<(), String> {
+    let terminal = get_terminal!(manager, window);
+    overlay_raise(Arc::clone(&terminal.overlay), window.label(), &app).await?;
+    let overlay = format!("{}-overlay", window.label());
+    app.get_webview(&overlay)
+        .ok_or("overlay not found".to_string())?
+        .emit(
+            "wm:dashboard-confirm-delete",
+            serde_json::json!({ "name": name }),
+        )
+        .map_err(|e| e.to_string())
+}
+
+/// Show the "close dashboard" confirm dialog in the overlay webview.
+/// Triggered by the dashboard tab context menu's "Close dashboard" item
+/// when wm_close_dashboard returns NeedsConfirm. Unlike
+/// `wm_dashboard_confirm_delete_open`, closing doesn't delete the
+/// dashboard's data — the overlay renders Save & Close / Discard & Close /
+/// Cancel (dirty case) or Close Anyway / Cancel (keep-alive-only case).
+#[tauri::command]
+async fn wm_dashboard_confirm_close_open(
+    name: String,
+    window: Window,
+    manager: State<'_, TerminalManager>,
+    app: AppHandle,
+) -> Result<(), String> {
+    let terminal = get_terminal!(manager, window);
+    let dirty = {
+        let ds = terminal.layout_tree.dashboards_snapshot();
+        ds.active == name && ds.dirty
+    };
+    overlay_raise(Arc::clone(&terminal.overlay), window.label(), &app).await?;
+    let overlay = format!("{}-overlay", window.label());
+    app.get_webview(&overlay)
+        .ok_or("overlay not found".to_string())?
+        .emit(
+            "wm:dashboard-confirm-close",
+            serde_json::json!({
+                "name": name,
+                "dirty": dirty,
             }),
         )
         .map_err(|e| e.to_string())
@@ -1390,6 +1501,10 @@ pub fn run() {
             wm_menu_open,
             wm_dashboard_create_open,
             wm_dashboard_confirm_open,
+            wm_dashboard_confirm_delete_open,
+            wm_dashboard_confirm_close_open,
+            wm_dashboard_ctx_menu_open,
+            wm_dashboard_request_rename,
             wm_request_rename,
             wm_list_dashboards,
             wm_switch_dashboard,
@@ -1398,9 +1513,14 @@ pub fn run() {
             wm_discard_dashboard,
             wm_rename_dashboard,
             wm_delete_dashboard,
+            wm_close_dashboard,
+            wm_reopen_dashboard,
             wm_reorder_dashboards,
             wm_set_auto_save,
             wm_duplicate_dashboard_to,
+            wm_duplicate_dashboard,
+            wm_set_dashboard_default_channel,
+            wm_set_dashboard_keep_alive_all,
             wm_spawn_terminal,
             wm_list_saved_terminals,
             wm_close_terminal,

@@ -409,11 +409,23 @@
       "overlay": "shared"
     },
     {
+      "path": "apps/one-terminal/src/components/OverlayConfirmDashboardClose.tsx",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/components/OverlayConfirmDashboardDelete.tsx",
+      "overlay": "shared"
+    },
+    {
       "path": "apps/one-terminal/src/components/OverlayConfirmDashboardSwitch.tsx",
       "overlay": "shared"
     },
     {
       "path": "apps/one-terminal/src/components/OverlayCreateDashboard.tsx",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/components/OverlayDashboardTabMenu.tsx",
       "overlay": "shared"
     },
     {

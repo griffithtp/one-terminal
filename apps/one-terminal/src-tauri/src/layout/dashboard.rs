@@ -30,6 +30,20 @@ pub struct PersistedDashboard {
     /// Stable id of the maximised Stack, if any.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub maximized_stack_id: Option<String>,
+    /// FDC3 user channel newly-added widgets in this dashboard join by
+    /// default. `None` = no default (widgets are born on no channel, as
+    /// before this field existed). Set via the dashboard tab context menu's
+    /// "Set default channel…" item, which also applies the channel to every
+    /// widget already in the dashboard at the time it's set.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_fdc3_channel: Option<String>,
+    /// When `true`, this dashboard is hidden from the switcher and Manage
+    /// drawer's main list — "closed" rather than deleted. Its layout, meta,
+    /// and default channel are untouched; `DashboardStore::reopen` clears
+    /// this flag to bring it back. Distinct from deletion (`DashboardStore::delete`),
+    /// which removes the entry entirely and cannot be undone.
+    #[serde(default)]
+    pub closed: bool,
 }
 
 impl PersistedDashboard {
@@ -51,6 +65,8 @@ impl PersistedDashboard {
             meta: layout.meta,
             active_panel: layout.active_panel,
             maximized_stack_id: layout.maximized_stack_id,
+            default_fdc3_channel: None,
+            closed: false,
         }
     }
 
@@ -61,6 +77,8 @@ impl PersistedDashboard {
             meta: HashMap::new(),
             active_panel: None,
             maximized_stack_id: None,
+            default_fdc3_channel: None,
+            closed: false,
         }
     }
 }
@@ -78,6 +96,10 @@ pub struct DashboardsSnapshot {
     /// persisted active dashboard.
     pub dirty: bool,
     pub dashboards: Vec<String>,
+    /// Names of dashboards hidden via `DashboardStore::close` — not deleted,
+    /// just absent from `dashboards` above. Surfaced so the Manage drawer
+    /// can list them with a "Reopen" action.
+    pub closed_dashboards: Vec<String>,
     /// Total count of panels across all Dashboards that are currently
     /// parked off-screen (kept alive) instead of closed, because their
     /// owning Dashboard isn't the active one. Surfaced so the switcher UI
@@ -145,12 +167,17 @@ impl DashboardStore {
             dashboards.insert(d.name.clone(), d);
         }
 
-        let active = if dashboards.contains_key(&persist.active_dashboard) {
+        let active_is_open = dashboards
+            .get(&persist.active_dashboard)
+            .map(|d| !d.closed)
+            .unwrap_or(false);
+        let active = if active_is_open {
             persist.active_dashboard
-        } else if let Some(first) = dashboards.keys().next() {
+        } else if let Some((first, _)) = dashboards.iter().find(|(_, d)| !d.closed) {
             first.clone()
         } else {
-            // No dashboards persisted — start empty; user creates the first one.
+            // No open dashboards persisted — start empty; user creates or
+            // reopens one.
             String::new()
         };
 
@@ -175,9 +202,25 @@ impl DashboardStore {
 
     // ── Read methods ──────────────────────────────────────────────────────────
 
-    /// Dashboard names in their current display order.
+    /// Open dashboard names in their current display order — what the
+    /// switcher and Manage drawer's main list show. Closed dashboards are
+    /// excluded; see `list_closed`.
     pub fn list(&self) -> Vec<String> {
-        self.dashboards.keys().cloned().collect()
+        self.dashboards
+            .iter()
+            .filter(|(_, d)| !d.closed)
+            .map(|(k, _)| k.clone())
+            .collect()
+    }
+
+    /// Closed dashboard names, in store order. Surfaced so the Manage
+    /// drawer can offer a "Reopen" action for each.
+    pub fn list_closed(&self) -> Vec<String> {
+        self.dashboards
+            .iter()
+            .filter(|(_, d)| d.closed)
+            .map(|(k, _)| k.clone())
+            .collect()
     }
 
     /// Snapshot of the full dashboard state for the `wm:dashboards` event.
@@ -189,6 +232,7 @@ impl DashboardStore {
             auto_save: self.auto_save,
             dirty: self.dirty,
             dashboards: self.list(),
+            closed_dashboards: self.list_closed(),
             parked_count,
         }
     }
@@ -269,27 +313,103 @@ impl DashboardStore {
         true
     }
 
-    /// Delete a dashboard. The last dashboard cannot be deleted.
-    /// Returns `false` if `name` doesn't exist or is the only dashboard.
+    /// Permanently delete a dashboard — its layout, meta, and default
+    /// channel are gone for good. Works on open or closed dashboards alike.
+    /// See `close` for the non-destructive, reopenable alternative used by
+    /// the dashboard tab's "Close dashboard" action.
+    /// Returns `false` if `name` doesn't exist.
     pub fn delete(&mut self, name: &str) -> bool {
         if !self.dashboards.contains_key(name) {
             return false;
         }
         self.dashboards.shift_remove(name);
         if self.active == name {
-            self.active = self.dashboards.keys().next().cloned().unwrap_or_default();
+            self.active = self
+                .dashboards
+                .iter()
+                .find(|(_, d)| !d.closed)
+                .map(|(k, _)| k.clone())
+                .unwrap_or_default();
         }
         true
     }
 
-    /// Reorder dashboards to match `order`. Names absent from the store are
-    /// ignored; names in the store absent from `order` are dropped.
+    /// Hide a dashboard from the switcher/Manage-drawer main list without
+    /// deleting it. If `name` was active, reassigns `active` to the next
+    /// open dashboard (or empties it if none remain open). No-op success if
+    /// `name` is already closed. Returns `false` if `name` doesn't exist.
+    pub fn close(&mut self, name: &str) -> bool {
+        let Some(dash) = self.dashboards.get_mut(name) else {
+            return false;
+        };
+        dash.closed = true;
+        if self.active == name {
+            self.active = self
+                .dashboards
+                .iter()
+                .find(|(_, d)| !d.closed)
+                .map(|(k, _)| k.clone())
+                .unwrap_or_default();
+        }
+        true
+    }
+
+    /// Make a closed dashboard selectable again. Does not change `active` —
+    /// the reopened dashboard just reappears in the switcher/drawer for the
+    /// user to click. Returns `false` if `name` doesn't exist.
+    pub fn reopen(&mut self, name: &str) -> bool {
+        let Some(dash) = self.dashboards.get_mut(name) else {
+            return false;
+        };
+        dash.closed = false;
+        true
+    }
+
+    /// Set (or clear) the default FDC3 channel for `name` and apply it to
+    /// every widget currently persisted in that dashboard's `meta` map —
+    /// active or not. When `name` is the active dashboard, the caller is
+    /// still responsible for mirroring this into the live `LayoutTree`
+    /// (`meta` here only reflects state, it isn't the live source of truth
+    /// while the dashboard is active). Returns `false` if `name` doesn't exist.
+    pub fn set_default_channel(&mut self, name: &str, channel: Option<String>) -> bool {
+        let Some(dash) = self.dashboards.get_mut(name) else {
+            return false;
+        };
+        dash.default_fdc3_channel = channel.clone();
+        for meta in dash.meta.values_mut() {
+            meta.fdc3_channel = channel.clone();
+        }
+        true
+    }
+
+    /// Bulk-set the keep-alive flag for every widget currently persisted in
+    /// `name`'s `meta` map — active or not. Same active-dashboard caveat as
+    /// `set_default_channel`. Returns `false` if `name` doesn't exist.
+    pub fn set_all_keep_alive(&mut self, name: &str, keep_alive: bool) -> bool {
+        let Some(dash) = self.dashboards.get_mut(name) else {
+            return false;
+        };
+        for meta in dash.meta.values_mut() {
+            meta.keep_alive = keep_alive;
+        }
+        true
+    }
+
+    /// Reorder dashboards to match `order` (the switcher/drawer only ever
+    /// reorders *open* dashboards). Names in `order` absent from the store
+    /// are ignored. Any dashboard not mentioned in `order` — i.e. every
+    /// closed dashboard, which the reordering UI never sees — is preserved,
+    /// appended after the reordered ones in its prior relative order, rather
+    /// than being dropped from the store.
     pub fn reorder(&mut self, order: &[String]) {
         let mut next: IndexMap<String, PersistedDashboard> = IndexMap::with_capacity(order.len());
         for name in order {
             if let Some(d) = self.dashboards.shift_remove(name) {
                 next.insert(name.clone(), d);
             }
+        }
+        for (k, v) in self.dashboards.drain(..) {
+            next.insert(k, v);
         }
         self.dashboards = next;
     }

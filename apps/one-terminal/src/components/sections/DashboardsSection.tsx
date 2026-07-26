@@ -30,6 +30,7 @@ interface Props {
 export function DashboardsSection({ ds }: Props) {
   const {
     dashboards,
+    closedDashboards,
     autoSave,
     switchTo,
     create,
@@ -37,6 +38,8 @@ export function DashboardsSection({ ds }: Props) {
     discard,
     rename,
     remove,
+    close,
+    reopen,
     reorder,
     setAutoSave,
   } = ds;
@@ -260,9 +263,10 @@ export function DashboardsSection({ ds }: Props) {
                       <button
                         type="button"
                         className="ot-dashboards__btn ot-dashboards__btn--danger"
-                        onClick={() => remove(d.name).catch(console.error)}
+                        onClick={() => close(d.name).catch(console.error)}
+                        title="Hide from the switcher; reopen and delete from Closed below"
                       >
-                        Delete
+                        Close
                       </button>
                     </>
                   )}
@@ -272,6 +276,38 @@ export function DashboardsSection({ ds }: Props) {
           })
         )}
       </ul>
+
+      {closedDashboards.length > 0 && (
+        <section className="ot-dashboards__closed">
+          <h3 className="ot-dashboards__closed-title">Closed</h3>
+          <ul className="ot-dashboards__list">
+            {closedDashboards.map((name) => (
+              <li key={name} className="ot-dashboards__item ot-dashboards__item--closed">
+                <span className="ot-dashboards__item-head">
+                  <span className="ot-dashboards__closed-name">{name}</span>
+                </span>
+                <span className="ot-dashboards__item-actions">
+                  <button
+                    type="button"
+                    className="ot-dashboards__btn ot-dashboards__btn--primary"
+                    onClick={() => reopen(name).catch(console.error)}
+                  >
+                    Reopen
+                  </button>
+                  <button
+                    type="button"
+                    className="ot-dashboards__btn ot-dashboards__btn--danger"
+                    onClick={() => remove(name).catch(console.error)}
+                    title="Permanently delete — cannot be undone"
+                  >
+                    Delete
+                  </button>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
     </div>
   );
 }
