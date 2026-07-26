@@ -5,6 +5,8 @@
 //! - `Stack`    → the active child fills the rect below the tab strip; every
 //!   other child is parked offscreen so it stays loaded but hidden.
 
+use std::collections::HashMap;
+
 use tauri::{AppHandle, LogicalPosition, LogicalSize, Manager};
 
 use super::node::{Direction, LayoutNode};
@@ -24,8 +26,16 @@ pub const SPLITTER_THICKNESS: f64 = 4.0;
 const OFFSCREEN_X: f64 = -20000.0;
 const OFFSCREEN_Y: f64 = -20000.0;
 
-pub fn reflow_layout(node: &LayoutNode, app: &AppHandle, x: f64, y: f64, width: f64, height: f64) {
-    reflow_inner(node, app, x, y, width, height, false);
+pub fn reflow_layout(
+    node: &LayoutNode,
+    app: &AppHandle,
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+    address_bar_extra: &HashMap<String, f64>,
+) {
+    reflow_inner(node, app, x, y, width, height, false, address_bar_extra);
 }
 
 /// Internal reflow walker.
@@ -34,6 +44,15 @@ pub fn reflow_layout(node: &LayoutNode, app: &AppHandle, x: f64, y: f64, width: 
 /// strip serves as the panel header and we skip the extra `PANEL_HEADER_HEIGHT`
 /// reservation. Outside a Stack every Leaf reserves space for a chrome-drawn
 /// per-panel header, matching the binary-tree `apply()` pass in `lib.rs`.
+///
+/// `address_bar_extra` maps a leaf's label to any additional height it
+/// reserves below its header for its own address-bar row (currently only
+/// Generic Web Widget panels with `show_address_bar` set; `0.0` otherwise).
+/// Precomputed by the caller (`LayoutTree::reflow`) since only it has access
+/// to `LeafMeta`. Applied both inside and outside a Stack — a stacked
+/// leaf's active-tab content still needs the row even though it has no
+/// standalone chrome header (the tab strip fills that role instead).
+#[allow(clippy::too_many_arguments)]
 fn reflow_inner(
     node: &LayoutNode,
     app: &AppHandle,
@@ -42,16 +61,22 @@ fn reflow_inner(
     width: f64,
     height: f64,
     in_stack: bool,
+    address_bar_extra: &HashMap<String, f64>,
 ) {
     match node {
         LayoutNode::Leaf { label, .. } => {
+            // Address-bar reservation applies whether or not this leaf is a
+            // Stack's active tab — unlike PANEL_HEADER_HEIGHT (whose chrome
+            // header is only drawn outside a Stack; inside one, the tab strip
+            // takes its place), the address bar has no equivalent "already
+            // have a header" case inside a Stack, so it always reserves its
+            // own space when the panel opts in.
+            let extra = address_bar_extra.get(label).copied().unwrap_or(0.0);
             let (py, ph) = if in_stack {
-                (y, height)
+                (y + extra, (height - extra).max(0.0))
             } else {
-                (
-                    y + PANEL_HEADER_HEIGHT,
-                    (height - PANEL_HEADER_HEIGHT).max(0.0),
-                )
+                let reserved = PANEL_HEADER_HEIGHT + extra;
+                (y + reserved, (height - reserved).max(0.0))
             };
             place(app, label, x, py, width, ph);
         }
@@ -83,10 +108,28 @@ fn reflow_inner(
                 let axis_share = content * frac;
                 match direction {
                     Direction::Horizontal => {
-                        reflow_inner(child, app, x + offset, y, axis_share, height, false);
+                        reflow_inner(
+                            child,
+                            app,
+                            x + offset,
+                            y,
+                            axis_share,
+                            height,
+                            false,
+                            address_bar_extra,
+                        );
                     }
                     Direction::Vertical => {
-                        reflow_inner(child, app, x, y + offset, width, axis_share, false);
+                        reflow_inner(
+                            child,
+                            app,
+                            x,
+                            y + offset,
+                            width,
+                            axis_share,
+                            false,
+                            address_bar_extra,
+                        );
                     }
                 }
                 offset += axis_share;
@@ -108,7 +151,16 @@ fn reflow_inner(
 
             for (i, child) in children.iter().enumerate() {
                 if i == active_idx {
-                    reflow_inner(child, app, x, content_y, width, content_h, true);
+                    reflow_inner(
+                        child,
+                        app,
+                        x,
+                        content_y,
+                        width,
+                        content_h,
+                        true,
+                        address_bar_extra,
+                    );
                 } else {
                     park_offscreen(child, app);
                 }

@@ -19,6 +19,7 @@ import type {
   OverflowMenuPayload,
 } from "../types";
 import { FDC3_CHANNELS } from "./fdc3Channels";
+import { GENERIC_WEB_WIDGET_APP_ID } from "../lib/genericWebWidget";
 
 // ── Context-menu types ─────────────────────────────────────────────────────────
 
@@ -36,6 +37,9 @@ interface CtxMenuPayload {
   /** True when the tab keeps running in the background across dashboard
    *  switches instead of being destroyed/recreated. */
   keepAlive?: boolean;
+  /** True when the tab (Generic Web Widget only) shows its read-only
+   *  address-bar row below the title header. */
+  showAddressBar?: boolean;
   /**
    * Menu shape selector:
    * - `"tab"` — per-widget kebab + per-tab right-click. Renders Add Widget,
@@ -876,6 +880,27 @@ export function OverlayApp() {
                           </span>
                           Keep running in background
                         </button>
+
+                        {menu.appId === GENERIC_WEB_WIDGET_APP_ID && (
+                          <button
+                            type="button"
+                            role="menuitemcheckbox"
+                            aria-checked={!!menu.showAddressBar}
+                            className="wm-tab-ctx-menu__item"
+                            onClick={() => {
+                              invoke("wm_set_panel_show_address_bar", {
+                                label: menu.tabLabel,
+                                showAddressBar: !menu.showAddressBar,
+                              }).catch(console.error);
+                              dismiss();
+                            }}
+                          >
+                            <span className="wm-tab-ctx-menu__zoom-check">
+                              {menu.showAddressBar ? "✓" : ""}
+                            </span>
+                            Show address bar
+                          </button>
+                        )}
 
                         {customItems.length > 0 && (
                           <>

@@ -330,7 +330,13 @@ fn spawn_or_restore(
             WebviewBuilder::new(
                 &lbl,
                 WebviewUrl::External("about:blank".parse().expect("about:blank is valid")),
-            ),
+            )
+            .on_navigation(crate::address_bar_navigation_handler(
+                app.clone(),
+                label.to_string(),
+                lbl.clone(),
+                tree.clone(),
+            )),
             LogicalPosition::new(-20000.0, -20000.0),
             LogicalSize::new(init_w, init_h),
         ) {
@@ -351,7 +357,13 @@ fn spawn_or_restore(
                     crate::config::append_initial_channel(&base_init_script, channel.as_deref());
                 if let Err(e) = win.add_child(
                     WebviewBuilder::new(panel_label, WebviewUrl::External(parsed_url))
-                        .initialization_script(&script),
+                        .initialization_script(&script)
+                        .on_navigation(crate::address_bar_navigation_handler(
+                            app.clone(),
+                            label.to_string(),
+                            panel_label.clone(),
+                            tree.clone(),
+                        )),
                     LogicalPosition::new(0.0, 0.0),
                     LogicalSize::new(1.0, 1.0),
                 ) {

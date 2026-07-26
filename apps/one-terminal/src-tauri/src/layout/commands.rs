@@ -428,6 +428,38 @@ pub fn wm_set_panel_keep_alive(
     Ok(())
 }
 
+/// Set (or clear) the "show address bar" flag for the panel identified by
+/// `label` (Generic Web Widget panels only — harmless no-op visually for any
+/// other app). Unlike `wm_set_panel_keep_alive`, this changes how much
+/// content-area height the panel's own webview reserves, so a `reflow` is
+/// required in addition to the metadata update and snapshot re-emit.
+#[tauri::command]
+pub fn wm_set_panel_show_address_bar(
+    label: String,
+    show_address_bar: bool,
+    window: Window,
+    manager: State<'_, TerminalManager>,
+    app: AppHandle,
+) -> Result<(), String> {
+    let terminal = get_terminal!(manager, window);
+    if !terminal
+        .layout_tree
+        .set_show_address_bar(&label, show_address_bar)
+    {
+        return Err(format!("no panel with label '{label}'"));
+    }
+
+    terminal.layout_tree.reflow(&app);
+    terminal.layout_tree.emit_host(&app);
+    if let Some(snap) = terminal.layout_tree.snapshot() {
+        let chrome = format!("{}-chrome", window.label());
+        if let Some(wv) = app.get_webview(&chrome) {
+            let _ = wv.emit("wm:layout", &snap);
+        }
+    }
+    Ok(())
+}
+
 #[tauri::command]
 pub fn wm_end_tab_drag(
     source_label: String,

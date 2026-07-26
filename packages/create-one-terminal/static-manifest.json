@@ -421,6 +421,10 @@
       "overlay": "shared"
     },
     {
+      "path": "apps/one-terminal/src/components/PanelAddressBar.tsx",
+      "overlay": "shared"
+    },
+    {
       "path": "apps/one-terminal/src/components/PanelHeaderLayer.tsx",
       "overlay": "shared"
     },
@@ -522,6 +526,10 @@
     },
     {
       "path": "apps/one-terminal/src/hooks/useWidgetCatalog.ts",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/lib/genericWebWidget.ts",
       "overlay": "shared"
     },
     {

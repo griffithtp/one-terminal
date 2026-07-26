@@ -20,6 +20,10 @@ export interface PanelBounds {
   /** True when this panel keeps running in the background (parked
    *  off-screen instead of destroyed) across Dashboard switches. */
   keepAlive: boolean;
+  /** Whether the read-only address-bar row is shown below the title header
+   *  (Generic Web Widget panels only). Defaults to `false` — hidden until
+   *  the user opts in via the tab context menu. */
+  showAddressBar: boolean;
 }
 
 export interface DividerBounds {
@@ -47,6 +51,9 @@ export type Direction = "horizontal" | "vertical";
 export interface StackTab {
   label: string;
   title: string;
+  /** The panel's URL — used to render the Generic Web Widget address-bar
+   *  row for the active tab. */
+  url: string;
   appId: string;
   /** User-set display name override; absent means show `title`. */
   displayName?: string;
@@ -57,6 +64,10 @@ export interface StackTab {
   /** True when this panel keeps running in the background (parked
    *  off-screen instead of destroyed) across Dashboard switches. */
   keepAlive: boolean;
+  /** Whether the read-only address-bar row is shown below the tab strip
+   *  when this tab is active (Generic Web Widget panels only). Defaults to
+   *  `false` — hidden until the user opts in via the tab context menu. */
+  showAddressBar: boolean;
 }
 
 export interface StackHeader {

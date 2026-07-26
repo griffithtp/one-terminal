@@ -14,8 +14,8 @@ use layout::commands::{
     wm_create_dashboard, wm_delete_dashboard, wm_end_tab_drag, wm_get_panel_fdc3_channel,
     wm_get_panel_keep_alive, wm_list_dashboards, wm_rename_dashboard, wm_rename_panel,
     wm_rename_tab, wm_reorder_dashboards, wm_save_dashboard, wm_set_active_tab, wm_set_auto_save,
-    wm_set_panel_fdc3_channel, wm_set_panel_keep_alive, wm_set_zoom, wm_splitter_drag,
-    wm_toggle_maximize_stack,
+    wm_set_panel_fdc3_channel, wm_set_panel_keep_alive, wm_set_panel_show_address_bar, wm_set_zoom,
+    wm_splitter_drag, wm_toggle_maximize_stack,
 };
 use layout::dashboard::DashboardError;
 use layout::drag::wm_drag_move;
@@ -236,6 +236,42 @@ fn wm_host_snapshot(window: Window, manager: State<'_, TerminalManager>) -> Host
     }
 }
 
+/// Build an `on_navigation` handler that keeps `LeafMeta.url` in sync with
+/// live navigation inside a panel's webview (link clicks, redirects, SPA
+/// route changes) — so a Generic Web Widget's read-only address-bar row
+/// reflects where the user actually is, not just the URL it was launched
+/// with.
+///
+/// Attached to *every* panel-webview builder (cold `wm_open` path, pool
+/// pre-warm, dashboard-switch/discard reconcile, startup/spawn restore) —
+/// not only Generic Web Widget ones — because a pool webview is built once
+/// as a blank placeholder and later `.navigate()`-d to its real URL; the
+/// navigation handler is bound to the underlying platform webview at
+/// creation time and must already be in place before that later navigate
+/// call. The actual app-type gating happens inside
+/// `LayoutTree::track_navigated_url`, so this is a cheap no-op for every
+/// panel that isn't a Generic Web Widget. Always returns `true` (never
+/// blocks navigation).
+pub(crate) fn address_bar_navigation_handler(
+    app: AppHandle,
+    terminal_id: String,
+    label: String,
+    tree: LayoutTree,
+) -> impl Fn(&tauri::Url) -> bool + Send + 'static {
+    move |url: &tauri::Url| {
+        if tree.track_navigated_url(&label, url.as_str()) {
+            tree.emit_host(&app);
+            if let Some(snap) = tree.snapshot() {
+                let chrome = format!("{terminal_id}-chrome");
+                if let Some(wv) = app.get_webview(&chrome) {
+                    let _ = wv.emit("wm:layout", &snap);
+                }
+            }
+        }
+        true
+    }
+}
+
 /// Open a new panel.
 ///
 /// - `target`         — panel id to insert relative to. Defaults to the
@@ -316,6 +352,7 @@ async fn wm_open(
     let using_pool = pool_label.is_some();
     let terminal_id_for_main = window.label().to_string();
     let panel_init_script = panel_init_script.clone();
+    let tree_for_main = tree.clone();
 
     app.run_on_main_thread(move || {
         let result = (|| -> Result<(), String> {
@@ -332,7 +369,13 @@ async fn wm_open(
                 // correctly once it's created.
                 win.add_child(
                     WebviewBuilder::new(&panel_id_for_main, WebviewUrl::External(parsed_url))
-                        .initialization_script(&panel_init_script),
+                        .initialization_script(&panel_init_script)
+                        .on_navigation(address_bar_navigation_handler(
+                            app_for_main.clone(),
+                            terminal_id_for_main.clone(),
+                            panel_id_for_main.clone(),
+                            tree_for_main.clone(),
+                        )),
                     LogicalPosition::new(0.0, 0.0),
                     LogicalSize::new(1.0, 1.0),
                 )
@@ -386,7 +429,13 @@ async fn wm_open(
 
     // Replenish the pool in the background after a slot was consumed.
     // No-op on the cold path (pool not used) or when already at capacity.
-    pool.replenish(&app, overlay, window.label(), &cfg.panel_init_script());
+    pool.replenish(
+        &app,
+        overlay,
+        window.label(),
+        &cfg.panel_init_script(),
+        tree,
+    );
 
     // Reflow positions every webview (including the new/navigated one).
     tree.reflow(&app);
@@ -658,6 +707,7 @@ async fn wm_ctx_menu_open(
     zoom_factor: Option<f64>,
     fdc3_channel: Option<String>,
     keep_alive: Option<bool>,
+    show_address_bar: Option<bool>,
     kind: Option<String>,
     maximized: Option<bool>,
     anchor: Option<String>,
@@ -683,6 +733,7 @@ async fn wm_ctx_menu_open(
                 "zoomFactor": zoom_factor,
                 "fdc3Channel": fdc3_channel,
                 "keepAlive": keep_alive.unwrap_or(false),
+                "showAddressBar": show_address_bar.unwrap_or(false),
                 "kind": kind.unwrap_or_else(|| "tab".to_string()),
                 "maximized": maximized.unwrap_or(false),
                 "anchor": anchor.unwrap_or_else(|| "left".to_string()),
@@ -1204,7 +1255,13 @@ pub fn run() {
                                 "about:blank".parse().expect("about:blank is a valid URL"),
                             ),
                         )
-                        .initialization_script(&panel_init_script),
+                        .initialization_script(&panel_init_script)
+                        .on_navigation(address_bar_navigation_handler(
+                            app.handle().clone(),
+                            WIN.to_string(),
+                            label.clone(),
+                            tree.clone(),
+                        )),
                         LogicalPosition::new(-20000.0, -20000.0),
                         LogicalSize::new(init_w, init_h),
                     ) {
@@ -1229,7 +1286,13 @@ pub fn run() {
                             config::append_initial_channel(&panel_init_script, channel.as_deref());
                         if let Err(e) = win.add_child(
                             WebviewBuilder::new(label, WebviewUrl::External(parsed_url))
-                                .initialization_script(&script),
+                                .initialization_script(&script)
+                                .on_navigation(address_bar_navigation_handler(
+                                    app.handle().clone(),
+                                    WIN.to_string(),
+                                    label.clone(),
+                                    tree.clone(),
+                                )),
                             LogicalPosition::new(0.0, 0.0),
                             LogicalSize::new(1.0, 1.0),
                         ) {
@@ -1315,6 +1378,7 @@ pub fn run() {
             wm_set_panel_fdc3_channel,
             wm_get_panel_keep_alive,
             wm_set_panel_keep_alive,
+            wm_set_panel_show_address_bar,
             wm_park_panels,
             wm_unpark_panels,
             wm_overlay_ready,

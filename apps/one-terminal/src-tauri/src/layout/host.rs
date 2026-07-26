@@ -49,6 +49,9 @@ pub struct StackTab {
     pub label: String,
     /// App-provided title (from the App Directory record or `wm_open` arg).
     pub title: String,
+    /// The panel's URL — used by the tab strip to render the Generic Web
+    /// Widget address-bar row for the active tab.
+    pub url: String,
     /// FDC3 App Directory identifier — lets the tab strip render the same
     /// custom header content as the single-panel overlay (e.g. LIVE badge).
     pub app_id: String,
@@ -64,6 +67,10 @@ pub struct StackTab {
     /// across Dashboard switches instead of being destroyed/recreated.
     #[serde(default)]
     pub keep_alive: bool,
+    /// Whether the read-only address-bar row is shown below the tab strip
+    /// when this tab is active (Generic Web Widget panels only). Defaults
+    /// to `false` — hidden until the user opts in via the tab context menu.
+    pub show_address_bar: bool,
 }
 
 #[derive(Clone, Serialize)]
@@ -89,11 +96,13 @@ pub fn compute_host_layout(
     content_w: f64,
     content_h: f64,
     titles: &HashMap<String, String>,
+    urls: &HashMap<String, String>,
     app_ids: &HashMap<String, String>,
     display_names: &HashMap<String, Option<String>>,
     zoom_factors: &HashMap<String, f64>,
     fdc3_channels: &HashMap<String, Option<String>>,
     keep_alives: &HashMap<String, bool>,
+    show_address_bars: &HashMap<String, bool>,
 ) -> HostLayout {
     let mut stacks = Vec::new();
     let mut splitters = Vec::new();
@@ -109,11 +118,13 @@ pub fn compute_host_layout(
                 let tabs = stack_tabs(
                     children,
                     titles,
+                    urls,
                     app_ids,
                     display_names,
                     zoom_factors,
                     fdc3_channels,
                     keep_alives,
+                    show_address_bars,
                 );
                 stacks.push(StackHeader {
                     path: path.to_vec(),
@@ -138,11 +149,13 @@ pub fn compute_host_layout(
                 &mut stacks,
                 &mut splitters,
                 titles,
+                urls,
                 app_ids,
                 display_names,
                 zoom_factors,
                 fdc3_channels,
                 keep_alives,
+                show_address_bars,
             );
         }
     }
@@ -167,14 +180,17 @@ fn resolve<'a>(root: &'a LayoutNode, path: &[usize]) -> Option<&'a LayoutNode> {
     Some(node)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn stack_tabs(
     children: &[LayoutNode],
     titles: &HashMap<String, String>,
+    urls: &HashMap<String, String>,
     app_ids: &HashMap<String, String>,
     display_names: &HashMap<String, Option<String>>,
     zoom_factors: &HashMap<String, f64>,
     fdc3_channels: &HashMap<String, Option<String>>,
     keep_alives: &HashMap<String, bool>,
+    show_address_bars: &HashMap<String, bool>,
 ) -> Vec<StackTab> {
     children
         .iter()
@@ -185,19 +201,23 @@ fn stack_tabs(
                     .cloned()
                     .filter(|t| !t.is_empty())
                     .unwrap_or_else(|| label.clone());
+                let url = urls.get(label).cloned().unwrap_or_default();
                 let app_id = app_ids.get(label).cloned().unwrap_or_default();
                 let display_name = display_names.get(label).and_then(|v| v.clone());
                 let zoom_factor = zoom_factors.get(label).copied().unwrap_or(1.0);
                 let fdc3_channel = fdc3_channels.get(label).and_then(|v| v.clone());
                 let keep_alive = keep_alives.get(label).copied().unwrap_or(false);
+                let show_address_bar = show_address_bars.get(label).copied().unwrap_or(false);
                 Some(StackTab {
                     label: label.clone(),
                     title,
+                    url,
                     app_id,
                     display_name,
                     zoom_factor,
                     fdc3_channel,
                     keep_alive,
+                    show_address_bar,
                 })
             }
             _ => None,
@@ -216,11 +236,13 @@ fn walk(
     stacks: &mut Vec<StackHeader>,
     splitters: &mut Vec<SplitterHandle>,
     titles: &HashMap<String, String>,
+    urls: &HashMap<String, String>,
     app_ids: &HashMap<String, String>,
     display_names: &HashMap<String, Option<String>>,
     zoom_factors: &HashMap<String, f64>,
     fdc3_channels: &HashMap<String, Option<String>>,
     keep_alives: &HashMap<String, bool>,
+    show_address_bars: &HashMap<String, bool>,
 ) {
     match node {
         LayoutNode::Leaf { .. } => {}
@@ -265,11 +287,13 @@ fn walk(
                     stacks,
                     splitters,
                     titles,
+                    urls,
                     app_ids,
                     display_names,
                     zoom_factors,
                     fdc3_channels,
                     keep_alives,
+                    show_address_bars,
                 );
                 path.pop();
                 offset += axis_share;
@@ -301,11 +325,13 @@ fn walk(
             let tabs = stack_tabs(
                 children,
                 titles,
+                urls,
                 app_ids,
                 display_names,
                 zoom_factors,
                 fdc3_channels,
                 keep_alives,
+                show_address_bars,
             );
 
             stacks.push(StackHeader {
@@ -333,11 +359,13 @@ fn walk(
                     stacks,
                     splitters,
                     titles,
+                    urls,
                     app_ids,
                     display_names,
                     zoom_factors,
                     fdc3_channels,
                     keep_alives,
+                    show_address_bars,
                 );
                 path.pop();
             }
