@@ -8,7 +8,7 @@ use std::sync::{Arc, RwLock};
 
 use indexmap::IndexMap;
 use serde::Serialize;
-use tauri::{AppHandle, Emitter};
+use tauri::{AppHandle, Emitter, Manager};
 
 use crate::layout::dashboard::DashboardRegistry;
 
@@ -135,6 +135,33 @@ impl TerminalManager {
             })
             .collect();
         let _ = app.emit("wm:terminals", &items);
+    }
+
+    /// Broadcast `wm:dashboards` to every registered terminal's chrome
+    /// webview (Issue 15-C). Call this — instead of a single terminal's own
+    /// `LayoutTree::emit_dashboards` — after any dashboard *registry*
+    /// mutation (create/rename/close/reopen/delete/duplicate/reorder):
+    /// since the registry is shared, every window's switcher and Manage
+    /// drawer needs to reflect it immediately, not just the window that
+    /// issued the command.
+    ///
+    /// This computes and emits each terminal's own `dashboards_snapshot()`
+    /// individually rather than one shared payload — `DashboardsSnapshot`
+    /// bundles registry-scoped fields (`dashboards`, `closedDashboards`,
+    /// shared) with session-scoped ones (`active`, `dirty`, `autoSave`,
+    /// per-window), so a single broadcast payload couldn't correctly serve
+    /// every listener. Commands that only touch session state (switch,
+    /// save, discard, set-auto-save) are unaffected by other windows and
+    /// should keep calling `LayoutTree::emit_dashboards` on just their own
+    /// terminal instead of this.
+    pub fn emit_dashboards_all(&self, app: &AppHandle) {
+        for t in self.list() {
+            let snapshot = t.layout_tree.dashboards_snapshot();
+            let chrome = format!("{}-chrome", t.id);
+            if let Some(wv) = app.get_webview(&chrome) {
+                let _ = wv.emit("wm:dashboards", &snapshot);
+            }
+        }
     }
 }
 

@@ -1161,7 +1161,7 @@ fn wm_duplicate_dashboard_to(
         .with_registry_mut(|r| r.create_from(trimmed, dashboard));
     if created {
         target.layout_tree.persist_dashboards();
-        target.layout_tree.emit_dashboards(&app);
+        manager.emit_dashboards_all(&app);
     }
     Ok(created)
 }

@@ -527,7 +527,7 @@ pub fn wm_create_dashboard(
     let created = terminal.layout_tree.with_registry_mut(|r| r.create(trimmed));
     if created {
         terminal.layout_tree.persist_dashboards();
-        terminal.layout_tree.emit_dashboards(&app);
+        manager.emit_dashboards_all(&app);
     }
     Ok(created)
 }
@@ -574,7 +574,7 @@ pub fn wm_rename_dashboard(
             .layout_tree
             .rename_parked_owner(&old_name, &new_trimmed);
         terminal.layout_tree.persist_dashboards();
-        terminal.layout_tree.emit_dashboards(&app);
+        manager.emit_dashboards_all(&app);
     }
     Ok(renamed)
 }
@@ -636,7 +636,7 @@ pub async fn wm_delete_dashboard(
             .delete_dashboard(&name, &window, &app, &cfg.panel_init_script())?;
     if deleted {
         terminal.layout_tree.persist_dashboards();
-        terminal.layout_tree.emit_dashboards(&app);
+        manager.emit_dashboards_all(&app);
     }
     Ok(deleted)
 }
@@ -678,7 +678,7 @@ pub async fn wm_close_dashboard(
             .close_dashboard(&name, &window, &app, &cfg.panel_init_script())?;
     if closed {
         terminal.layout_tree.persist_dashboards();
-        terminal.layout_tree.emit_dashboards(&app);
+        manager.emit_dashboards_all(&app);
     }
     Ok(closed)
 }
@@ -697,7 +697,7 @@ pub fn wm_reopen_dashboard(
     let terminal = get_terminal!(manager, window);
     let reopened = terminal.layout_tree.reopen_dashboard(&name);
     if reopened {
-        terminal.layout_tree.emit_dashboards(&app);
+        manager.emit_dashboards_all(&app);
     }
     Ok(reopened)
 }
@@ -721,7 +721,7 @@ pub fn wm_reorder_dashboards(
     };
     terminal.layout_tree.with_registry_mut(|r| r.reorder(&order));
     terminal.layout_tree.persist_dashboards();
-    terminal.layout_tree.emit_dashboards(&app);
+    manager.emit_dashboards_all(&app);
 }
 
 /// Set (or clear) the default FDC3 channel for `dashboard_name` and apply it
@@ -862,7 +862,7 @@ pub fn wm_duplicate_dashboard(
     });
 
     terminal.layout_tree.persist_dashboards();
-    terminal.layout_tree.emit_dashboards(&app);
+    manager.emit_dashboards_all(&app);
     Ok(new_name)
 }
 
