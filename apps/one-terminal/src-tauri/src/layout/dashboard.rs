@@ -420,28 +420,27 @@ impl DashboardRegistry {
 
     // ── Serialisation ─────────────────────────────────────────────────────────
 
-    /// Convert to `TerminalPersist` for writing to disk.
-    ///
-    /// Only populates dashboard-owned fields (`active_dashboard`, `auto_save`,
-    /// `dashboards`). Callers that do a full write use
-    /// `persist::save_terminal_dashboards` which read-modify-writes the file so
-    /// that `name`, `fdc3_channel`, and `window` are preserved.
-    ///
-    /// Until Issue 15-B lands a real shared persistence file, this writes
-    /// the *entire* shared registry into every Terminal's own per-terminal
-    /// file (rather than just the dashboards that terminal "owns", which no
-    /// longer means anything once the registry is shared) — each terminal's
-    /// file temporarily balloons to a full copy, and whichever terminal
-    /// saves last "wins" for that file. This is an intentional, short-lived
-    /// stepping stone: 15-B replaces per-terminal dashboard files with one
-    /// real shared file and a one-time migration, eliminating the
-    /// duplication rather than living with it.
+    /// Convert this window's session into a `TerminalPersist` for writing to
+    /// its own per-terminal file — resolves the session's active `id` back
+    /// to a name (the persisted format's `active_dashboard`). Carries no
+    /// dashboard *content*; see `to_persisted` for that (Issue 15-B —
+    /// dashboard content lives in the one shared `dashboards.json`, not
+    /// duplicated per terminal). Callers that do a full write use
+    /// `persist::save_terminal_dashboards`, which read-modify-writes the
+    /// file so that `name` and `window` are preserved.
     pub fn to_terminal_persist(&self, session: &DashboardSession) -> super::persist::TerminalPersist {
         super::persist::TerminalPersist {
             active_dashboard: self.name_of(&session.active).unwrap_or_default(),
             auto_save: session.auto_save,
-            dashboards: self.dashboards.values().cloned().collect(),
             ..Default::default()
+        }
+    }
+
+    /// Convert to `PersistedDashboardRegistry` for writing to the one shared
+    /// `<data_dir>/dashboards.json` (Issue 15-B).
+    pub fn to_persisted(&self) -> super::persist::PersistedDashboardRegistry {
+        super::persist::PersistedDashboardRegistry {
+            dashboards: self.dashboards.values().cloned().collect(),
         }
     }
 }

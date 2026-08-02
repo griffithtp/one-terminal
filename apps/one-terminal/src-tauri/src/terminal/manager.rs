@@ -63,6 +63,19 @@ impl TerminalManager {
         Arc::clone(&self.dashboards)
     }
 
+    /// Load the shared dashboard registry from `<data_dir>/dashboards.json`,
+    /// running the one-time Issue 15-B migration first if it doesn't exist
+    /// yet but pre-existing per-terminal dashboard lists do. Must be called
+    /// once, before any `LayoutTree::init` runs, so every terminal's session
+    /// resolves its `active_dashboard` against fully-populated content.
+    pub fn load_dashboards_registry(&self, data_dir: &std::path::Path) {
+        let persisted = crate::layout::persist::load_or_migrate_registry(data_dir);
+        let mut registry = self.dashboards.write().unwrap();
+        for d in persisted.dashboards {
+            registry.dashboards.insert(d.name.clone(), d);
+        }
+    }
+
     /// Register a freshly-spawned terminal. Replaces any existing entry with
     /// the same id (should not occur in normal usage).
     pub fn register(&self, state: Arc<TerminalState>) {

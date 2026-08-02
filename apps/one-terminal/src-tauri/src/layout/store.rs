@@ -158,29 +158,29 @@ impl LayoutTree {
         // Use terminal_id-aware load so each Terminal reads its own file.
         // For "terminal-main" this also handles migration from the legacy layout.json.
         let terminal_persist_opt = if self.terminal_id.as_ref() == "terminal-main" {
-            persist::load_terminal(&data_dir)
+            let persist = persist::load_terminal(&data_dir);
+            // The legacy layout.json migration (inside `load_terminal`, above)
+            // may have just written a brand-new dashboard directly to the
+            // shared registry *file* — the in-memory registry was already
+            // loaded once at process startup (`TerminalManager::load_dashboards_registry`,
+            // before this ran) and wouldn't otherwise see it until next
+            // launch. Re-merge from disk so this session isn't stuck with an
+            // empty layout on the very launch that migrated it.
+            if let Some(fresh) = persist::load_registry(&data_dir) {
+                let mut registry = self.dashboards.write().unwrap();
+                for d in fresh.dashboards {
+                    registry.dashboards.entry(d.name.clone()).or_insert(d);
+                }
+            }
+            persist
         } else {
             persist::load_terminal_for(&self.terminal_id, &data_dir)
         };
         if let Some(terminal_persist) = terminal_persist_opt {
-            // Merge this terminal's persisted dashboards into the shared
-            // registry. First-loaded-wins on a name collision — this is an
-            // interim rule only: Issue 15-B replaces per-terminal dashboard
-            // files with one real shared file plus a proper collision-
-            // disambiguating migration. Until then, this just keeps the
-            // registry populated across terminals without one terminal's
-            // load silently clobbering another's already-registered,
-            // same-named dashboard.
-            {
-                let mut registry = self.dashboards.write().unwrap();
-                for d in &terminal_persist.dashboards {
-                    registry
-                        .dashboards
-                        .entry(d.name.clone())
-                        .or_insert_with(|| d.clone());
-                }
-            }
-
+            // The shared registry (Issue 15-B) is loaded once, process-wide,
+            // by `TerminalManager::load_dashboards_registry` before any
+            // terminal's `init` runs — resolve this session's active
+            // dashboard against it here rather than merging anything in.
             let session = {
                 let registry = self.dashboards.read().unwrap();
                 DashboardSession::from_persist(&terminal_persist, &registry)
@@ -1058,15 +1058,18 @@ impl LayoutTree {
     /// delete, reorder).
     pub fn persist_dashboards(&self) {
         let Some(app) = self.app.get() else { return };
-        let terminal_persist = {
+        let (terminal_persist, registry_persist) = {
             let registry = self.dashboards.read().unwrap();
             let session = self.session.read().unwrap();
-            registry.to_terminal_persist(&session)
+            (registry.to_terminal_persist(&session), registry.to_persisted())
         };
         if let Ok(data_dir) = app.path().app_data_dir() {
             let tid = self.terminal_id.to_string();
             if let Err(e) = persist::save_terminal_dashboards(&tid, &terminal_persist, &data_dir) {
                 eprintln!("[layout] persist_dashboards: {e}");
+            }
+            if let Err(e) = persist::save_registry(&data_dir, &registry_persist) {
+                eprintln!("[layout] persist_dashboards (registry): {e}");
             }
         }
     }
@@ -1123,18 +1126,21 @@ impl LayoutTree {
             let g = self.inner.read().unwrap();
             snapshot_for_persist(&g)
         };
-        let terminal_persist = {
+        let (terminal_persist, registry_persist) = {
             let mut registry = self.dashboards.write().unwrap();
             let mut session = self.session.write().unwrap();
             registry.snapshot_current(&session.active, layout);
             session.dirty = false;
-            registry.to_terminal_persist(&session)
+            (registry.to_terminal_persist(&session), registry.to_persisted())
         };
         let Some(app) = self.app.get() else { return };
         if let Ok(data_dir) = app.path().app_data_dir() {
             let tid = self.terminal_id.to_string();
             if let Err(e) = persist::save_terminal_dashboards(&tid, &terminal_persist, &data_dir) {
                 eprintln!("[layout] save_dashboard: {e}");
+            }
+            if let Err(e) = persist::save_registry(&data_dir, &registry_persist) {
+                eprintln!("[layout] save_dashboard (registry): {e}");
             }
         }
     }
@@ -1725,8 +1731,9 @@ impl LayoutTree {
         }
 
         // Snapshot the current layout and fold it into the active dashboard,
-        // then serialise the whole store for the async write task.
-        let terminal_persist = {
+        // then serialise both the session and the shared registry for the
+        // async write task.
+        let (terminal_persist, registry_persist) = {
             let layout = {
                 let g = self.inner.read().unwrap();
                 snapshot_for_persist(&g)
@@ -1734,7 +1741,7 @@ impl LayoutTree {
             let mut registry = self.dashboards.write().unwrap();
             let session = self.session.read().unwrap();
             registry.snapshot_current(&session.active, layout);
-            registry.to_terminal_persist(&session)
+            (registry.to_terminal_persist(&session), registry.to_persisted())
         };
 
         let terminal_id = self.terminal_id.to_string();
@@ -1750,6 +1757,9 @@ impl LayoutTree {
                 persist::save_terminal_dashboards(&terminal_id, &terminal_persist, &data_dir)
             {
                 eprintln!("[layout] persist::save_terminal_dashboards failed: {e}");
+            }
+            if let Err(e) = persist::save_registry(&data_dir, &registry_persist) {
+                eprintln!("[layout] persist::save_registry failed: {e}");
             }
         }));
     }

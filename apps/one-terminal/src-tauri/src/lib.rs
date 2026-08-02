@@ -1273,6 +1273,17 @@ pub fn run() {
         .manage(manager.clone())
         .manage(cfg.clone())
         .setup(move |app| {
+            // ── Load the shared dashboard registry ──────────────────────────
+            // Must happen before any `LayoutTree::init` below, which resolves
+            // its terminal's `active_dashboard` against this registry. Runs
+            // the one-time Issue 15-B migration on first launch after
+            // upgrading from a pre-15-B install.
+            if !fresh_start {
+                if let Ok(data_dir) = app.path().app_data_dir() {
+                    manager.load_dashboards_registry(&data_dir);
+                }
+            }
+
             // ── Load persisted layout state ───────────────────────────────
             // Skip when OT_FRESH_START is set (Desktop Agent "Open New Terminal").
             if !fresh_start {
