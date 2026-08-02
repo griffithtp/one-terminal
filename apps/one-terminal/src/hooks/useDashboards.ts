@@ -16,15 +16,29 @@ interface DashboardsPayload {
   /** Total panels across all dashboards parked off-screen (kept alive)
    *  instead of closed, because their owning dashboard isn't active. */
   parkedCount: number;
+  /**
+   * Dashboard name → display name of the *other* Terminal window currently
+   * holding it active (Issue 15-D's exclusivity lock). Never has an entry
+   * for this window's own active dashboard — only dashboards locked
+   * elsewhere get a badge.
+   */
+  lockedBy: Record<string, string>;
 }
 
 type DashboardError =
   | { code: "needsConfirm" }
   | { code: "notFound" }
+  | { code: "lockedElsewhere"; terminalName: string }
   | { code: "other"; message: string };
 
 function isNeedsConfirm(e: unknown): boolean {
   return typeof e === "object" && e !== null && (e as DashboardError).code === "needsConfirm";
+}
+
+function asLockedElsewhere(e: unknown): string | null {
+  if (typeof e !== "object" || e === null) return null;
+  const err = e as DashboardError;
+  return err.code === "lockedElsewhere" ? err.terminalName : null;
 }
 
 // ── Public types ──────────────────────────────────────────────────────────────
@@ -34,6 +48,12 @@ export interface DashboardInfo {
   active: boolean;
   /** true only on the active dashboard when auto-save is off and layout has changed */
   dirty: boolean;
+  /**
+   * Display name of the *other* Terminal window currently holding this
+   * dashboard active (Issue 15-D), or `null` if it isn't locked elsewhere.
+   * Never set for this window's own active dashboard.
+   */
+  lockedBy: string | null;
 }
 
 export interface UseDashboardsResult {
@@ -47,7 +67,9 @@ export interface UseDashboardsResult {
    * Try to switch to `name`. On NeedsConfirm (auto-save off + dirty active
    * layout) the hook invokes `wm_dashboard_confirm_open` so the overlay
    * shows the Save / Discard / Cancel dialog. The dialog completes the
-   * switch itself; no chrome-side confirm state is needed.
+   * switch itself; no chrome-side confirm state is needed. On
+   * LockedElsewhere (Issue 15-D — `name` is active in another window),
+   * surfaces `lockMessage` instead of switching.
    */
   switchTo: (name: string) => Promise<void>;
   create: (name: string) => Promise<void>;
@@ -62,12 +84,21 @@ export interface UseDashboardsResult {
   reopen: (name: string) => Promise<void>;
   reorder: (names: string[]) => Promise<void>;
   setAutoSave: (enabled: boolean) => Promise<void>;
+  /**
+   * Non-blocking message naming the window that has a dashboard the user
+   * just tried to switch to / close / delete (Issue 15-D). `null` when
+   * there's nothing to show. Pair with `clearLockMessage`.
+   */
+  lockMessage: string | null;
+  clearLockMessage: () => void;
 }
 
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
 export function useDashboards(): UseDashboardsResult {
   const [payload, setPayload] = useState<DashboardsPayload | null>(null);
+  const [lockMessage, setLockMessage] = useState<string | null>(null);
+  const clearLockMessage = useCallback(() => setLockMessage(null), []);
 
   // ── Initial fetch + live subscription ────────────────────────────────────
   useEffect(() => {
@@ -98,7 +129,10 @@ export function useDashboards(): UseDashboardsResult {
     try {
       await invoke("wm_switch_dashboard", { name });
     } catch (e) {
-      if (isNeedsConfirm(e)) {
+      const owner = asLockedElsewhere(e);
+      if (owner) {
+        setLockMessage(`"${name}" is open in ${owner}`);
+      } else if (isNeedsConfirm(e)) {
         const activeName = payloadRef.current?.active ?? "";
         invoke("wm_dashboard_confirm_open", {
           activeName,
@@ -130,7 +164,10 @@ export function useDashboards(): UseDashboardsResult {
     try {
       await invoke("wm_delete_dashboard", { name, force: false });
     } catch (e) {
-      if (isNeedsConfirm(e)) {
+      const owner = asLockedElsewhere(e);
+      if (owner) {
+        setLockMessage(`"${name}" is open in ${owner} — switch away from it there first`);
+      } else if (isNeedsConfirm(e)) {
         invoke("wm_dashboard_confirm_delete_open", { name }).catch(console.error);
       } else {
         console.error("[dashboards] remove:", e);
@@ -142,7 +179,10 @@ export function useDashboards(): UseDashboardsResult {
     try {
       await invoke("wm_close_dashboard", { name, force: false });
     } catch (e) {
-      if (isNeedsConfirm(e)) {
+      const owner = asLockedElsewhere(e);
+      if (owner) {
+        setLockMessage(`"${name}" is open in ${owner} — switch away from it there first`);
+      } else if (isNeedsConfirm(e)) {
         invoke("wm_dashboard_confirm_close_open", { name }).catch(console.error);
       } else {
         console.error("[dashboards] close:", e);
@@ -233,6 +273,7 @@ export function useDashboards(): UseDashboardsResult {
         name,
         active: name === payload.active,
         dirty: name === payload.active && payload.dirty,
+        lockedBy: payload.lockedBy[name] ?? null,
       }))
     : [];
 
@@ -251,5 +292,7 @@ export function useDashboards(): UseDashboardsResult {
     reopen,
     reorder,
     setAutoSave,
+    lockMessage,
+    clearLockMessage,
   };
 }

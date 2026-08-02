@@ -1086,7 +1086,8 @@ async fn wm_switch_dashboard(
         inner.is_ready = false;
     }
     overlay_prewarm_in_background(Arc::clone(&terminal.overlay), window.label(), &app);
-    terminal.layout_tree.emit_dashboards(&app);
+    // Broadcasts to every terminal (including this one) with fresh lockedBy
+    // data — a plain single-window `emit_dashboards` would be redundant.
     manager.emit_dashboards_all(&app);
     Ok(())
 }
@@ -1115,7 +1116,7 @@ async fn wm_discard_dashboard(
         inner.is_ready = false;
     }
     overlay_prewarm_in_background(Arc::clone(&terminal.overlay), window.label(), &app);
-    terminal.layout_tree.emit_dashboards(&app);
+    manager.emit_dashboards_for(window.label(), &app);
     Ok(())
 }
 

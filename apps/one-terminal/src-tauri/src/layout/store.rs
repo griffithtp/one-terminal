@@ -1031,21 +1031,11 @@ impl LayoutTree {
 
     // ── Dashboard operations ──────────────────────────────────────────────────
 
-    /// Emit the current dashboard list state as `wm:dashboards`.
-    pub fn emit_dashboards(&self, app: &AppHandle) {
-        let parked_count = self.parked.read().unwrap().len();
-        let snapshot = {
-            let registry = self.dashboards.read().unwrap();
-            let session = self.session.read().unwrap();
-            registry.snapshot(&session, parked_count)
-        };
-        let chrome = format!("{}-chrome", self.terminal_id);
-        if let Some(wv) = app.get_webview(&chrome) {
-            let _ = wv.emit("wm:dashboards", &snapshot);
-        }
-    }
-
     /// Return the current dashboard list state without emitting an event.
+    /// This is the *raw* snapshot — no lock-ownership info (`lockedBy`),
+    /// since locks live in `TerminalManager`, not here. Emitting to the
+    /// frontend should always go through `TerminalManager::emit_dashboards_for`
+    /// / `emit_dashboards_all`, which enrich this before sending.
     pub fn dashboards_snapshot(&self) -> DashboardsSnapshot {
         let parked_count = self.parked.read().unwrap().len();
         let registry = self.dashboards.read().unwrap();

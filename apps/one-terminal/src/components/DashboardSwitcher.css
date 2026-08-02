@@ -146,6 +146,14 @@
   flex-shrink: 0;
 }
 
+/* ── Lock indicator — dashboard is active in another Terminal window ─────── */
+.wm-ds__lock {
+  font-size: 9px;
+  line-height: 1;
+  flex-shrink: 0;
+  opacity: 0.75;
+}
+
 /* ── Empty hint (no dashboards) ─────────────────────────────────────────── */
 .wm-ds__empty-hint {
   font-size: 11px;

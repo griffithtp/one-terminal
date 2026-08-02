@@ -490,8 +490,8 @@ pub fn wm_list_dashboards(
     window: Window,
     manager: State<'_, TerminalManager>,
 ) -> DashboardsSnapshot {
-    match manager.get(window.label()) {
-        Some(terminal) => terminal.layout_tree.dashboards_snapshot(),
+    match manager.dashboards_snapshot_for(window.label()) {
+        Some(snapshot) => snapshot,
         None => {
             eprintln!(
                 "[wm_list_dashboards] terminal '{}' not found",
@@ -504,6 +504,7 @@ pub fn wm_list_dashboards(
                 dashboards: vec![],
                 closed_dashboards: vec![],
                 parked_count: 0,
+                locked_by: Default::default(),
             }
         }
     }
@@ -545,7 +546,7 @@ pub fn wm_save_dashboard(window: Window, manager: State<'_, TerminalManager>, ap
         return;
     };
     terminal.layout_tree.save_dashboard();
-    terminal.layout_tree.emit_dashboards(&app);
+    manager.emit_dashboards_for(window.label(), &app);
 }
 
 /// Rename a dashboard. Returns `false` if `old_name` doesn't exist or
@@ -924,5 +925,5 @@ pub fn wm_set_auto_save(
         return;
     };
     terminal.layout_tree.set_auto_save(enabled);
-    terminal.layout_tree.emit_dashboards(&app);
+    manager.emit_dashboards_for(window.label(), &app);
 }

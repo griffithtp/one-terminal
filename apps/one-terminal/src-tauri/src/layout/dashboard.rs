@@ -119,9 +119,7 @@ pub struct DashboardsSnapshot {
     /// Internally, `DashboardSession` tracks the same dashboard by stable
     /// `id` rather than name (Issue 15-A) so a rename issued by another
     /// window never orphans a session; this field is resolved back to the
-    /// current name here for the existing wire format. Issue 15-E may widen
-    /// this payload to also carry the id once the frontend needs it (e.g.
-    /// for id-keyed lock indicators).
+    /// current name here for the existing wire format.
     pub active: String,
     pub auto_save: bool,
     /// `true` when `auto_save` is off and the live layout differs from the
@@ -137,6 +135,18 @@ pub struct DashboardsSnapshot {
     /// owning Dashboard isn't the active one. Surfaced so the switcher UI
     /// can hint at background resource usage.
     pub parked_count: usize,
+    /// Dashboard name → display name of the *other* Terminal window
+    /// currently holding it active (Issue 15-D's exclusivity lock). Never
+    /// contains an entry for this window's own active dashboard — only
+    /// dashboards locked *elsewhere* are worth showing a badge for. Keyed
+    /// by name (not the internal stable id) to match every other field on
+    /// this payload and avoid widening `dashboards` into a richer
+    /// `{id,name}` shape just for this; resolved fresh on every snapshot,
+    /// the same way `active` already is, so it's at most one broadcast
+    /// tick stale if a rename races it — 15-C already re-broadcasts after
+    /// every rename, so that's self-correcting.
+    #[serde(default)]
+    pub locked_by: HashMap<String, String>,
 }
 
 // ── Error type ────────────────────────────────────────────────────────────────
@@ -284,6 +294,10 @@ impl DashboardRegistry {
             dashboards: self.list(),
             closed_dashboards: self.list_closed(),
             parked_count,
+            // Lock ownership isn't known at this layer — `TerminalManager`
+            // (the only thing that holds both the registry and the lock
+            // map) fills this in; see `dashboards_snapshot_for`.
+            locked_by: HashMap::new(),
         }
     }
 

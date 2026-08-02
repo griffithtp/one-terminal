@@ -193,6 +193,15 @@ export function DashboardsSection({ ds }: Props) {
                   {d.dirty && (
                     <span className="ot-dashboards__item-dirty" title="Unsaved changes" />
                   )}
+                  {d.lockedBy && (
+                    <span
+                      className="ot-dashboards__item-lock"
+                      title={`Open in ${d.lockedBy}`}
+                      aria-label={`Open in ${d.lockedBy}`}
+                    >
+                      🔒
+                    </span>
+                  )}
                   {isRenaming ? (
                     <input
                       ref={renameInputRef}

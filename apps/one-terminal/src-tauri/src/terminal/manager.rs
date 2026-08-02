@@ -11,7 +11,7 @@ use indexmap::IndexMap;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 
-use crate::layout::dashboard::DashboardRegistry;
+use crate::layout::dashboard::{DashboardRegistry, DashboardsSnapshot};
 
 use super::state::TerminalState;
 
@@ -161,15 +161,61 @@ impl TerminalManager {
     /// every listener. Commands that only touch session state (switch,
     /// save, discard, set-auto-save) are unaffected by other windows and
     /// should keep calling `LayoutTree::emit_dashboards` on just their own
-    /// terminal instead of this.
+    /// terminal instead of this, via `emit_dashboards_for`.
     pub fn emit_dashboards_all(&self, app: &AppHandle) {
         for t in self.list() {
-            let snapshot = t.layout_tree.dashboards_snapshot();
-            let chrome = format!("{}-chrome", t.id);
-            if let Some(wv) = app.get_webview(&chrome) {
-                let _ = wv.emit("wm:dashboards", &snapshot);
-            }
+            self.emit_dashboards_for(&t.id, app);
         }
+    }
+
+    /// Emit `wm:dashboards` to just `terminal_id`'s own chrome webview, with
+    /// lock-ownership info (`lockedBy`, Issue 15-E) filled in. Prefer this
+    /// over calling `LayoutTree::emit_dashboards` directly — that raw
+    /// version has no idea about locks held by other windows, so its
+    /// `lockedBy` is always empty. Used both by `emit_dashboards_all` (one
+    /// call per terminal) and directly by session-only commands
+    /// (switch/save/discard/set-auto-save) that don't need every *other*
+    /// window to hear about it, just their own.
+    pub fn emit_dashboards_for(&self, terminal_id: &str, app: &AppHandle) {
+        let Some(snapshot) = self.dashboards_snapshot_for(terminal_id) else {
+            return;
+        };
+        let chrome = format!("{terminal_id}-chrome");
+        if let Some(wv) = app.get_webview(&chrome) {
+            let _ = wv.emit("wm:dashboards", &snapshot);
+        }
+    }
+
+    /// Build `terminal_id`'s dashboard snapshot enriched with `lockedBy`
+    /// (Issue 15-E) — the version that should reach the frontend everywhere
+    /// (`wm_list_dashboards`, every `wm:dashboards` emission). The raw
+    /// `LayoutTree::dashboards_snapshot()` doesn't know about locks held by
+    /// *other* terminals, since locks live here in `TerminalManager`, not
+    /// in any one `LayoutTree`.
+    pub fn dashboards_snapshot_for(&self, terminal_id: &str) -> Option<DashboardsSnapshot> {
+        let terminal = self.get(terminal_id)?;
+        let mut snapshot = terminal.layout_tree.dashboards_snapshot();
+
+        let registry = self.dashboards.read().unwrap();
+        let inner = self.inner.read().unwrap();
+        for (dashboard_id, owner_id) in inner.active_locks.iter() {
+            if owner_id == terminal_id {
+                // Never badge this window's own active dashboard as
+                // "locked elsewhere" — it isn't.
+                continue;
+            }
+            let Some(name) = registry.name_of(dashboard_id) else {
+                continue;
+            };
+            let owner_name = inner
+                .terminals
+                .get(owner_id)
+                .map(|t| t.name.read().unwrap().clone())
+                .unwrap_or_else(|| owner_id.clone());
+            snapshot.locked_by.insert(name, owner_name);
+        }
+
+        Some(snapshot)
     }
 
     // ── Active-dashboard exclusivity lock (Issue 15-D) ────────────────────────
@@ -383,6 +429,32 @@ mod tests {
         let excluding_a = manager.locked_dashboard_ids_excluding("terminal-a");
         assert!(excluding_a.contains("dash-2"));
         assert!(!excluding_a.contains("dash-1"));
+    }
+
+    #[test]
+    fn locked_by_names_the_owner_but_never_ones_own_lock() {
+        let manager = TerminalManager::new();
+        test_terminal(&manager, "terminal-a", "Terminal A");
+        test_terminal(&manager, "terminal-b", "Terminal B");
+
+        let dash_id = {
+            let registry_arc = manager.dashboards();
+            let mut registry = registry_arc.write().unwrap();
+            registry.create("Trading".to_string());
+            registry.id_of("Trading").unwrap()
+        };
+        manager.acquire_dashboard_lock(&dash_id, "terminal-a").unwrap();
+
+        // Window B sees "Trading" locked by Terminal A.
+        let snap_b = manager.dashboards_snapshot_for("terminal-b").unwrap();
+        assert_eq!(
+            snap_b.locked_by.get("Trading"),
+            Some(&"Terminal A".to_string())
+        );
+
+        // Window A never sees a lock badge on its own active dashboard.
+        let snap_a = manager.dashboards_snapshot_for("terminal-a").unwrap();
+        assert!(snap_a.locked_by.get("Trading").is_none());
     }
 
     #[test]

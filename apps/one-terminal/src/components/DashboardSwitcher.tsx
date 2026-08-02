@@ -237,6 +237,15 @@ function Pill({
       title={info.dirty ? `${info.name} (unsaved changes)` : info.name}
     >
       {info.dirty && <span className="wm-ds__dirty" aria-label="unsaved changes" />}
+      {info.lockedBy && (
+        <span
+          className="wm-ds__lock"
+          title={`Open in ${info.lockedBy}`}
+          aria-label={`Open in ${info.lockedBy}`}
+        >
+          🔒
+        </span>
+      )}
       <button
         type="button"
         className="wm-ds__pill-label"

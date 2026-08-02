@@ -214,6 +214,13 @@
   background: var(--ot-warning);
 }
 
+.ot-dashboards__item-lock {
+  flex: 0 0 auto;
+  font-size: 10px;
+  line-height: 1;
+  opacity: 0.75;
+}
+
 .ot-dashboards__name {
   flex: 1 1 auto;
   display: inline-flex;
