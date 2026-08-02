@@ -524,9 +524,7 @@ pub fn wm_create_dashboard(
         return Err("dashboard name must not be empty".into());
     }
     let terminal = get_terminal!(manager, window);
-    let created = terminal
-        .layout_tree
-        .with_dashboard_store_mut(|ds| ds.create(trimmed));
+    let created = terminal.layout_tree.with_registry_mut(|r| r.create(trimmed));
     if created {
         terminal.layout_tree.persist_dashboards();
         terminal.layout_tree.emit_dashboards(&app);
@@ -567,7 +565,7 @@ pub fn wm_rename_dashboard(
     let terminal = get_terminal!(manager, window);
     let renamed = terminal
         .layout_tree
-        .with_dashboard_store_mut(|ds| ds.rename(&old_name, new_trimmed.clone()));
+        .with_registry_mut(|r| r.rename(&old_name, new_trimmed.clone()));
     if renamed {
         // Keep the `parked` registry's ownership in sync — otherwise panels
         // kept alive under the old name become unreachable by
@@ -617,7 +615,7 @@ pub async fn wm_delete_dashboard(
 
     let is_closed = terminal
         .layout_tree
-        .with_dashboard_store_mut(|ds| ds.dashboards.get(&name).map(|d| d.closed));
+        .with_registry(|r| r.dashboards.get(&name).map(|d| d.closed));
     match is_closed {
         None => return Ok(false),
         Some(false) => {
@@ -721,9 +719,7 @@ pub fn wm_reorder_dashboards(
         );
         return;
     };
-    terminal
-        .layout_tree
-        .with_dashboard_store_mut(|ds| ds.reorder(&order));
+    terminal.layout_tree.with_registry_mut(|r| r.reorder(&order));
     terminal.layout_tree.persist_dashboards();
     terminal.layout_tree.emit_dashboards(&app);
 }
@@ -750,12 +746,10 @@ pub fn wm_set_dashboard_default_channel(
     }
 
     let terminal = get_terminal!(manager, window);
-    let is_active = terminal
-        .layout_tree
-        .with_dashboard_store_mut(|ds| ds.active == dashboard_name);
+    let is_active = terminal.layout_tree.is_active_dashboard(&dashboard_name);
     let found = terminal
         .layout_tree
-        .with_dashboard_store_mut(|ds| ds.set_default_channel(&dashboard_name, channel_id.clone()));
+        .with_registry_mut(|r| r.set_default_channel(&dashboard_name, channel_id.clone()));
     if !found {
         return Err(format!("dashboard '{dashboard_name}' not found"));
     }
@@ -808,12 +802,10 @@ pub fn wm_set_dashboard_keep_alive_all(
     app: AppHandle,
 ) -> Result<(), String> {
     let terminal = get_terminal!(manager, window);
-    let is_active = terminal
-        .layout_tree
-        .with_dashboard_store_mut(|ds| ds.active == dashboard_name);
+    let is_active = terminal.layout_tree.is_active_dashboard(&dashboard_name);
     let found = terminal
         .layout_tree
-        .with_dashboard_store_mut(|ds| ds.set_all_keep_alive(&dashboard_name, keep_alive));
+        .with_registry_mut(|r| r.set_all_keep_alive(&dashboard_name, keep_alive));
     if !found {
         return Err(format!("dashboard '{dashboard_name}' not found"));
     }
@@ -849,7 +841,7 @@ pub fn wm_duplicate_dashboard(
 
     let snapshot = terminal
         .layout_tree
-        .with_dashboard_store_mut(|ds| ds.dashboards.get(&name).cloned());
+        .with_registry(|r| r.dashboards.get(&name).cloned());
     let Some(mut dashboard) = snapshot else {
         return Err(format!("dashboard '{name}' not found"));
     };
@@ -858,14 +850,14 @@ pub fn wm_duplicate_dashboard(
     // not another hidden one.
     dashboard.closed = false;
 
-    let new_name = terminal.layout_tree.with_dashboard_store_mut(|ds| {
+    let new_name = terminal.layout_tree.with_registry_mut(|r| {
         let mut candidate = format!("{name} (copy)");
         let mut n = 2;
-        while ds.dashboards.contains_key(&candidate) {
+        while r.dashboards.contains_key(&candidate) {
             candidate = format!("{name} (copy {n})");
             n += 1;
         }
-        ds.create_from(candidate.clone(), dashboard);
+        r.create_from(candidate.clone(), dashboard);
         candidate
     });
 

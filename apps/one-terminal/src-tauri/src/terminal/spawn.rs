@@ -276,7 +276,7 @@ fn spawn_or_restore(
     // ── Layout tree ───────────────────────────────────────────────────────────
     let tree = if restore {
         // Load dashboards and panels from disk for this terminal ID.
-        let t = LayoutTree::new(label, init_w, init_h);
+        let t = LayoutTree::new(label, init_w, init_h, manager.dashboards());
         if let Err(e) = t.init(app) {
             eprintln!("[restore_terminal] init failed for {label}: {e}");
         }
@@ -289,7 +289,7 @@ fn spawn_or_restore(
                 eprintln!("[spawn_terminal] stale persist cleanup for {label}: {e}");
             }
         }
-        let t = LayoutTree::new(label, init_w, init_h);
+        let t = LayoutTree::new(label, init_w, init_h, manager.dashboards());
         t.register_app_handle(app);
         t
     };

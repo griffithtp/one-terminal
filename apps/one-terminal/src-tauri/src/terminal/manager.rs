@@ -10,6 +10,8 @@ use indexmap::IndexMap;
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
+use crate::layout::dashboard::DashboardRegistry;
+
 use super::state::TerminalState;
 
 // ── Internal storage ──────────────────────────────────────────────────────────
@@ -38,6 +40,10 @@ pub struct TerminalListItem {
 
 pub struct TerminalManager {
     inner: Arc<RwLock<ManagerInner>>,
+    /// Shared, process-wide dashboard registry — every `LayoutTree`
+    /// constructed via `terminal::spawn` (and the main window's, in `lib.rs`)
+    /// shares this same instance via `dashboards()` (Issue 15-A).
+    dashboards: Arc<RwLock<DashboardRegistry>>,
 }
 
 impl TerminalManager {
@@ -47,7 +53,14 @@ impl TerminalManager {
                 terminals: IndexMap::new(),
                 next_id: 2,
             })),
+            dashboards: Arc::new(RwLock::new(DashboardRegistry::new())),
         }
+    }
+
+    /// Shared dashboard registry handle, passed into `LayoutTree::new` so
+    /// every Terminal window's layout tree reads/writes the same dashboards.
+    pub fn dashboards(&self) -> Arc<RwLock<DashboardRegistry>> {
+        Arc::clone(&self.dashboards)
     }
 
     /// Register a freshly-spawned terminal. Replaces any existing entry with
@@ -118,6 +131,7 @@ impl Clone for TerminalManager {
     fn clone(&self) -> Self {
         Self {
             inner: Arc::clone(&self.inner),
+            dashboards: Arc::clone(&self.dashboards),
         }
     }
 }

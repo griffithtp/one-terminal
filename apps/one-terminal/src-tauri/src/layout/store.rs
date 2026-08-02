@@ -11,7 +11,7 @@ use tauri::{
 };
 use uuid::Uuid;
 
-use super::dashboard::{DashboardError, DashboardStore, DashboardsSnapshot};
+use super::dashboard::{DashboardError, DashboardRegistry, DashboardSession, DashboardsSnapshot};
 use super::docking::{add_leaf_as_sibling, append_to_stack_at, is_stack_at, move_leaf, DropZone};
 use super::host::{compute_host_layout, HostLayout};
 use super::node::{Direction, LayoutNode};
@@ -80,9 +80,17 @@ struct Inner {
 #[derive(Clone)]
 pub struct LayoutTree {
     inner: Arc<RwLock<Inner>>,
-    /// Named layout snapshots. Populated from disk in `init`; the active
-    /// dashboard is the source of truth for what gets restored on startup.
-    dashboard_store: Arc<RwLock<DashboardStore>>,
+    /// Shared, process-wide dashboard registry (Issue 15-A) — one instance,
+    /// passed in via `TerminalManager::dashboards()` and referenced by every
+    /// Terminal window's `LayoutTree`. Populated from disk in `init`.
+    ///
+    /// Lock ordering: whenever a method needs both `dashboards` and
+    /// `session`, always acquire `dashboards` first to avoid deadlocking
+    /// against another window's command running concurrently.
+    dashboards: Arc<RwLock<DashboardRegistry>>,
+    /// This window's own session state (active dashboard id / auto_save /
+    /// dirty) — per-Terminal, NOT shared, unlike `dashboards` above.
+    session: Arc<RwLock<DashboardSession>>,
     /// Set once during `init` so all subsequent `schedule_save` calls can
     /// resolve `app_data_dir` without threading it through every call site.
     app: Arc<OnceLock<AppHandle>>,
@@ -104,7 +112,12 @@ pub struct LayoutTree {
 }
 
 impl LayoutTree {
-    pub fn new(terminal_id: &str, width: f64, height: f64) -> Self {
+    pub fn new(
+        terminal_id: &str,
+        width: f64,
+        height: f64,
+        dashboards: Arc<RwLock<DashboardRegistry>>,
+    ) -> Self {
         Self {
             inner: Arc::new(RwLock::new(Inner {
                 root: None,
@@ -114,7 +127,8 @@ impl LayoutTree {
                 width,
                 height,
             })),
-            dashboard_store: Arc::new(RwLock::new(DashboardStore::with_empty())),
+            dashboards,
+            session: Arc::new(RwLock::new(DashboardSession::with_empty())),
             app: Arc::new(OnceLock::new()),
             save_handle: Arc::new(Mutex::new(None)),
             terminal_id: Arc::from(terminal_id),
@@ -149,10 +163,35 @@ impl LayoutTree {
             persist::load_terminal_for(&self.terminal_id, &data_dir)
         };
         if let Some(terminal_persist) = terminal_persist_opt {
-            let ds = DashboardStore::from_persist(terminal_persist);
+            // Merge this terminal's persisted dashboards into the shared
+            // registry. First-loaded-wins on a name collision — this is an
+            // interim rule only: Issue 15-B replaces per-terminal dashboard
+            // files with one real shared file plus a proper collision-
+            // disambiguating migration. Until then, this just keeps the
+            // registry populated across terminals without one terminal's
+            // load silently clobbering another's already-registered,
+            // same-named dashboard.
+            {
+                let mut registry = self.dashboards.write().unwrap();
+                for d in &terminal_persist.dashboards {
+                    registry
+                        .dashboards
+                        .entry(d.name.clone())
+                        .or_insert_with(|| d.clone());
+                }
+            }
+
+            let session = {
+                let registry = self.dashboards.read().unwrap();
+                DashboardSession::from_persist(&terminal_persist, &registry)
+            };
 
             // Load the active dashboard's layout into Inner.
-            if let Some(layout) = ds.load_active() {
+            let active_layout = {
+                let registry = self.dashboards.read().unwrap();
+                registry.get_by_id(&session.active).map(|d| d.as_layout())
+            };
+            if let Some(layout) = active_layout {
                 let mut g = self.inner.write().unwrap();
                 g.root = layout.tree;
                 g.meta = layout
@@ -179,7 +218,7 @@ impl LayoutTree {
                 g.maximized_stack_id = layout.maximized_stack_id;
             }
 
-            *self.dashboard_store.write().unwrap() = ds;
+            *self.session.write().unwrap() = session;
         }
 
         Ok(())
@@ -511,8 +550,11 @@ impl LayoutTree {
     /// check — that's intentional, existing behavior, not a state-loss risk.
     pub fn dashboard_needs_confirm_close(&self, name: &str) -> bool {
         let dirty = {
-            let ds = self.dashboard_store.read().unwrap();
-            ds.active == name && ds.dirty && !ds.auto_save
+            let registry = self.dashboards.read().unwrap();
+            let session = self.session.read().unwrap();
+            registry.id_of(name).as_deref() == Some(session.active.as_str())
+                && session.dirty
+                && !session.auto_save
         };
         if dirty {
             return true;
@@ -545,7 +587,7 @@ impl LayoutTree {
     /// Set the FDC3 channel for every panel currently in the live tree (i.e.
     /// every panel belonging to the active Dashboard). Returns the affected
     /// labels so the caller can push the join/leave script into each
-    /// webview. Does not touch the persisted `DashboardStore` entry — the
+    /// webview. Does not touch the persisted `DashboardRegistry` entry — the
     /// caller (`wm_set_dashboard_default_channel`) is responsible for that.
     pub fn set_fdc3_channel_for_all(&self, channel_id: Option<String>) -> Vec<String> {
         let labels: Vec<String> = {
@@ -736,11 +778,12 @@ impl LayoutTree {
         dir: Option<SplitDir>,
     ) -> String {
         // New panels join the active dashboard's default FDC3 channel, if
-        // one is set (see `DashboardStore::set_default_channel`).
+        // one is set (see `DashboardRegistry::set_default_channel`).
         let default_channel = {
-            let ds = self.dashboard_store.read().unwrap();
-            ds.dashboards
-                .get(&ds.active)
+            let registry = self.dashboards.read().unwrap();
+            let session = self.session.read().unwrap();
+            registry
+                .get_by_id(&session.active)
                 .and_then(|d| d.default_fdc3_channel.clone())
         };
         {
@@ -991,11 +1034,11 @@ impl LayoutTree {
     /// Emit the current dashboard list state as `wm:dashboards`.
     pub fn emit_dashboards(&self, app: &AppHandle) {
         let parked_count = self.parked.read().unwrap().len();
-        let snapshot = self
-            .dashboard_store
-            .read()
-            .unwrap()
-            .as_snapshot(parked_count);
+        let snapshot = {
+            let registry = self.dashboards.read().unwrap();
+            let session = self.session.read().unwrap();
+            registry.snapshot(&session, parked_count)
+        };
         let chrome = format!("{}-chrome", self.terminal_id);
         if let Some(wv) = app.get_webview(&chrome) {
             let _ = wv.emit("wm:dashboards", &snapshot);
@@ -1005,17 +1048,21 @@ impl LayoutTree {
     /// Return the current dashboard list state without emitting an event.
     pub fn dashboards_snapshot(&self) -> DashboardsSnapshot {
         let parked_count = self.parked.read().unwrap().len();
-        self.dashboard_store
-            .read()
-            .unwrap()
-            .as_snapshot(parked_count)
+        let registry = self.dashboards.read().unwrap();
+        let session = self.session.read().unwrap();
+        registry.snapshot(&session, parked_count)
     }
 
-    /// Write the current `DashboardStore` to disk immediately without touching
-    /// `Inner`. Used by metadata-only mutations (create, rename, delete, reorder).
+    /// Write the shared registry + this session to disk immediately without
+    /// touching `Inner`. Used by metadata-only mutations (create, rename,
+    /// delete, reorder).
     pub fn persist_dashboards(&self) {
         let Some(app) = self.app.get() else { return };
-        let terminal_persist = self.dashboard_store.read().unwrap().to_terminal_persist();
+        let terminal_persist = {
+            let registry = self.dashboards.read().unwrap();
+            let session = self.session.read().unwrap();
+            registry.to_terminal_persist(&session)
+        };
         if let Ok(data_dir) = app.path().app_data_dir() {
             let tid = self.terminal_id.to_string();
             if let Err(e) = persist::save_terminal_dashboards(&tid, &terminal_persist, &data_dir) {
@@ -1024,23 +1071,45 @@ impl LayoutTree {
         }
     }
 
-    /// Expose a write-locked reference to the dashboard store for commands
-    /// that need to mutate it directly (create / rename / delete / reorder).
-    pub fn with_dashboard_store_mut<F, R>(&self, f: F) -> R
+    /// Expose a write-locked reference to the shared dashboard registry for
+    /// commands that mutate dashboard *content* (create / rename / delete /
+    /// reorder / set-default-channel / set-keep-alive-all). Visible to every
+    /// Terminal window sharing this registry (Issue 15-A).
+    pub fn with_registry_mut<F, R>(&self, f: F) -> R
     where
-        F: FnOnce(&mut DashboardStore) -> R,
+        F: FnOnce(&mut DashboardRegistry) -> R,
     {
-        f(&mut self.dashboard_store.write().unwrap())
+        f(&mut self.dashboards.write().unwrap())
+    }
+
+    /// Read-only access to the shared dashboard registry.
+    pub fn with_registry<F, R>(&self, f: F) -> R
+    where
+        F: FnOnce(&DashboardRegistry) -> R,
+    {
+        f(&self.dashboards.read().unwrap())
+    }
+
+    /// `true` iff `name` is this window's own active dashboard.
+    pub fn is_active_dashboard(&self, name: &str) -> bool {
+        let registry = self.dashboards.read().unwrap();
+        let session = self.session.read().unwrap();
+        registry.id_of(name).as_deref() == Some(session.active.as_str())
+    }
+
+    /// This window's active dashboard id (empty string = none).
+    pub fn active_dashboard_id(&self) -> String {
+        self.session.read().unwrap().active.clone()
     }
 
     /// Set auto-save mode. When switching from off→on, the live layout is
     /// immediately snapshotted and persisted, clearing the dirty flag.
     pub fn set_auto_save(&self, enabled: bool) {
         let should_flush = {
-            let mut ds = self.dashboard_store.write().unwrap();
-            let was_off = !ds.auto_save;
-            ds.auto_save = enabled;
-            was_off && enabled && ds.dirty
+            let mut session = self.session.write().unwrap();
+            let was_off = !session.auto_save;
+            session.auto_save = enabled;
+            was_off && enabled && session.dirty
         };
         if should_flush {
             self.schedule_save(0);
@@ -1055,10 +1124,11 @@ impl LayoutTree {
             snapshot_for_persist(&g)
         };
         let terminal_persist = {
-            let mut ds = self.dashboard_store.write().unwrap();
-            ds.snapshot_current(layout);
-            ds.dirty = false;
-            ds.to_terminal_persist()
+            let mut registry = self.dashboards.write().unwrap();
+            let mut session = self.session.write().unwrap();
+            registry.snapshot_current(&session.active, layout);
+            session.dirty = false;
+            registry.to_terminal_persist(&session)
         };
         let Some(app) = self.app.get() else { return };
         if let Ok(data_dir) = app.path().app_data_dir() {
@@ -1093,9 +1163,10 @@ impl LayoutTree {
 
         // Load the clean snapshot and reset Inner.
         let clean_layout = {
-            let mut ds = self.dashboard_store.write().unwrap();
-            ds.dirty = false;
-            ds.load_active()
+            let registry = self.dashboards.read().unwrap();
+            let mut session = self.session.write().unwrap();
+            session.dirty = false;
+            registry.get_by_id(&session.active).map(|d| d.as_layout())
         };
         let panels_to_create = self.apply_layout_to_inner(clean_layout);
 
@@ -1135,23 +1206,26 @@ impl LayoutTree {
         panel_init_script: &str,
     ) -> Result<(), DashboardError> {
         // Validate and check dirty state without holding any write lock.
-        {
-            let ds = self.dashboard_store.read().unwrap();
-            if ds.active == name {
+        let target_id = {
+            let registry = self.dashboards.read().unwrap();
+            let session = self.session.read().unwrap();
+            let Some(target_id) = registry.id_of(name) else {
+                return Err(DashboardError::NotFound);
+            };
+            if session.active == target_id {
                 return Ok(());
             }
-            if !ds.dashboards.contains_key(name) {
-                return Err(DashboardError::NotFound);
-            }
-            if !ds.auto_save && ds.dirty {
+            if !session.auto_save && session.dirty {
                 return Err(DashboardError::NeedsConfirm);
             }
-        }
+            target_id
+        };
 
         // Capture the outgoing dashboard's name — it owns any panels we park.
         let outgoing_name = {
-            let ds = self.dashboard_store.read().unwrap();
-            ds.active.clone()
+            let registry = self.dashboards.read().unwrap();
+            let session = self.session.read().unwrap();
+            registry.name_of(&session.active).unwrap_or_default()
         };
 
         // Collect current panel labels, split into those to destroy and
@@ -1175,17 +1249,18 @@ impl LayoutTree {
 
         // Snapshot outgoing dashboard if auto_save is on, then switch active.
         let new_layout = {
-            let mut ds = self.dashboard_store.write().unwrap();
-            if ds.auto_save {
+            let mut registry = self.dashboards.write().unwrap();
+            let mut session = self.session.write().unwrap();
+            if session.auto_save {
                 let layout = {
                     let g = self.inner.read().unwrap();
                     snapshot_for_persist(&g)
                 };
-                ds.snapshot_current(layout);
+                registry.snapshot_current(&session.active, layout);
             }
-            ds.active = name.to_string();
-            ds.dirty = false;
-            ds.load_active()
+            session.active = target_id.clone();
+            session.dirty = false;
+            registry.get_by_id(&target_id).map(|d| d.as_layout())
         };
 
         // Load new dashboard into Inner and collect panels to create. Any
@@ -1238,11 +1313,12 @@ impl LayoutTree {
     ) -> Result<bool, DashboardError> {
         // Check existence and whether this is the active dashboard.
         let (is_active, current_labels) = {
-            let ds = self.dashboard_store.read().unwrap();
-            if !ds.dashboards.contains_key(name) {
+            let registry = self.dashboards.read().unwrap();
+            let session = self.session.read().unwrap();
+            if !registry.dashboards.contains_key(name) {
                 return Ok(false);
             }
-            let is_active = ds.active == name;
+            let is_active = registry.id_of(name).as_deref() == Some(session.active.as_str());
             let labels = if is_active {
                 let g = self.inner.read().unwrap();
                 let mut out = Vec::new();
@@ -1256,7 +1332,7 @@ impl LayoutTree {
             (is_active, labels)
         };
 
-        self.with_dashboard_store_mut(|ds| ds.delete(name));
+        self.with_registry_mut(|r| r.delete(name));
 
         // The deleted Dashboard may own panels parked off-screen (kept alive
         // while some other Dashboard was active) — there's no home for them
@@ -1267,8 +1343,18 @@ impl LayoutTree {
             return Ok(true);
         }
 
-        // Deleted the active dashboard — load whatever is now active (or None).
-        let new_layout = self.dashboard_store.read().unwrap().load_active();
+        // Deleted the active dashboard — reassign this session's active to
+        // whatever's now the first open dashboard in the registry (or none).
+        let new_layout = {
+            let registry = self.dashboards.read().unwrap();
+            let mut session = self.session.write().unwrap();
+            let new_active_id = registry
+                .first_open_name()
+                .and_then(|n| registry.id_of(&n))
+                .unwrap_or_default();
+            session.active = new_active_id.clone();
+            registry.get_by_id(&new_active_id).map(|d| d.as_layout())
+        };
         let panels_to_create = self.apply_layout_to_inner(new_layout);
         self.reconcile_panel_webviews(
             current_labels,
@@ -1295,7 +1381,7 @@ impl LayoutTree {
 
     /// Hide a dashboard from the switcher without deleting it — its layout,
     /// per-leaf metadata, and default channel all stay intact in the
-    /// `DashboardStore` so `reopen_dashboard` can bring it back exactly as
+    /// `DashboardRegistry` so `reopen_dashboard` can bring it back exactly as
     /// it was. Reconciles panel webviews the same way `delete_dashboard`
     /// does when `name` is the active dashboard (switches to the next open
     /// one, or empties the terminal if none remain open), and closes any of
@@ -1311,11 +1397,12 @@ impl LayoutTree {
     ) -> Result<bool, DashboardError> {
         // Check existence and whether this is the active dashboard.
         let (is_active, current_labels) = {
-            let ds = self.dashboard_store.read().unwrap();
-            if !ds.dashboards.contains_key(name) {
+            let registry = self.dashboards.read().unwrap();
+            let session = self.session.read().unwrap();
+            if !registry.dashboards.contains_key(name) {
                 return Ok(false);
             }
-            let is_active = ds.active == name;
+            let is_active = registry.id_of(name).as_deref() == Some(session.active.as_str());
             let labels = if is_active {
                 let g = self.inner.read().unwrap();
                 let mut out = Vec::new();
@@ -1329,7 +1416,7 @@ impl LayoutTree {
             (is_active, labels)
         };
 
-        self.with_dashboard_store_mut(|ds| ds.close(name));
+        self.with_registry_mut(|r| r.close(name));
 
         // The closed Dashboard may own panels parked off-screen (kept alive
         // while some other Dashboard was active) — it's no longer reachable
@@ -1340,8 +1427,18 @@ impl LayoutTree {
             return Ok(true);
         }
 
-        // Closed the active dashboard — load whatever is now active (or None).
-        let new_layout = self.dashboard_store.read().unwrap().load_active();
+        // Closed the active dashboard — reassign this session's active to
+        // whatever's now the first open dashboard in the registry (or none).
+        let new_layout = {
+            let registry = self.dashboards.read().unwrap();
+            let mut session = self.session.write().unwrap();
+            let new_active_id = registry
+                .first_open_name()
+                .and_then(|n| registry.id_of(&n))
+                .unwrap_or_default();
+            session.active = new_active_id.clone();
+            registry.get_by_id(&new_active_id).map(|d| d.as_layout())
+        };
         let panels_to_create = self.apply_layout_to_inner(new_layout);
         self.reconcile_panel_webviews(
             current_labels,
@@ -1371,7 +1468,7 @@ impl LayoutTree {
     /// from the switcher (or Manage drawer) like any other pill. Returns
     /// `false` if `name` doesn't exist.
     pub fn reopen_dashboard(&self, name: &str) -> bool {
-        let reopened = self.with_dashboard_store_mut(|ds| ds.reopen(name));
+        let reopened = self.with_registry_mut(|r| r.reopen(name));
         if reopened {
             self.schedule_save(0);
         }
@@ -1621,9 +1718,9 @@ impl LayoutTree {
 
         // When auto_save is off: just mark dirty and do not touch the
         // persisted dashboard snapshot.
-        let auto_save = self.dashboard_store.read().unwrap().auto_save;
+        let auto_save = self.session.read().unwrap().auto_save;
         if !auto_save {
-            self.dashboard_store.write().unwrap().dirty = true;
+            self.session.write().unwrap().dirty = true;
             return;
         }
 
@@ -1634,9 +1731,10 @@ impl LayoutTree {
                 let g = self.inner.read().unwrap();
                 snapshot_for_persist(&g)
             };
-            let mut ds = self.dashboard_store.write().unwrap();
-            ds.snapshot_current(layout);
-            ds.to_terminal_persist()
+            let mut registry = self.dashboards.write().unwrap();
+            let session = self.session.read().unwrap();
+            registry.snapshot_current(&session.active, layout);
+            registry.to_terminal_persist(&session)
         };
 
         let terminal_id = self.terminal_id.to_string();

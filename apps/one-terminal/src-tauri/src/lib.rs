@@ -1148,16 +1148,17 @@ fn wm_duplicate_dashboard_to(
 
     // Take the saved snapshot of the active dashboard (not the live layout,
     // which may have unsaved changes if auto_save is off).
+    let active_id = source.layout_tree.active_dashboard_id();
     let snapshot = source
         .layout_tree
-        .with_dashboard_store_mut(|ds| ds.dashboards.get(&ds.active).cloned());
+        .with_registry(|r| r.get_by_id(&active_id).cloned());
     let Some(dashboard) = snapshot else {
         return Err("source has no active dashboard".into());
     };
 
     let created = target
         .layout_tree
-        .with_dashboard_store_mut(|ds| ds.create_from(trimmed, dashboard));
+        .with_registry_mut(|r| r.create_from(trimmed, dashboard));
     if created {
         target.layout_tree.persist_dashboards();
         target.layout_tree.emit_dashboards(&app);
@@ -1233,7 +1234,13 @@ pub fn run() {
 
     let cfg = TerminalConfig::load();
     let panel_init_script = cfg.panel_init_script();
-    let tree = LayoutTree::new(WIN, cfg.window.width, cfg.window.height);
+    let manager = TerminalManager::new();
+    let tree = LayoutTree::new(
+        WIN,
+        cfg.window.width,
+        cfg.window.height,
+        manager.dashboards(),
+    );
     let identity = WmHostIdentity::from_env();
     let overlay_state: OverlayState = Arc::new(Mutex::new(OverlayInner::default()));
     let pool_size = std::env::var("OT_WEBVIEW_POOL_SIZE")
@@ -1241,7 +1248,6 @@ pub fn run() {
         .and_then(|v| v.parse::<usize>().ok())
         .unwrap_or(1);
     let pool = WebviewPool::new(pool_size);
-    let manager = TerminalManager::new();
     println!(
         "[wm] engine: {}@{} (runtime={:?})",
         identity.binding.family.as_dir(),
