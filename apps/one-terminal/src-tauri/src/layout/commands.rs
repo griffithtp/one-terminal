@@ -612,6 +612,16 @@ pub async fn wm_delete_dashboard(
         .ok_or_else(|| DashboardError::Other {
             message: format!("terminal '{}' not found", window.label()),
         })?;
+    let terminal_id = window.label().to_string();
+
+    let dashboard_id = terminal.layout_tree.with_registry(|r| r.id_of(&name));
+    if let Some(id) = &dashboard_id {
+        if let Some(owner_name) = manager.dashboard_lock_owner_name(id, &terminal_id) {
+            return Err(DashboardError::LockedElsewhere {
+                terminal_name: owner_name,
+            });
+        }
+    }
 
     let is_closed = terminal
         .layout_tree
@@ -630,12 +640,24 @@ pub async fn wm_delete_dashboard(
         return Err(DashboardError::NeedsConfirm);
     }
 
-    let deleted =
-        terminal
-            .layout_tree
-            .delete_dashboard(&name, &window, &app, &cfg.panel_init_script())?;
+    let locked_elsewhere = manager.locked_dashboard_ids_excluding(&terminal_id);
+    let deleted = terminal.layout_tree.delete_dashboard(
+        &name,
+        &locked_elsewhere,
+        &window,
+        &app,
+        &cfg.panel_init_script(),
+    )?;
     if deleted {
         terminal.layout_tree.persist_dashboards();
+        // This terminal's active dashboard may have changed as a fallback
+        // (delete_dashboard picks the next open one, if any) — reconcile
+        // the lock to match (Issue 15-D).
+        manager.release_dashboard_locks_for(&terminal_id);
+        let new_active = terminal.layout_tree.active_dashboard_id();
+        if !new_active.is_empty() {
+            let _ = manager.acquire_dashboard_lock(&new_active, &terminal_id);
+        }
         manager.emit_dashboards_all(&app);
     }
     Ok(deleted)
@@ -667,17 +689,39 @@ pub async fn wm_close_dashboard(
         .ok_or_else(|| DashboardError::Other {
             message: format!("terminal '{}' not found", window.label()),
         })?;
+    let terminal_id = window.label().to_string();
+
+    let dashboard_id = terminal.layout_tree.with_registry(|r| r.id_of(&name));
+    if let Some(id) = &dashboard_id {
+        if let Some(owner_name) = manager.dashboard_lock_owner_name(id, &terminal_id) {
+            return Err(DashboardError::LockedElsewhere {
+                terminal_name: owner_name,
+            });
+        }
+    }
 
     if !force && terminal.layout_tree.dashboard_needs_confirm_close(&name) {
         return Err(DashboardError::NeedsConfirm);
     }
 
-    let closed =
-        terminal
-            .layout_tree
-            .close_dashboard(&name, &window, &app, &cfg.panel_init_script())?;
+    let locked_elsewhere = manager.locked_dashboard_ids_excluding(&terminal_id);
+    let closed = terminal.layout_tree.close_dashboard(
+        &name,
+        &locked_elsewhere,
+        &window,
+        &app,
+        &cfg.panel_init_script(),
+    )?;
     if closed {
         terminal.layout_tree.persist_dashboards();
+        // This terminal's active dashboard may have changed as a fallback
+        // (close_dashboard picks the next open one, if any) — reconcile
+        // the lock to match (Issue 15-D).
+        manager.release_dashboard_locks_for(&terminal_id);
+        let new_active = terminal.layout_tree.active_dashboard_id();
+        if !new_active.is_empty() {
+            let _ = manager.acquire_dashboard_lock(&new_active, &terminal_id);
+        }
         manager.emit_dashboards_all(&app);
     }
     Ok(closed)

@@ -1030,7 +1030,10 @@ async fn wm_dashboard_confirm_close_open(
 /// Switch the active dashboard to `name`, performing the full webview
 /// destroy/recreate lifecycle.  Returns `DashboardError::NeedsConfirm` when
 /// `auto_save` is off and there are unsaved changes — the frontend should show
-/// a Save / Discard / Cancel dialog and retry accordingly.
+/// a Save / Discard / Cancel dialog and retry accordingly. Returns
+/// `DashboardError::LockedElsewhere` (Issue 15-D) if `name` is currently
+/// active in a different Terminal window — a dashboard can only ever be
+/// active in one window at a time.
 #[tauri::command]
 async fn wm_switch_dashboard(
     name: String,
@@ -1044,9 +1047,39 @@ async fn wm_switch_dashboard(
         .ok_or_else(|| DashboardError::Other {
             message: format!("terminal '{}' not found", window.label()),
         })?;
-    terminal
+    let terminal_id = window.label().to_string();
+
+    // Reserve the lock *before* attempting the switch, not after — two
+    // windows racing to switch to the same dashboard must not both proceed
+    // to `switch_dashboard` (which would leave both actually displaying it).
+    // Whichever acquires the lock first wins; the other is rejected here,
+    // before it ever touches its own live layout.
+    let target_id = terminal.layout_tree.with_registry(|r| r.id_of(&name));
+    let previous_active_id = terminal.layout_tree.active_dashboard_id();
+    if let Some(id) = &target_id {
+        if let Err(owner_name) = manager.acquire_dashboard_lock(id, &terminal_id) {
+            return Err(DashboardError::LockedElsewhere {
+                terminal_name: owner_name,
+            });
+        }
+    }
+
+    if let Err(e) = terminal
         .layout_tree
-        .switch_dashboard(&name, &window, &app, &cfg.panel_init_script())?;
+        .switch_dashboard(&name, &window, &app, &cfg.panel_init_script())
+    {
+        // The switch didn't actually happen (e.g. NeedsConfirm) — restore
+        // whatever this terminal's lock state was before we reserved the
+        // target, rather than leaving a phantom lock on a dashboard we
+        // never actually switched to.
+        if !previous_active_id.is_empty() {
+            let _ = manager.acquire_dashboard_lock(&previous_active_id, &terminal_id);
+        } else {
+            manager.release_dashboard_locks_for(&terminal_id);
+        }
+        return Err(e);
+    }
+
     {
         let mut inner = terminal.overlay.lock().unwrap();
         inner.stale = true;
@@ -1054,6 +1087,7 @@ async fn wm_switch_dashboard(
     }
     overlay_prewarm_in_background(Arc::clone(&terminal.overlay), window.label(), &app);
     terminal.layout_tree.emit_dashboards(&app);
+    manager.emit_dashboards_all(&app);
     Ok(())
 }
 
@@ -1207,6 +1241,10 @@ fn wm_close_terminal(
     manager: State<'_, TerminalManager>,
     app: AppHandle,
 ) -> Result<(), String> {
+    // Release this terminal's active-dashboard lock (Issue 15-D) so another
+    // window can switch to it immediately — the lock is in-memory only and
+    // would otherwise linger, wrongly, past this window's lifetime.
+    manager.release_dashboard_locks_for(&label);
     manager.remove(&label);
 
     if let Ok(data_dir) = app.path().app_data_dir() {
@@ -1221,6 +1259,7 @@ fn wm_close_terminal(
     }
 
     manager.emit_terminals(&app);
+    manager.emit_dashboards_all(&app);
     Ok(())
 }
 
@@ -1288,6 +1327,22 @@ pub fn run() {
             // Skip when OT_FRESH_START is set (Desktop Agent "Open New Terminal").
             if !fresh_start {
                 tree.init(app.handle())?;
+
+                // A terminal implicitly holds a lock on its own active
+                // dashboard at all times (Issue 15-D) — acquire it here as
+                // part of restore, not just on explicit wm_switch_dashboard
+                // calls, so a second terminal restored later in this same
+                // launch can't also claim the same dashboard.
+                let active_id = tree.active_dashboard_id();
+                if !active_id.is_empty() {
+                    if let Err(owner) = manager.acquire_dashboard_lock(&active_id, WIN) {
+                        eprintln!(
+                            "[wm] '{WIN}' startup: dashboard already locked by '{owner}', \
+                             falling back to no active dashboard"
+                        );
+                        tree.clear_active_for_lock_conflict();
+                    }
+                }
             }
 
             // ── Load saved window position for terminal-main ──────────────

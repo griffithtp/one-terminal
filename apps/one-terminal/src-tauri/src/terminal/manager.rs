@@ -4,6 +4,7 @@
 //! objects (`LayoutTree`, `WebviewPool`, `OverlayState`) by the invoking
 //! window's label instead of injecting them as separate global `State` values.
 
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 
 use indexmap::IndexMap;
@@ -22,6 +23,12 @@ struct ManagerInner {
     /// Monotonically increasing counter for generating unique terminal IDs.
     /// Starts at 2; "terminal-main" occupies the implied slot 1.
     next_id: u32,
+    /// In-memory-only active-dashboard exclusivity lock (Issue 15-D):
+    /// dashboard id → id of the terminal currently displaying it. A
+    /// dashboard can be active in at most one window at a time. Never
+    /// persisted — killing the process drops every lock for free, so
+    /// there's no "stale lock survived a crash" state to recover.
+    active_locks: HashMap<String, String>,
 }
 
 // ── TerminalListItem ──────────────────────────────────────────────────────────
@@ -52,6 +59,7 @@ impl TerminalManager {
             inner: Arc::new(RwLock::new(ManagerInner {
                 terminals: IndexMap::new(),
                 next_id: 2,
+                active_locks: HashMap::new(),
             })),
             dashboards: Arc::new(RwLock::new(DashboardRegistry::new())),
         }
@@ -163,6 +171,98 @@ impl TerminalManager {
             }
         }
     }
+
+    // ── Active-dashboard exclusivity lock (Issue 15-D) ────────────────────────
+
+    /// Attempt to acquire `dashboard_id`'s lock for `terminal_id`, releasing
+    /// `terminal_id`'s own previous lock entry as part of the same
+    /// operation — a terminal can only ever hold one active-dashboard lock
+    /// at a time, matching the one-active-dashboard-per-window invariant.
+    /// An empty `dashboard_id` ("no active dashboard") is never locked and
+    /// always succeeds, releasing whatever this terminal held before.
+    ///
+    /// Returns `Err(owning_terminal_name)` if `dashboard_id` is already
+    /// locked by a *different* terminal. Re-acquiring a lock this same
+    /// terminal already holds is a no-op success.
+    pub fn acquire_dashboard_lock(&self, dashboard_id: &str, terminal_id: &str) -> Result<(), String> {
+        let mut inner = self.inner.write().unwrap();
+        if !dashboard_id.is_empty() {
+            if let Some(owner) = inner.active_locks.get(dashboard_id) {
+                if owner != terminal_id {
+                    let owner_name = inner
+                        .terminals
+                        .get(owner)
+                        .map(|t| t.name.read().unwrap().clone())
+                        .unwrap_or_else(|| owner.clone());
+                    return Err(owner_name);
+                }
+            }
+        }
+        inner.active_locks.retain(|_, v| v != terminal_id);
+        if !dashboard_id.is_empty() {
+            inner
+                .active_locks
+                .insert(dashboard_id.to_string(), terminal_id.to_string());
+        }
+        Ok(())
+    }
+
+    /// Release every lock entry owned by `terminal_id` (there should only
+    /// ever be at most one). Called when the terminal's window closes
+    /// (`wm_close_terminal`) or as part of `acquire_dashboard_lock` moving
+    /// the lock elsewhere.
+    pub fn release_dashboard_locks_for(&self, terminal_id: &str) {
+        self.inner
+            .write()
+            .unwrap()
+            .active_locks
+            .retain(|_, v| v != terminal_id);
+    }
+
+    /// Name of the terminal holding `dashboard_id`'s lock, if it's locked by
+    /// some terminal *other than* `excluding_terminal_id`. Used to reject a
+    /// close/delete/switch that would otherwise interfere with another
+    /// window's active dashboard — a terminal is always allowed to act on
+    /// its own active dashboard (e.g. closing it and auto-switching away),
+    /// so a lock this same terminal holds is not reported here.
+    pub fn dashboard_lock_owner_name(
+        &self,
+        dashboard_id: &str,
+        excluding_terminal_id: &str,
+    ) -> Option<String> {
+        if dashboard_id.is_empty() {
+            return None;
+        }
+        let inner = self.inner.read().unwrap();
+        let owner = inner.active_locks.get(dashboard_id)?;
+        if owner == excluding_terminal_id {
+            return None;
+        }
+        Some(
+            inner
+                .terminals
+                .get(owner)
+                .map(|t| t.name.read().unwrap().clone())
+                .unwrap_or_else(|| owner.clone()),
+        )
+    }
+
+    /// Every dashboard id currently locked by some terminal other than
+    /// `excluding_terminal_id`. Used when a terminal needs to auto-pick a
+    /// fallback active dashboard (e.g. after closing/deleting its own
+    /// active one) — the fallback must skip anything already active
+    /// elsewhere, or it would silently create the exact two-windows-same-
+    /// dashboard conflict this lock exists to prevent.
+    pub fn locked_dashboard_ids_excluding(&self, excluding_terminal_id: &str) -> HashSet<String> {
+        self.inner
+            .read()
+            .unwrap()
+            .active_locks
+            .iter()
+            .filter(|(_, owner)| owner.as_str() != excluding_terminal_id)
+            .map(|(id, _)| id.clone())
+            .collect()
+    }
 }
 
 impl Clone for TerminalManager {
@@ -173,5 +273,137 @@ impl Clone for TerminalManager {
             inner: Arc::clone(&self.inner),
             dashboards: Arc::clone(&self.dashboards),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Mutex;
+    use std::thread;
+
+    use super::*;
+    use crate::layout::persist::PersistedWindowConfig;
+    use crate::layout::store::LayoutTree;
+    use crate::terminal::state::{OverlayInner, TerminalState};
+    use crate::webview_pool::WebviewPool;
+
+    /// Register a minimal `TerminalState` fixture — no real Tauri app/window,
+    /// just enough for the lock methods (which only need `id`/`name`) to work.
+    fn test_terminal(manager: &TerminalManager, id: &str, name: &str) -> Arc<TerminalState> {
+        let state = Arc::new(TerminalState {
+            id: id.to_string(),
+            name: RwLock::new(name.to_string()),
+            layout_tree: LayoutTree::new(id, 800.0, 600.0, manager.dashboards()),
+            overlay: Arc::new(Mutex::new(OverlayInner::default())),
+            pool: WebviewPool::new(0),
+            window_config: Arc::new(RwLock::new(PersistedWindowConfig::default())),
+        });
+        manager.register(Arc::clone(&state));
+        state
+    }
+
+    #[test]
+    fn switch_blocked_by_lock_names_the_owning_terminal() {
+        let manager = TerminalManager::new();
+        test_terminal(&manager, "terminal-a", "Terminal A");
+        test_terminal(&manager, "terminal-b", "Terminal B");
+
+        manager.acquire_dashboard_lock("dash-1", "terminal-a").unwrap();
+
+        let err = manager
+            .acquire_dashboard_lock("dash-1", "terminal-b")
+            .unwrap_err();
+        assert_eq!(err, "Terminal A", "must name the window that has it");
+    }
+
+    #[test]
+    fn closing_releases_the_lock_immediately() {
+        let manager = TerminalManager::new();
+        test_terminal(&manager, "terminal-a", "Terminal A");
+        manager.acquire_dashboard_lock("dash-1", "terminal-a").unwrap();
+
+        manager.release_dashboard_locks_for("terminal-a");
+
+        assert!(
+            manager
+                .dashboard_lock_owner_name("dash-1", "terminal-b")
+                .is_none(),
+            "another window must be able to acquire it right away"
+        );
+    }
+
+    #[test]
+    fn reacquiring_ones_own_lock_is_a_no_op() {
+        let manager = TerminalManager::new();
+        test_terminal(&manager, "terminal-a", "Terminal A");
+        manager.acquire_dashboard_lock("dash-1", "terminal-a").unwrap();
+        assert!(manager.acquire_dashboard_lock("dash-1", "terminal-a").is_ok());
+    }
+
+    #[test]
+    fn a_terminal_only_ever_holds_one_lock_at_a_time() {
+        let manager = TerminalManager::new();
+        test_terminal(&manager, "terminal-a", "Terminal A");
+        manager.acquire_dashboard_lock("dash-1", "terminal-a").unwrap();
+        manager.acquire_dashboard_lock("dash-2", "terminal-a").unwrap();
+
+        assert!(
+            manager
+                .dashboard_lock_owner_name("dash-1", "terminal-z")
+                .is_none(),
+            "switching to dash-2 must release the previous lock on dash-1"
+        );
+        assert_eq!(
+            manager.dashboard_lock_owner_name("dash-2", "terminal-z"),
+            Some("Terminal A".to_string())
+        );
+    }
+
+    #[test]
+    fn empty_dashboard_id_is_never_locked() {
+        let manager = TerminalManager::new();
+        test_terminal(&manager, "terminal-a", "Terminal A");
+        manager.acquire_dashboard_lock("dash-1", "terminal-a").unwrap();
+        // Switching to "no active dashboard" must release the prior lock.
+        manager.acquire_dashboard_lock("", "terminal-a").unwrap();
+
+        assert!(manager
+            .dashboard_lock_owner_name("dash-1", "terminal-z")
+            .is_none());
+    }
+
+    #[test]
+    fn locked_dashboard_ids_excluding_omits_the_callers_own_lock() {
+        let manager = TerminalManager::new();
+        test_terminal(&manager, "terminal-a", "Terminal A");
+        test_terminal(&manager, "terminal-b", "Terminal B");
+        manager.acquire_dashboard_lock("dash-1", "terminal-a").unwrap();
+        manager.acquire_dashboard_lock("dash-2", "terminal-b").unwrap();
+
+        let excluding_a = manager.locked_dashboard_ids_excluding("terminal-a");
+        assert!(excluding_a.contains("dash-2"));
+        assert!(!excluding_a.contains("dash-1"));
+    }
+
+    #[test]
+    fn two_terminals_racing_to_switch_to_the_same_dashboard() {
+        let manager = Arc::new(TerminalManager::new());
+        test_terminal(&manager, "terminal-a", "Terminal A");
+        test_terminal(&manager, "terminal-b", "Terminal B");
+
+        let m1 = Arc::clone(&manager);
+        let m2 = Arc::clone(&manager);
+        let t1 = thread::spawn(move || m1.acquire_dashboard_lock("dash-1", "terminal-a"));
+        let t2 = thread::spawn(move || m2.acquire_dashboard_lock("dash-1", "terminal-b"));
+
+        let r1 = t1.join().unwrap();
+        let r2 = t2.join().unwrap();
+
+        // Exactly one of the two racing switches must win — never both, never neither.
+        assert_ne!(
+            r1.is_ok(),
+            r2.is_ok(),
+            "exactly one of the two racing acquires must succeed, got {r1:?} / {r2:?}"
+        );
     }
 }

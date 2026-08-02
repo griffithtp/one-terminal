@@ -3,7 +3,7 @@
 //! One `LayoutTree` lives inside each `TerminalState`. Commands reach it via
 //! `manager.get(window.label())?.layout_tree`.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
 
 use tauri::{
@@ -1105,6 +1105,24 @@ impl LayoutTree {
         self.session.read().unwrap().active.clone()
     }
 
+    /// Force this session to "no active dashboard" and clear whatever `init`
+    /// optimistically loaded into the live tree (Issue 15-D). Used only for
+    /// the narrow startup race its design notes call out: two terminals
+    /// restored in the same launch both resolve to what's now the same
+    /// shared dashboard id (should be rare-to-impossible after Issue 15-B's
+    /// migration renames name collisions, but defended against rather than
+    /// left to crash or silently double-lock).
+    pub fn clear_active_for_lock_conflict(&self) {
+        {
+            let mut g = self.inner.write().unwrap();
+            g.root = None;
+            g.meta.clear();
+            g.active_panel = None;
+            g.maximized_stack_id = None;
+        }
+        self.session.write().unwrap().active = String::new();
+    }
+
     /// Set auto-save mode. When switching from off→on, the live layout is
     /// immediately snapshotted and persisted, clearing the dirty flag.
     pub fn set_auto_save(&self, enabled: bool) {
@@ -1310,9 +1328,18 @@ impl LayoutTree {
     /// Delete a dashboard by name, reconciling panel webviews when the active
     /// dashboard is the one being removed. Returns `false` if `name` doesn't
     /// exist. Allowed to delete the last dashboard, leaving the terminal empty.
+    ///
+    /// `locked_elsewhere` (Issue 15-D) — dashboard ids currently active in
+    /// some *other* Terminal window — is consulted only when picking this
+    /// session's fallback active dashboard (if `name` was active): the
+    /// fallback must never auto-pick something already active elsewhere,
+    /// or this window would silently end up displaying a dashboard another
+    /// window has locked. Callers should pass
+    /// `manager.locked_dashboard_ids_excluding(this_terminal_id)`.
     pub fn delete_dashboard(
         &self,
         name: &str,
+        locked_elsewhere: &HashSet<String>,
         win: &Window,
         app: &AppHandle,
         panel_init_script: &str,
@@ -1355,7 +1382,7 @@ impl LayoutTree {
             let registry = self.dashboards.read().unwrap();
             let mut session = self.session.write().unwrap();
             let new_active_id = registry
-                .first_open_name()
+                .first_open_name_excluding(locked_elsewhere)
                 .and_then(|n| registry.id_of(&n))
                 .unwrap_or_default();
             session.active = new_active_id.clone();
@@ -1394,9 +1421,13 @@ impl LayoutTree {
     /// `name`'s panels currently parked in the background — a closed
     /// dashboard doesn't keep widgets running, same as a deleted one.
     /// Returns `false` if `name` doesn't exist.
+    ///
+    /// `locked_elsewhere` (Issue 15-D) — see `delete_dashboard`'s doc
+    /// comment; same contract, used the same way for the fallback pick.
     pub fn close_dashboard(
         &self,
         name: &str,
+        locked_elsewhere: &HashSet<String>,
         win: &Window,
         app: &AppHandle,
         panel_init_script: &str,
@@ -1439,7 +1470,7 @@ impl LayoutTree {
             let registry = self.dashboards.read().unwrap();
             let mut session = self.session.write().unwrap();
             let new_active_id = registry
-                .first_open_name()
+                .first_open_name_excluding(locked_elsewhere)
                 .and_then(|n| registry.id_of(&n))
                 .unwrap_or_default();
             session.active = new_active_id.clone();

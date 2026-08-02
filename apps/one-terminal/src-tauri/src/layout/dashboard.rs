@@ -152,6 +152,13 @@ pub enum DashboardError {
     NeedsConfirm,
     /// The requested dashboard name does not exist.
     NotFound,
+    /// The dashboard is currently active in a *different* Terminal window
+    /// (Issue 15-D's exclusivity lock) — switching to it, or closing/
+    /// deleting it, was blocked. `terminal_name` identifies the window that
+    /// has it, so the frontend can show e.g. "open in Terminal 2". Never
+    /// returned for a dashboard that's active in the *caller's own* window
+    /// — a terminal is always allowed to act on its own active dashboard.
+    LockedElsewhere { terminal_name: String },
     /// A runtime error that should not normally occur.
     Other { message: String },
 }
@@ -161,6 +168,9 @@ impl std::fmt::Display for DashboardError {
         match self {
             Self::NeedsConfirm => write!(f, "unsaved changes — confirm required"),
             Self::NotFound => write!(f, "dashboard not found"),
+            Self::LockedElsewhere { terminal_name } => {
+                write!(f, "dashboard is open in '{terminal_name}'")
+            }
             Self::Other { message } => write!(f, "{message}"),
         }
     }
@@ -225,13 +235,18 @@ impl DashboardRegistry {
         self.dashboards.values().find(|d| d.id == id)
     }
 
-    /// Name of the first open (non-closed) dashboard in store order, if any.
-    /// Used by callers reassigning a session's `active` after the dashboard
-    /// it pointed at closes or is deleted.
-    pub fn first_open_name(&self) -> Option<String> {
+    /// Name of the first open (non-closed) dashboard in store order whose
+    /// id isn't in `locked_elsewhere`, if any. Used by callers reassigning a
+    /// session's `active` after the dashboard it pointed at closes or is
+    /// deleted — the fallback must skip anything already active in another
+    /// window (Issue 15-D), or auto-picking it would silently recreate the
+    /// exact two-windows-same-dashboard conflict the lock exists to
+    /// prevent. Pass an empty set if lock state isn't relevant (e.g. a
+    /// single-window context).
+    pub fn first_open_name_excluding(&self, locked_elsewhere: &std::collections::HashSet<String>) -> Option<String> {
         self.dashboards
             .iter()
-            .find(|(_, d)| !d.closed)
+            .find(|(_, d)| !d.closed && !locked_elsewhere.contains(&d.id))
             .map(|(k, _)| k.clone())
     }
 
