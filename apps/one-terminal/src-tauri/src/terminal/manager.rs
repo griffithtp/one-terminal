@@ -293,6 +293,23 @@ impl TerminalManager {
         )
     }
 
+    /// Raw lookup: id of the terminal currently holding `dashboard_id`'s
+    /// lock, if any — regardless of who's asking. Unlike
+    /// `dashboard_lock_owner_name`, this never excludes a terminal or
+    /// resolves to a display name; used by "Move here" (Issue 15-G) to
+    /// determine whether evicting another window is even necessary.
+    pub fn dashboard_owner_id(&self, dashboard_id: &str) -> Option<String> {
+        if dashboard_id.is_empty() {
+            return None;
+        }
+        self.inner
+            .read()
+            .unwrap()
+            .active_locks
+            .get(dashboard_id)
+            .cloned()
+    }
+
     /// Every dashboard id currently locked by some terminal other than
     /// `excluding_terminal_id`. Used when a terminal needs to auto-pick a
     /// fallback active dashboard (e.g. after closing/deleting its own

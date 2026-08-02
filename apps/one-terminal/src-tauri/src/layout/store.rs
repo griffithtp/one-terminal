@@ -1095,6 +1095,14 @@ impl LayoutTree {
         self.session.read().unwrap().active.clone()
     }
 
+    /// `true` iff this session's live layout has diverged from its
+    /// persisted active dashboard. Only ever set when `auto_save` is off —
+    /// used by "Move here" (Issue 15-G) to decide whether evicting this
+    /// terminal from its active dashboard needs a save-then-move confirm.
+    pub fn session_dirty(&self) -> bool {
+        self.session.read().unwrap().dirty
+    }
+
     /// Force this session to "no active dashboard" and clear whatever `init`
     /// optimistically loaded into the live tree (Issue 15-D). Used only for
     /// the narrow startup race its design notes call out: two terminals
@@ -1309,6 +1317,105 @@ impl LayoutTree {
             let chrome = format!("{}-chrome", self.terminal_id);
             if let Some(wv) = app.get_webview(&chrome) {
                 let _ = wv.emit("wm:layout", &snap);
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Switch this session away from its current active dashboard to a
+    /// fallback (the first open dashboard not in `locked_elsewhere`, or
+    /// none), without touching the registry entry itself — used by "Move
+    /// here" (Issue 15-G) when another window takes over this terminal's
+    /// active dashboard out from under it. No-op if this terminal has no
+    /// active dashboard.
+    ///
+    /// Mirrors `switch_dashboard`'s outgoing-dashboard handling (snapshot if
+    /// `auto_save`, park `keep_alive` panels, destroy the rest) but picks
+    /// the incoming dashboard automatically rather than by name, and never
+    /// discards unsaved edits itself — callers must already have saved (or
+    /// obtained confirmation to discard) before calling this, since by the
+    /// time this runs there's no user in this window to ask.
+    pub fn force_switch_away(
+        &self,
+        locked_elsewhere: &HashSet<String>,
+        win: &Window,
+        app: &AppHandle,
+        panel_init_script: &str,
+    ) -> Result<(), DashboardError> {
+        let outgoing_id = self.session.read().unwrap().active.clone();
+        if outgoing_id.is_empty() {
+            return Ok(());
+        }
+        let outgoing_name = self
+            .dashboards
+            .read()
+            .unwrap()
+            .name_of(&outgoing_id)
+            .unwrap_or_default();
+
+        let (to_destroy, to_park): (Vec<String>, Vec<String>) = {
+            let g = self.inner.read().unwrap();
+            let mut labels = Vec::new();
+            if let Some(root) = &g.root {
+                collect_leaf_labels(root, &mut labels);
+            }
+            labels
+                .into_iter()
+                .partition(|label| !g.meta.get(label).map(|m| m.keep_alive).unwrap_or(false))
+        };
+        if !to_park.is_empty() {
+            let mut parked = self.parked.write().unwrap();
+            for label in &to_park {
+                parked.insert(label.clone(), outgoing_name.clone());
+            }
+        }
+
+        let new_layout = {
+            let mut registry = self.dashboards.write().unwrap();
+            let mut session = self.session.write().unwrap();
+            if session.auto_save {
+                let layout = {
+                    let g = self.inner.read().unwrap();
+                    snapshot_for_persist(&g)
+                };
+                registry.snapshot_current(&outgoing_id, layout);
+            }
+            let new_active_id = registry
+                .first_open_name_excluding(locked_elsewhere)
+                .and_then(|n| registry.id_of(&n))
+                .unwrap_or_default();
+            session.active = new_active_id.clone();
+            session.dirty = false;
+            registry.get_by_id(&new_active_id).map(|d| d.as_layout())
+        };
+
+        let panels_to_create = self.apply_layout_to_inner(new_layout);
+        let panels_to_create: Vec<(String, String, Option<String>)> = {
+            let mut parked = self.parked.write().unwrap();
+            panels_to_create
+                .into_iter()
+                .filter(|(label, _, _)| parked.remove(label).is_none())
+                .collect()
+        };
+
+        self.reconcile_panel_webviews(
+            to_destroy,
+            to_park,
+            panels_to_create,
+            win,
+            app,
+            panel_init_script,
+        )?;
+
+        self.reflow(app);
+        self.emit_host(app);
+        let chrome = format!("{}-chrome", self.terminal_id);
+        if let Some(wv) = app.get_webview(&chrome) {
+            if let Some(snap) = self.snapshot() {
+                let _ = wv.emit("wm:layout", &snap);
+            } else {
+                let _ = wv.emit("wm:layout", serde_json::Value::Null);
             }
         }
 

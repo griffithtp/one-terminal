@@ -1,11 +1,15 @@
 /* ── Container ────────────────────────────────────────────────────────────── */
 .wm-ds {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 3px;
   min-width: 0;
   flex-shrink: 1;
-  overflow: hidden;
+  /* visible, not hidden: .wm-ds__strip already clips pill overflow
+     horizontally via its own overflow-x; this container needs to stay
+     unclipped vertically so .wm-ds__conflict can drop down below it. */
+  overflow: visible;
 }
 
 /* ── Pill strip ──────────────────────────────────────────────────────────── */
@@ -191,6 +195,72 @@
 .wm-ds__add:hover {
   color: var(--ot-text-secondary);
   border-color: var(--ot-border-strong);
+}
+
+/* ── Lock-conflict banner (Issue 15-G: Duplicate / Move here) ────────────── */
+.wm-ds__conflict {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 4px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px 6px 12px;
+  background: var(--ot-bg-surface);
+  border: 1px solid var(--ot-border-default);
+  border-radius: 6px;
+  box-shadow: var(--ot-elev-dialog);
+  white-space: nowrap;
+  pointer-events: auto;
+}
+.wm-ds__conflict-text {
+  font-size: 12px;
+  color: var(--ot-text-secondary);
+}
+.wm-ds__conflict-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.wm-ds__conflict-btn {
+  padding: 3px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  border: 1px solid var(--ot-border-default);
+  background: var(--ot-bg-elevated);
+  color: var(--ot-text-primary);
+  transition: background 120ms;
+}
+.wm-ds__conflict-btn:hover {
+  background: var(--ot-bg-elevated-hover);
+}
+.wm-ds__conflict-btn--primary {
+  background: var(--ot-primary);
+  border-color: var(--ot-primary-border);
+  color: var(--ot-accent-on);
+}
+.wm-ds__conflict-btn--primary:hover {
+  background: var(--ot-primary-hover);
+}
+.wm-ds__conflict-dismiss {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  background: none;
+  border: none;
+  border-radius: 50%;
+  color: var(--ot-text-muted);
+  font-size: 10px;
+  cursor: pointer;
+}
+.wm-ds__conflict-dismiss:hover {
+  background: var(--ot-bg-elevated-hover);
+  color: var(--ot-text-strong);
 }
 
 /* ── Context menu ─────────────────────────────────────────────────────────

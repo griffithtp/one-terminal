@@ -47,7 +47,8 @@ interface Props {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function DashboardSwitcher({ ds, onManageDashboards }: Props) {
-  const { dashboards, switchTo, parkedCount, rename } = ds;
+  const { dashboards, switchTo, parkedCount, rename, lockConflict, clearLockConflict, duplicateHere, moveHere } =
+    ds;
 
   const [renamingName, setRenamingName] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
@@ -175,6 +176,35 @@ export function DashboardSwitcher({ ds, onManageDashboards }: Props) {
       >
         +
       </button>
+      {lockConflict && (
+        <div className="wm-ds__conflict" role="alert">
+          <span className="wm-ds__conflict-text">{lockConflict.message}</span>
+          <span className="wm-ds__conflict-actions">
+            <button
+              type="button"
+              className="wm-ds__conflict-btn"
+              onClick={() => duplicateHere(lockConflict.name).catch(console.error)}
+            >
+              Duplicate
+            </button>
+            <button
+              type="button"
+              className="wm-ds__conflict-btn wm-ds__conflict-btn--primary"
+              onClick={() => moveHere(lockConflict.name).catch(console.error)}
+            >
+              Move here
+            </button>
+            <button
+              type="button"
+              className="wm-ds__conflict-dismiss"
+              onClick={clearLockConflict}
+              aria-label="Dismiss"
+            >
+              ✕
+            </button>
+          </span>
+        </div>
+      )}
     </div>
   );
 }

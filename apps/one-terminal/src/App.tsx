@@ -320,8 +320,8 @@ function ChromeApp() {
       onPointerCancel={handleTabPointerUp}
     >
       <Header
-        errorMessage={launch.errorMessage ?? dashboards.lockMessage}
-        onClearError={launch.errorMessage ? launch.clearError : dashboards.clearLockMessage}
+        errorMessage={launch.errorMessage}
+        onClearError={launch.clearError}
         dashboards={dashboards}
         onMenuToggle={toggleMenu}
         onManageDashboards={() => openMenuAt("dashboards")}

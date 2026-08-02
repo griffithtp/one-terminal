@@ -1092,6 +1092,115 @@ async fn wm_switch_dashboard(
     Ok(())
 }
 
+/// "Move here" (Issue 15-G): take `name` away from whichever *other*
+/// Terminal window currently has it active/locked, and make it active in
+/// this one instead. If `name` isn't locked elsewhere (or is already this
+/// window's own active dashboard), behaves exactly like `wm_switch_dashboard`.
+///
+/// If the owning window has unsaved edits (`auto_save` off and dirty) and
+/// `force_discard` is `false`, returns `DashboardError::NeedsConfirm` — the
+/// frontend should confirm with the user that those edits will be **saved**
+/// (never silently discarded) before the move proceeds, then retry with
+/// `force_discard: true`.
+#[tauri::command]
+async fn wm_move_dashboard(
+    name: String,
+    force_discard: bool,
+    window: Window,
+    manager: State<'_, TerminalManager>,
+    cfg: State<'_, TerminalConfig>,
+    app: AppHandle,
+) -> Result<(), DashboardError> {
+    let terminal = manager
+        .get(window.label())
+        .ok_or_else(|| DashboardError::Other {
+            message: format!("terminal '{}' not found", window.label()),
+        })?;
+    let terminal_id = window.label().to_string();
+
+    let target_id = terminal
+        .layout_tree
+        .with_registry(|r| r.id_of(&name))
+        .ok_or(DashboardError::NotFound)?;
+
+    // If it's locked by some *other* window, evict that window first —
+    // saving its edits (never discarding) if it was dirty, then switching
+    // it to its own fallback dashboard, exactly like closing one's own
+    // active dashboard does.
+    if let Some(owner_id) = manager.dashboard_owner_id(&target_id) {
+        if owner_id != terminal_id {
+            let owner_terminal = manager.get(&owner_id).ok_or_else(|| DashboardError::Other {
+                message: format!("owning terminal '{owner_id}' not found"),
+            })?;
+            let owner_window = app.get_window(&owner_id).ok_or_else(|| DashboardError::Other {
+                message: format!("window '{owner_id}' not found"),
+            })?;
+
+            if owner_terminal.layout_tree.session_dirty() {
+                if !force_discard {
+                    return Err(DashboardError::NeedsConfirm);
+                }
+                // "Force" means confirmed, not "discard" — flush the owning
+                // window's live edits to the registry before taking it away.
+                owner_terminal.layout_tree.save_dashboard();
+            }
+
+            let owner_locked_elsewhere = manager.locked_dashboard_ids_excluding(&owner_id);
+            owner_terminal.layout_tree.force_switch_away(
+                &owner_locked_elsewhere,
+                &owner_window,
+                &app,
+                &cfg.panel_init_script(),
+            )?;
+            owner_terminal.layout_tree.persist_dashboards();
+
+            {
+                let mut inner = owner_terminal.overlay.lock().unwrap();
+                inner.stale = true;
+                inner.is_ready = false;
+            }
+            overlay_prewarm_in_background(Arc::clone(&owner_terminal.overlay), &owner_id, &app);
+
+            // Reconcile the owner's lock to match wherever it fell back to.
+            manager.release_dashboard_locks_for(&owner_id);
+            let owner_new_active = owner_terminal.layout_tree.active_dashboard_id();
+            if !owner_new_active.is_empty() {
+                let _ = manager.acquire_dashboard_lock(&owner_new_active, &owner_id);
+            }
+        }
+    }
+
+    // From here it's the same reserve-then-switch-then-commit-or-rollback
+    // sequence as wm_switch_dashboard — the target is now unlocked (or was
+    // always ours), so this should not fail on the lock itself.
+    let previous_active_id = terminal.layout_tree.active_dashboard_id();
+    if let Err(owner_name) = manager.acquire_dashboard_lock(&target_id, &terminal_id) {
+        return Err(DashboardError::LockedElsewhere {
+            terminal_name: owner_name,
+        });
+    }
+    if let Err(e) = terminal
+        .layout_tree
+        .switch_dashboard(&name, &window, &app, &cfg.panel_init_script())
+    {
+        if !previous_active_id.is_empty() {
+            let _ = manager.acquire_dashboard_lock(&previous_active_id, &terminal_id);
+        } else {
+            manager.release_dashboard_locks_for(&terminal_id);
+        }
+        return Err(e);
+    }
+
+    {
+        let mut inner = terminal.overlay.lock().unwrap();
+        inner.stale = true;
+        inner.is_ready = false;
+    }
+    overlay_prewarm_in_background(Arc::clone(&terminal.overlay), window.label(), &app);
+    manager.emit_dashboards_all(&app);
+    Ok(())
+}
+
 /// Reload the active dashboard's saved snapshot, discarding all unsaved live
 /// changes. Reconciles panel webviews (creates/destroys as needed) then
 /// reflows and emits the updated layout events.
@@ -1581,6 +1690,7 @@ pub fn run() {
             wm_request_rename,
             wm_list_dashboards,
             wm_switch_dashboard,
+            wm_move_dashboard,
             wm_create_dashboard,
             wm_save_dashboard,
             wm_discard_dashboard,
