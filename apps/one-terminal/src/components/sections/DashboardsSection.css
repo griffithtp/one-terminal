@@ -214,6 +214,13 @@
   background: var(--ot-warning);
 }
 
+.ot-dashboards__item-lock {
+  flex: 0 0 auto;
+  font-size: 10px;
+  line-height: 1;
+  opacity: 0.75;
+}
+
 .ot-dashboards__name {
   flex: 1 1 auto;
   display: inline-flex;
@@ -281,6 +288,21 @@
 
 .ot-dashboards__item--closed {
   opacity: 0.75;
+}
+
+/* ── Cross-instance import ────────────────────────────────────────────────── */
+.ot-dashboards__cross-instance {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 4px;
+  border-top: 1px solid var(--ot-border-default);
+}
+
+.ot-dashboards__error {
+  font-size: 12px;
+  color: var(--ot-danger-text);
+  margin: 0;
 }
 
 .ot-dashboards__closed-name {

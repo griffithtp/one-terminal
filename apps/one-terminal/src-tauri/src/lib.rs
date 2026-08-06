@@ -1030,7 +1030,10 @@ async fn wm_dashboard_confirm_close_open(
 /// Switch the active dashboard to `name`, performing the full webview
 /// destroy/recreate lifecycle.  Returns `DashboardError::NeedsConfirm` when
 /// `auto_save` is off and there are unsaved changes — the frontend should show
-/// a Save / Discard / Cancel dialog and retry accordingly.
+/// a Save / Discard / Cancel dialog and retry accordingly. Returns
+/// `DashboardError::LockedElsewhere` (Issue 15-D) if `name` is currently
+/// active in a different Terminal window — a dashboard can only ever be
+/// active in one window at a time.
 #[tauri::command]
 async fn wm_switch_dashboard(
     name: String,
@@ -1044,16 +1047,163 @@ async fn wm_switch_dashboard(
         .ok_or_else(|| DashboardError::Other {
             message: format!("terminal '{}' not found", window.label()),
         })?;
-    terminal
-        .layout_tree
-        .switch_dashboard(&name, &window, &app, &cfg.panel_init_script())?;
+    let terminal_id = window.label().to_string();
+
+    // Reserve the lock *before* attempting the switch, not after — two
+    // windows racing to switch to the same dashboard must not both proceed
+    // to `switch_dashboard` (which would leave both actually displaying it).
+    // Whichever acquires the lock first wins; the other is rejected here,
+    // before it ever touches its own live layout.
+    let target_id = terminal.layout_tree.with_registry(|r| r.id_of(&name));
+    let previous_active_id = terminal.layout_tree.active_dashboard_id();
+    if let Some(id) = &target_id {
+        if let Err(owner_name) = manager.acquire_dashboard_lock(id, &terminal_id) {
+            return Err(DashboardError::LockedElsewhere {
+                terminal_name: owner_name,
+            });
+        }
+    }
+
+    if let Err(e) =
+        terminal
+            .layout_tree
+            .switch_dashboard(&name, &window, &app, &cfg.panel_init_script())
+    {
+        // The switch didn't actually happen (e.g. NeedsConfirm) — restore
+        // whatever this terminal's lock state was before we reserved the
+        // target, rather than leaving a phantom lock on a dashboard we
+        // never actually switched to.
+        if !previous_active_id.is_empty() {
+            let _ = manager.acquire_dashboard_lock(&previous_active_id, &terminal_id);
+        } else {
+            manager.release_dashboard_locks_for(&terminal_id);
+        }
+        return Err(e);
+    }
+
     {
         let mut inner = terminal.overlay.lock().unwrap();
         inner.stale = true;
         inner.is_ready = false;
     }
     overlay_prewarm_in_background(Arc::clone(&terminal.overlay), window.label(), &app);
-    terminal.layout_tree.emit_dashboards(&app);
+    // Broadcasts to every terminal (including this one) with fresh lockedBy
+    // data — a plain single-window `emit_dashboards` would be redundant.
+    manager.emit_dashboards_all(&app);
+    Ok(())
+}
+
+/// "Move here" (Issue 15-G): take `name` away from whichever *other*
+/// Terminal window currently has it active/locked, and make it active in
+/// this one instead. If `name` isn't locked elsewhere (or is already this
+/// window's own active dashboard), behaves exactly like `wm_switch_dashboard`.
+///
+/// If the owning window has unsaved edits (`auto_save` off and dirty) and
+/// `force_discard` is `false`, returns `DashboardError::NeedsConfirm` — the
+/// frontend should confirm with the user that those edits will be **saved**
+/// (never silently discarded) before the move proceeds, then retry with
+/// `force_discard: true`.
+#[tauri::command]
+async fn wm_move_dashboard(
+    name: String,
+    force_discard: bool,
+    window: Window,
+    manager: State<'_, TerminalManager>,
+    cfg: State<'_, TerminalConfig>,
+    app: AppHandle,
+) -> Result<(), DashboardError> {
+    let terminal = manager
+        .get(window.label())
+        .ok_or_else(|| DashboardError::Other {
+            message: format!("terminal '{}' not found", window.label()),
+        })?;
+    let terminal_id = window.label().to_string();
+
+    let target_id = terminal
+        .layout_tree
+        .with_registry(|r| r.id_of(&name))
+        .ok_or(DashboardError::NotFound)?;
+
+    // If it's locked by some *other* window, evict that window first —
+    // saving its edits (never discarding) if it was dirty, then switching
+    // it to its own fallback dashboard, exactly like closing one's own
+    // active dashboard does.
+    if let Some(owner_id) = manager.dashboard_owner_id(&target_id) {
+        if owner_id != terminal_id {
+            let owner_terminal = manager
+                .get(&owner_id)
+                .ok_or_else(|| DashboardError::Other {
+                    message: format!("owning terminal '{owner_id}' not found"),
+                })?;
+            let owner_window = app
+                .get_window(&owner_id)
+                .ok_or_else(|| DashboardError::Other {
+                    message: format!("window '{owner_id}' not found"),
+                })?;
+
+            if owner_terminal.layout_tree.session_dirty() {
+                if !force_discard {
+                    return Err(DashboardError::NeedsConfirm);
+                }
+                // "Force" means confirmed, not "discard" — flush the owning
+                // window's live edits to the registry before taking it away.
+                owner_terminal.layout_tree.save_dashboard();
+            }
+
+            let owner_locked_elsewhere = manager.locked_dashboard_ids_excluding(&owner_id);
+            owner_terminal.layout_tree.force_switch_away(
+                &owner_locked_elsewhere,
+                &owner_window,
+                &app,
+                &cfg.panel_init_script(),
+            )?;
+            owner_terminal.layout_tree.persist_dashboards();
+
+            {
+                let mut inner = owner_terminal.overlay.lock().unwrap();
+                inner.stale = true;
+                inner.is_ready = false;
+            }
+            overlay_prewarm_in_background(Arc::clone(&owner_terminal.overlay), &owner_id, &app);
+
+            // Reconcile the owner's lock to match wherever it fell back to.
+            manager.release_dashboard_locks_for(&owner_id);
+            let owner_new_active = owner_terminal.layout_tree.active_dashboard_id();
+            if !owner_new_active.is_empty() {
+                let _ = manager.acquire_dashboard_lock(&owner_new_active, &owner_id);
+            }
+        }
+    }
+
+    // From here it's the same reserve-then-switch-then-commit-or-rollback
+    // sequence as wm_switch_dashboard — the target is now unlocked (or was
+    // always ours), so this should not fail on the lock itself.
+    let previous_active_id = terminal.layout_tree.active_dashboard_id();
+    if let Err(owner_name) = manager.acquire_dashboard_lock(&target_id, &terminal_id) {
+        return Err(DashboardError::LockedElsewhere {
+            terminal_name: owner_name,
+        });
+    }
+    if let Err(e) =
+        terminal
+            .layout_tree
+            .switch_dashboard(&name, &window, &app, &cfg.panel_init_script())
+    {
+        if !previous_active_id.is_empty() {
+            let _ = manager.acquire_dashboard_lock(&previous_active_id, &terminal_id);
+        } else {
+            manager.release_dashboard_locks_for(&terminal_id);
+        }
+        return Err(e);
+    }
+
+    {
+        let mut inner = terminal.overlay.lock().unwrap();
+        inner.stale = true;
+        inner.is_ready = false;
+    }
+    overlay_prewarm_in_background(Arc::clone(&terminal.overlay), window.label(), &app);
+    manager.emit_dashboards_all(&app);
     Ok(())
 }
 
@@ -1081,7 +1231,7 @@ async fn wm_discard_dashboard(
         inner.is_ready = false;
     }
     overlay_prewarm_in_background(Arc::clone(&terminal.overlay), window.label(), &app);
-    terminal.layout_tree.emit_dashboards(&app);
+    manager.emit_dashboards_for(window.label(), &app);
     Ok(())
 }
 
@@ -1148,24 +1298,246 @@ fn wm_duplicate_dashboard_to(
 
     // Take the saved snapshot of the active dashboard (not the live layout,
     // which may have unsaved changes if auto_save is off).
+    let active_id = source.layout_tree.active_dashboard_id();
     let snapshot = source
         .layout_tree
-        .with_dashboard_store_mut(|ds| ds.dashboards.get(&ds.active).cloned());
+        .with_registry(|r| r.get_by_id(&active_id).cloned());
     let Some(dashboard) = snapshot else {
         return Err("source has no active dashboard".into());
     };
 
     let created = target
         .layout_tree
-        .with_dashboard_store_mut(|ds| ds.create_from(trimmed, dashboard));
+        .with_registry_mut(|r| r.create_from(trimmed, dashboard));
     if created {
         target.layout_tree.persist_dashboards();
-        target.layout_tree.emit_dashboards(&app);
+        manager.emit_dashboards_all(&app);
     }
     Ok(created)
 }
 
+// ── Cross-instance dashboard duplication ──────────────────────────────────────
+//
+// Every `one-terminal` process is independent — see `terminal::instances`'s
+// doc comment. These three commands are the only way one process ever reads
+// another's state, and only for this one purpose: browsing another running
+// instance's open dashboards and pulling a copy of one into this instance's
+// own registry. The source instance's copy is never touched.
+
+/// This process's own random identity for cross-instance discovery — Tauri
+/// managed state, set once in `run()` before `.setup()`. Used to exclude
+/// this process from its own `wm_list_other_instances` results.
+struct InstanceId(String);
+
+/// Bind the discovery IPC listener on an OS-assigned ephemeral port and
+/// register this process in `<data_dir>/instances/` so other running
+/// instances can find it (see `terminal::instances`). Best-effort: if the
+/// bind fails for some reason, this instance just won't be discoverable by
+/// others — nothing else about it is affected.
+fn start_instance_discovery(
+    manager: TerminalManager,
+    instance_id: String,
+    data_dir: std::path::PathBuf,
+) {
+    let listener = match std::net::TcpListener::bind(("127.0.0.1", 0)) {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("[wm] instance discovery listener failed to bind: {e}");
+            return;
+        }
+    };
+    let port = match listener.local_addr() {
+        Ok(addr) => addr.port(),
+        Err(e) => {
+            eprintln!("[wm] instance discovery: could not read bound port: {e}");
+            return;
+        }
+    };
+
+    let record = terminal::instances::InstanceRecord {
+        id: instance_id,
+        port,
+    };
+    if let Err(e) = terminal::instances::register_self(&data_dir, &record) {
+        eprintln!("[wm] failed to register instance for discovery: {e}");
+    }
+
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { continue };
+            let manager = manager.clone();
+            std::thread::spawn(move || {
+                use std::io::{BufRead, BufReader, Write};
+                let Ok(cloned) = stream.try_clone() else {
+                    return;
+                };
+                let mut reader = BufReader::new(cloned);
+                let mut line = String::new();
+                if reader.read_line(&mut line).is_err() {
+                    return;
+                }
+                let line = line.trim();
+                let reply = if line == "list" {
+                    let names = manager.dashboards().read().unwrap().list();
+                    serde_json::json!({ "dashboards": names }).to_string()
+                } else if let Some(name) = line.strip_prefix("get ") {
+                    let dashboard = manager
+                        .dashboards()
+                        .read()
+                        .unwrap()
+                        .dashboards
+                        .get(name)
+                        .cloned();
+                    match dashboard {
+                        Some(d) => serde_json::json!({ "dashboard": d }).to_string(),
+                        None => serde_json::json!({ "error": "not found" }).to_string(),
+                    }
+                } else if line == "info" {
+                    serde_json::json!({ "label": instance_label(&manager) }).to_string()
+                } else {
+                    serde_json::json!({ "error": format!("unknown command {line:?}") }).to_string()
+                };
+                let _ = stream.write_all(format!("{reply}\n").as_bytes());
+            });
+        }
+    });
+}
+
+/// Human-readable, freshly-computed label for this process, shown in
+/// another instance's "duplicate from another Terminal" picker (`info`
+/// request, above). Built from `terminal-main`'s current active dashboard
+/// (every process has exactly this one window unless something explicitly
+/// opened more via `wm_spawn_terminal`) plus the total open-dashboard count
+/// and this process's pid, so two instances are never indistinguishable
+/// even if their active dashboards happen to share a name.
+fn instance_label(manager: &TerminalManager) -> String {
+    let pid = std::process::id();
+    let total = manager.dashboards().read().unwrap().list().len();
+    let active = manager
+        .get(WIN)
+        .map(|t| t.layout_tree.dashboards_snapshot())
+        .map(|s| s.active)
+        .filter(|a| !a.is_empty());
+
+    match active {
+        Some(name) if total > 1 => format!("{name} (+{} more) — pid {pid}", total - 1),
+        Some(name) => format!("{name} — pid {pid}"),
+        None if total > 0 => format!("{total} dashboard(s), none active — pid {pid}"),
+        None => format!("No dashboards — pid {pid}"),
+    }
+}
+
+/// Descriptor for another running `one-terminal` process, as shown in the
+/// "duplicate from another Terminal" picker.
+#[derive(Clone, Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RemoteInstance {
+    id: String,
+    label: String,
+}
+
+/// List every other currently-running `one-terminal` instance on this
+/// machine (excluding this process itself).
+#[tauri::command]
+fn wm_list_other_instances(
+    app: AppHandle,
+    instance_id: State<'_, InstanceId>,
+) -> Result<Vec<RemoteInstance>, String> {
+    let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let records = terminal::instances::list_instances(&data_dir, &instance_id.0);
+    Ok(records
+        .into_iter()
+        .map(|r| RemoteInstance {
+            id: r.id,
+            label: r.label,
+        })
+        .collect())
+}
+
+/// List the open dashboard names in another running instance, identified by
+/// the id returned from `wm_list_other_instances`.
+#[tauri::command]
+fn wm_list_remote_dashboards(instance_id: String, app: AppHandle) -> Result<Vec<String>, String> {
+    let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let record = terminal::instances::resolve(&data_dir, &instance_id)
+        .ok_or_else(|| "that Terminal instance is no longer running".to_string())?;
+    let reply = terminal::instances::request(record.port, "list")?;
+    let parsed: serde_json::Value = serde_json::from_str(&reply).map_err(|e| e.to_string())?;
+    let names = parsed
+        .get("dashboards")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| "malformed reply from remote instance".to_string())?
+        .iter()
+        .filter_map(|v| v.as_str().map(str::to_string))
+        .collect();
+    Ok(names)
+}
+
+/// Pull `name` from another running instance and add it to *this* instance's
+/// own registry as an independent copy — the source instance and its own
+/// copy of the dashboard are completely unaffected. Returns the name the
+/// copy was actually stored under (disambiguated on collision, same
+/// `" (copy)"` / `" (copy N)"` convention as `wm_duplicate_dashboard`).
+#[tauri::command]
+fn wm_duplicate_from_instance(
+    instance_id: String,
+    name: String,
+    window: Window,
+    manager: State<'_, TerminalManager>,
+    app: AppHandle,
+) -> Result<String, String> {
+    let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let record = terminal::instances::resolve(&data_dir, &instance_id)
+        .ok_or_else(|| "that Terminal instance is no longer running".to_string())?;
+    let reply = terminal::instances::request(record.port, &format!("get {name}"))?;
+    let parsed: serde_json::Value = serde_json::from_str(&reply).map_err(|e| e.to_string())?;
+    if let Some(err) = parsed.get("error").and_then(|v| v.as_str()) {
+        return Err(err.to_string());
+    }
+    let dashboard: layout::dashboard::PersistedDashboard = serde_json::from_value(
+        parsed
+            .get("dashboard")
+            .cloned()
+            .ok_or_else(|| "malformed reply from remote instance".to_string())?,
+    )
+    .map_err(|e| e.to_string())?;
+
+    let terminal = get_terminal!(manager, window);
+    let new_name = terminal.layout_tree.with_registry_mut(|r| {
+        let mut candidate = name.clone();
+        if r.dashboards.contains_key(&candidate) {
+            candidate = format!("{name} (copy)");
+            let mut n = 2;
+            while r.dashboards.contains_key(&candidate) {
+                candidate = format!("{name} (copy {n})");
+                n += 1;
+            }
+        }
+        r.create_from(candidate.clone(), dashboard);
+        candidate
+    });
+    terminal.layout_tree.persist_dashboards();
+    manager.emit_dashboards_all(&app);
+    Ok(new_name)
+}
+
 // ── Terminal lifecycle commands ───────────────────────────────────────────────
+
+/// Spawn a brand-new Terminal window (zero dashboards) in this process and
+/// register it in the `TerminalManager`.
+fn open_new_window(
+    manager: &TerminalManager,
+    app: &AppHandle,
+) -> Result<terminal::state::TerminalInfo, String> {
+    let label = manager.next_label();
+    let pool_size = std::env::var("OT_WEBVIEW_POOL_SIZE")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(1);
+    let info = terminal::spawn::spawn_terminal(&label, None, manager, app, pool_size, None)?;
+    manager.emit_terminals(app);
+    Ok(info)
+}
 
 /// Spawn a brand-new Terminal window with zero dashboards and register it in
 /// the TerminalManager. Called from the Desktop Agent tray "Open New Terminal"
@@ -1175,14 +1547,7 @@ fn wm_spawn_terminal(
     manager: State<'_, TerminalManager>,
     app: AppHandle,
 ) -> Result<terminal::state::TerminalInfo, String> {
-    let label = manager.next_label();
-    let pool_size = std::env::var("OT_WEBVIEW_POOL_SIZE")
-        .ok()
-        .and_then(|v| v.parse::<usize>().ok())
-        .unwrap_or(1);
-    let info = terminal::spawn::spawn_terminal(&label, None, &manager, &app, pool_size, None)?;
-    manager.emit_terminals(&app);
-    Ok(info)
+    open_new_window(&manager, &app)
 }
 
 /// Return the window labels of all saved non-main terminals by scanning the
@@ -1206,6 +1571,10 @@ fn wm_close_terminal(
     manager: State<'_, TerminalManager>,
     app: AppHandle,
 ) -> Result<(), String> {
+    // Release this terminal's active-dashboard lock (Issue 15-D) so another
+    // window can switch to it immediately — the lock is in-memory only and
+    // would otherwise linger, wrongly, past this window's lifetime.
+    manager.release_dashboard_locks_for(&label);
     manager.remove(&label);
 
     if let Ok(data_dir) = app.path().app_data_dir() {
@@ -1220,6 +1589,7 @@ fn wm_close_terminal(
     }
 
     manager.emit_terminals(&app);
+    manager.emit_dashboards_all(&app);
     Ok(())
 }
 
@@ -1233,7 +1603,13 @@ pub fn run() {
 
     let cfg = TerminalConfig::load();
     let panel_init_script = cfg.panel_init_script();
-    let tree = LayoutTree::new(WIN, cfg.window.width, cfg.window.height);
+    let manager = TerminalManager::new();
+    let tree = LayoutTree::new(
+        WIN,
+        cfg.window.width,
+        cfg.window.height,
+        manager.dashboards(),
+    );
     let identity = WmHostIdentity::from_env();
     let overlay_state: OverlayState = Arc::new(Mutex::new(OverlayInner::default()));
     let pool_size = std::env::var("OT_WEBVIEW_POOL_SIZE")
@@ -1241,7 +1617,7 @@ pub fn run() {
         .and_then(|v| v.parse::<usize>().ok())
         .unwrap_or(1);
     let pool = WebviewPool::new(pool_size);
-    let manager = TerminalManager::new();
+    let instance_id = uuid::Uuid::new_v4().to_string();
     println!(
         "[wm] engine: {}@{} (runtime={:?})",
         identity.binding.family.as_dir(),
@@ -1266,11 +1642,48 @@ pub fn run() {
         .manage(identity.clone())
         .manage(manager.clone())
         .manage(cfg.clone())
+        .manage(InstanceId(instance_id.clone()))
         .setup(move |app| {
+            // ── Load the shared dashboard registry ──────────────────────────
+            // Must happen before any `LayoutTree::init` below, which resolves
+            // its terminal's `active_dashboard` against this registry. Runs
+            // the one-time Issue 15-B migration on first launch after
+            // upgrading from a pre-15-B install.
+            if !fresh_start {
+                if let Ok(data_dir) = app.path().app_data_dir() {
+                    manager.load_dashboards_registry(&data_dir);
+                }
+            }
+
+            // ── Cross-instance discovery ────────────────────────────────────
+            // Lets another running instance find this one to pull a
+            // dashboard copy from it (wm_duplicate_from_instance) — see
+            // `terminal::instances`'s doc comment for why instances stay
+            // independent rather than sharing one process.
+            if let Ok(data_dir) = app.path().app_data_dir() {
+                start_instance_discovery(manager.clone(), instance_id.clone(), data_dir);
+            }
+
             // ── Load persisted layout state ───────────────────────────────
             // Skip when OT_FRESH_START is set (Desktop Agent "Open New Terminal").
             if !fresh_start {
                 tree.init(app.handle())?;
+
+                // A terminal implicitly holds a lock on its own active
+                // dashboard at all times (Issue 15-D) — acquire it here as
+                // part of restore, not just on explicit wm_switch_dashboard
+                // calls, so a second terminal restored later in this same
+                // launch can't also claim the same dashboard.
+                let active_id = tree.active_dashboard_id();
+                if !active_id.is_empty() {
+                    if let Err(owner) = manager.acquire_dashboard_lock(&active_id, WIN) {
+                        eprintln!(
+                            "[wm] '{WIN}' startup: dashboard already locked by '{owner}', \
+                             falling back to no active dashboard"
+                        );
+                        tree.clear_active_for_lock_conflict();
+                    }
+                }
             }
 
             // ── Load saved window position for terminal-main ──────────────
@@ -1508,6 +1921,7 @@ pub fn run() {
             wm_request_rename,
             wm_list_dashboards,
             wm_switch_dashboard,
+            wm_move_dashboard,
             wm_create_dashboard,
             wm_save_dashboard,
             wm_discard_dashboard,
@@ -1519,6 +1933,9 @@ pub fn run() {
             wm_set_auto_save,
             wm_duplicate_dashboard_to,
             wm_duplicate_dashboard,
+            wm_list_other_instances,
+            wm_list_remote_dashboards,
+            wm_duplicate_from_instance,
             wm_set_dashboard_default_channel,
             wm_set_dashboard_keep_alive_all,
             wm_spawn_terminal,

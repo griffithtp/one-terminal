@@ -276,9 +276,24 @@ fn spawn_or_restore(
     // ── Layout tree ───────────────────────────────────────────────────────────
     let tree = if restore {
         // Load dashboards and panels from disk for this terminal ID.
-        let t = LayoutTree::new(label, init_w, init_h);
+        let t = LayoutTree::new(label, init_w, init_h, manager.dashboards());
         if let Err(e) = t.init(app) {
             eprintln!("[restore_terminal] init failed for {label}: {e}");
+        }
+
+        // A terminal implicitly holds a lock on its own active dashboard at
+        // all times (Issue 15-D) — acquire it here as part of restore, so a
+        // terminal restored later in this same launch can't also claim the
+        // same dashboard. See `lib.rs`'s equivalent for terminal-main.
+        let active_id = t.active_dashboard_id();
+        if !active_id.is_empty() {
+            if let Err(owner) = manager.acquire_dashboard_lock(&active_id, label) {
+                eprintln!(
+                    "[restore_terminal] '{label}' startup: dashboard already locked by \
+                     '{owner}', falling back to no active dashboard"
+                );
+                t.clear_active_for_lock_conflict();
+            }
         }
         t
     } else {
@@ -289,7 +304,7 @@ fn spawn_or_restore(
                 eprintln!("[spawn_terminal] stale persist cleanup for {label}: {e}");
             }
         }
-        let t = LayoutTree::new(label, init_w, init_h);
+        let t = LayoutTree::new(label, init_w, init_h, manager.dashboards());
         t.register_app_handle(app);
         t
     };

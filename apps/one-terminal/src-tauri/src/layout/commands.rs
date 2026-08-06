@@ -490,8 +490,8 @@ pub fn wm_list_dashboards(
     window: Window,
     manager: State<'_, TerminalManager>,
 ) -> DashboardsSnapshot {
-    match manager.get(window.label()) {
-        Some(terminal) => terminal.layout_tree.dashboards_snapshot(),
+    match manager.dashboards_snapshot_for(window.label()) {
+        Some(snapshot) => snapshot,
         None => {
             eprintln!(
                 "[wm_list_dashboards] terminal '{}' not found",
@@ -504,6 +504,7 @@ pub fn wm_list_dashboards(
                 dashboards: vec![],
                 closed_dashboards: vec![],
                 parked_count: 0,
+                locked_by: Default::default(),
             }
         }
     }
@@ -526,10 +527,10 @@ pub fn wm_create_dashboard(
     let terminal = get_terminal!(manager, window);
     let created = terminal
         .layout_tree
-        .with_dashboard_store_mut(|ds| ds.create(trimmed));
+        .with_registry_mut(|r| r.create(trimmed));
     if created {
         terminal.layout_tree.persist_dashboards();
-        terminal.layout_tree.emit_dashboards(&app);
+        manager.emit_dashboards_all(&app);
     }
     Ok(created)
 }
@@ -547,7 +548,7 @@ pub fn wm_save_dashboard(window: Window, manager: State<'_, TerminalManager>, ap
         return;
     };
     terminal.layout_tree.save_dashboard();
-    terminal.layout_tree.emit_dashboards(&app);
+    manager.emit_dashboards_for(window.label(), &app);
 }
 
 /// Rename a dashboard. Returns `false` if `old_name` doesn't exist or
@@ -567,7 +568,7 @@ pub fn wm_rename_dashboard(
     let terminal = get_terminal!(manager, window);
     let renamed = terminal
         .layout_tree
-        .with_dashboard_store_mut(|ds| ds.rename(&old_name, new_trimmed.clone()));
+        .with_registry_mut(|r| r.rename(&old_name, new_trimmed.clone()));
     if renamed {
         // Keep the `parked` registry's ownership in sync — otherwise panels
         // kept alive under the old name become unreachable by
@@ -576,7 +577,7 @@ pub fn wm_rename_dashboard(
             .layout_tree
             .rename_parked_owner(&old_name, &new_trimmed);
         terminal.layout_tree.persist_dashboards();
-        terminal.layout_tree.emit_dashboards(&app);
+        manager.emit_dashboards_all(&app);
     }
     Ok(renamed)
 }
@@ -614,10 +615,20 @@ pub async fn wm_delete_dashboard(
         .ok_or_else(|| DashboardError::Other {
             message: format!("terminal '{}' not found", window.label()),
         })?;
+    let terminal_id = window.label().to_string();
+
+    let dashboard_id = terminal.layout_tree.with_registry(|r| r.id_of(&name));
+    if let Some(id) = &dashboard_id {
+        if let Some(owner_name) = manager.dashboard_lock_owner_name(id, &terminal_id) {
+            return Err(DashboardError::LockedElsewhere {
+                terminal_name: owner_name,
+            });
+        }
+    }
 
     let is_closed = terminal
         .layout_tree
-        .with_dashboard_store_mut(|ds| ds.dashboards.get(&name).map(|d| d.closed));
+        .with_registry(|r| r.dashboards.get(&name).map(|d| d.closed));
     match is_closed {
         None => return Ok(false),
         Some(false) => {
@@ -632,13 +643,25 @@ pub async fn wm_delete_dashboard(
         return Err(DashboardError::NeedsConfirm);
     }
 
-    let deleted =
-        terminal
-            .layout_tree
-            .delete_dashboard(&name, &window, &app, &cfg.panel_init_script())?;
+    let locked_elsewhere = manager.locked_dashboard_ids_excluding(&terminal_id);
+    let deleted = terminal.layout_tree.delete_dashboard(
+        &name,
+        &locked_elsewhere,
+        &window,
+        &app,
+        &cfg.panel_init_script(),
+    )?;
     if deleted {
         terminal.layout_tree.persist_dashboards();
-        terminal.layout_tree.emit_dashboards(&app);
+        // This terminal's active dashboard may have changed as a fallback
+        // (delete_dashboard picks the next open one, if any) — reconcile
+        // the lock to match (Issue 15-D).
+        manager.release_dashboard_locks_for(&terminal_id);
+        let new_active = terminal.layout_tree.active_dashboard_id();
+        if !new_active.is_empty() {
+            let _ = manager.acquire_dashboard_lock(&new_active, &terminal_id);
+        }
+        manager.emit_dashboards_all(&app);
     }
     Ok(deleted)
 }
@@ -669,18 +692,40 @@ pub async fn wm_close_dashboard(
         .ok_or_else(|| DashboardError::Other {
             message: format!("terminal '{}' not found", window.label()),
         })?;
+    let terminal_id = window.label().to_string();
+
+    let dashboard_id = terminal.layout_tree.with_registry(|r| r.id_of(&name));
+    if let Some(id) = &dashboard_id {
+        if let Some(owner_name) = manager.dashboard_lock_owner_name(id, &terminal_id) {
+            return Err(DashboardError::LockedElsewhere {
+                terminal_name: owner_name,
+            });
+        }
+    }
 
     if !force && terminal.layout_tree.dashboard_needs_confirm_close(&name) {
         return Err(DashboardError::NeedsConfirm);
     }
 
-    let closed =
-        terminal
-            .layout_tree
-            .close_dashboard(&name, &window, &app, &cfg.panel_init_script())?;
+    let locked_elsewhere = manager.locked_dashboard_ids_excluding(&terminal_id);
+    let closed = terminal.layout_tree.close_dashboard(
+        &name,
+        &locked_elsewhere,
+        &window,
+        &app,
+        &cfg.panel_init_script(),
+    )?;
     if closed {
         terminal.layout_tree.persist_dashboards();
-        terminal.layout_tree.emit_dashboards(&app);
+        // This terminal's active dashboard may have changed as a fallback
+        // (close_dashboard picks the next open one, if any) — reconcile
+        // the lock to match (Issue 15-D).
+        manager.release_dashboard_locks_for(&terminal_id);
+        let new_active = terminal.layout_tree.active_dashboard_id();
+        if !new_active.is_empty() {
+            let _ = manager.acquire_dashboard_lock(&new_active, &terminal_id);
+        }
+        manager.emit_dashboards_all(&app);
     }
     Ok(closed)
 }
@@ -699,7 +744,7 @@ pub fn wm_reopen_dashboard(
     let terminal = get_terminal!(manager, window);
     let reopened = terminal.layout_tree.reopen_dashboard(&name);
     if reopened {
-        terminal.layout_tree.emit_dashboards(&app);
+        manager.emit_dashboards_all(&app);
     }
     Ok(reopened)
 }
@@ -723,9 +768,9 @@ pub fn wm_reorder_dashboards(
     };
     terminal
         .layout_tree
-        .with_dashboard_store_mut(|ds| ds.reorder(&order));
+        .with_registry_mut(|r| r.reorder(&order));
     terminal.layout_tree.persist_dashboards();
-    terminal.layout_tree.emit_dashboards(&app);
+    manager.emit_dashboards_all(&app);
 }
 
 /// Set (or clear) the default FDC3 channel for `dashboard_name` and apply it
@@ -750,12 +795,10 @@ pub fn wm_set_dashboard_default_channel(
     }
 
     let terminal = get_terminal!(manager, window);
-    let is_active = terminal
-        .layout_tree
-        .with_dashboard_store_mut(|ds| ds.active == dashboard_name);
+    let is_active = terminal.layout_tree.is_active_dashboard(&dashboard_name);
     let found = terminal
         .layout_tree
-        .with_dashboard_store_mut(|ds| ds.set_default_channel(&dashboard_name, channel_id.clone()));
+        .with_registry_mut(|r| r.set_default_channel(&dashboard_name, channel_id.clone()));
     if !found {
         return Err(format!("dashboard '{dashboard_name}' not found"));
     }
@@ -808,12 +851,10 @@ pub fn wm_set_dashboard_keep_alive_all(
     app: AppHandle,
 ) -> Result<(), String> {
     let terminal = get_terminal!(manager, window);
-    let is_active = terminal
-        .layout_tree
-        .with_dashboard_store_mut(|ds| ds.active == dashboard_name);
+    let is_active = terminal.layout_tree.is_active_dashboard(&dashboard_name);
     let found = terminal
         .layout_tree
-        .with_dashboard_store_mut(|ds| ds.set_all_keep_alive(&dashboard_name, keep_alive));
+        .with_registry_mut(|r| r.set_all_keep_alive(&dashboard_name, keep_alive));
     if !found {
         return Err(format!("dashboard '{dashboard_name}' not found"));
     }
@@ -849,7 +890,7 @@ pub fn wm_duplicate_dashboard(
 
     let snapshot = terminal
         .layout_tree
-        .with_dashboard_store_mut(|ds| ds.dashboards.get(&name).cloned());
+        .with_registry(|r| r.dashboards.get(&name).cloned());
     let Some(mut dashboard) = snapshot else {
         return Err(format!("dashboard '{name}' not found"));
     };
@@ -858,19 +899,19 @@ pub fn wm_duplicate_dashboard(
     // not another hidden one.
     dashboard.closed = false;
 
-    let new_name = terminal.layout_tree.with_dashboard_store_mut(|ds| {
+    let new_name = terminal.layout_tree.with_registry_mut(|r| {
         let mut candidate = format!("{name} (copy)");
         let mut n = 2;
-        while ds.dashboards.contains_key(&candidate) {
+        while r.dashboards.contains_key(&candidate) {
             candidate = format!("{name} (copy {n})");
             n += 1;
         }
-        ds.create_from(candidate.clone(), dashboard);
+        r.create_from(candidate.clone(), dashboard);
         candidate
     });
 
     terminal.layout_tree.persist_dashboards();
-    terminal.layout_tree.emit_dashboards(&app);
+    manager.emit_dashboards_all(&app);
     Ok(new_name)
 }
 
@@ -888,5 +929,5 @@ pub fn wm_set_auto_save(
         return;
     };
     terminal.layout_tree.set_auto_save(enabled);
-    terminal.layout_tree.emit_dashboards(&app);
+    manager.emit_dashboards_for(window.label(), &app);
 }
