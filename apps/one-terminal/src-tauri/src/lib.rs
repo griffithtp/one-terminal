@@ -1310,7 +1310,224 @@ fn wm_duplicate_dashboard_to(
     Ok(created)
 }
 
+// ── Cross-instance dashboard duplication ──────────────────────────────────────
+//
+// Every `one-terminal` process is independent — see `terminal::instances`'s
+// doc comment. These three commands are the only way one process ever reads
+// another's state, and only for this one purpose: browsing another running
+// instance's open dashboards and pulling a copy of one into this instance's
+// own registry. The source instance's copy is never touched.
+
+/// This process's own random identity for cross-instance discovery — Tauri
+/// managed state, set once in `run()` before `.setup()`. Used to exclude
+/// this process from its own `wm_list_other_instances` results.
+struct InstanceId(String);
+
+/// Bind the discovery IPC listener on an OS-assigned ephemeral port and
+/// register this process in `<data_dir>/instances/` so other running
+/// instances can find it (see `terminal::instances`). Best-effort: if the
+/// bind fails for some reason, this instance just won't be discoverable by
+/// others — nothing else about it is affected.
+fn start_instance_discovery(manager: TerminalManager, instance_id: String, data_dir: std::path::PathBuf) {
+    let listener = match std::net::TcpListener::bind(("127.0.0.1", 0)) {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("[wm] instance discovery listener failed to bind: {e}");
+            return;
+        }
+    };
+    let port = match listener.local_addr() {
+        Ok(addr) => addr.port(),
+        Err(e) => {
+            eprintln!("[wm] instance discovery: could not read bound port: {e}");
+            return;
+        }
+    };
+
+    let record = terminal::instances::InstanceRecord {
+        id: instance_id,
+        port,
+    };
+    if let Err(e) = terminal::instances::register_self(&data_dir, &record) {
+        eprintln!("[wm] failed to register instance for discovery: {e}");
+    }
+
+    std::thread::spawn(move || {
+        for stream in listener.incoming() {
+            let Ok(mut stream) = stream else { continue };
+            let manager = manager.clone();
+            std::thread::spawn(move || {
+                use std::io::{BufRead, BufReader, Write};
+                let Ok(cloned) = stream.try_clone() else {
+                    return;
+                };
+                let mut reader = BufReader::new(cloned);
+                let mut line = String::new();
+                if reader.read_line(&mut line).is_err() {
+                    return;
+                }
+                let line = line.trim();
+                let reply = if line == "list" {
+                    let names = manager.dashboards().read().unwrap().list();
+                    serde_json::json!({ "dashboards": names }).to_string()
+                } else if let Some(name) = line.strip_prefix("get ") {
+                    let dashboard = manager
+                        .dashboards()
+                        .read()
+                        .unwrap()
+                        .dashboards
+                        .get(name)
+                        .cloned();
+                    match dashboard {
+                        Some(d) => serde_json::json!({ "dashboard": d }).to_string(),
+                        None => serde_json::json!({ "error": "not found" }).to_string(),
+                    }
+                } else if line == "info" {
+                    serde_json::json!({ "label": instance_label(&manager) }).to_string()
+                } else {
+                    serde_json::json!({ "error": format!("unknown command {line:?}") }).to_string()
+                };
+                let _ = stream.write_all(format!("{reply}\n").as_bytes());
+            });
+        }
+    });
+}
+
+/// Human-readable, freshly-computed label for this process, shown in
+/// another instance's "duplicate from another Terminal" picker (`info`
+/// request, above). Built from `terminal-main`'s current active dashboard
+/// (every process has exactly this one window unless something explicitly
+/// opened more via `wm_spawn_terminal`) plus the total open-dashboard count
+/// and this process's pid, so two instances are never indistinguishable
+/// even if their active dashboards happen to share a name.
+fn instance_label(manager: &TerminalManager) -> String {
+    let pid = std::process::id();
+    let total = manager.dashboards().read().unwrap().list().len();
+    let active = manager
+        .get(WIN)
+        .map(|t| t.layout_tree.dashboards_snapshot())
+        .map(|s| s.active)
+        .filter(|a| !a.is_empty());
+
+    match active {
+        Some(name) if total > 1 => format!("{name} (+{} more) — pid {pid}", total - 1),
+        Some(name) => format!("{name} — pid {pid}"),
+        None if total > 0 => format!("{total} dashboard(s), none active — pid {pid}"),
+        None => format!("No dashboards — pid {pid}"),
+    }
+}
+
+/// Descriptor for another running `one-terminal` process, as shown in the
+/// "duplicate from another Terminal" picker.
+#[derive(Clone, Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RemoteInstance {
+    id: String,
+    label: String,
+}
+
+/// List every other currently-running `one-terminal` instance on this
+/// machine (excluding this process itself).
+#[tauri::command]
+fn wm_list_other_instances(
+    app: AppHandle,
+    instance_id: State<'_, InstanceId>,
+) -> Result<Vec<RemoteInstance>, String> {
+    let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let records = terminal::instances::list_instances(&data_dir, &instance_id.0);
+    Ok(records
+        .into_iter()
+        .map(|r| RemoteInstance {
+            id: r.id,
+            label: r.label,
+        })
+        .collect())
+}
+
+/// List the open dashboard names in another running instance, identified by
+/// the id returned from `wm_list_other_instances`.
+#[tauri::command]
+fn wm_list_remote_dashboards(instance_id: String, app: AppHandle) -> Result<Vec<String>, String> {
+    let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let record = terminal::instances::resolve(&data_dir, &instance_id)
+        .ok_or_else(|| "that Terminal instance is no longer running".to_string())?;
+    let reply = terminal::instances::request(record.port, "list")?;
+    let parsed: serde_json::Value = serde_json::from_str(&reply).map_err(|e| e.to_string())?;
+    let names = parsed
+        .get("dashboards")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| "malformed reply from remote instance".to_string())?
+        .iter()
+        .filter_map(|v| v.as_str().map(str::to_string))
+        .collect();
+    Ok(names)
+}
+
+/// Pull `name` from another running instance and add it to *this* instance's
+/// own registry as an independent copy — the source instance and its own
+/// copy of the dashboard are completely unaffected. Returns the name the
+/// copy was actually stored under (disambiguated on collision, same
+/// `" (copy)"` / `" (copy N)"` convention as `wm_duplicate_dashboard`).
+#[tauri::command]
+fn wm_duplicate_from_instance(
+    instance_id: String,
+    name: String,
+    window: Window,
+    manager: State<'_, TerminalManager>,
+    app: AppHandle,
+) -> Result<String, String> {
+    let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let record = terminal::instances::resolve(&data_dir, &instance_id)
+        .ok_or_else(|| "that Terminal instance is no longer running".to_string())?;
+    let reply = terminal::instances::request(record.port, &format!("get {name}"))?;
+    let parsed: serde_json::Value = serde_json::from_str(&reply).map_err(|e| e.to_string())?;
+    if let Some(err) = parsed.get("error").and_then(|v| v.as_str()) {
+        return Err(err.to_string());
+    }
+    let dashboard: layout::dashboard::PersistedDashboard = serde_json::from_value(
+        parsed
+            .get("dashboard")
+            .cloned()
+            .ok_or_else(|| "malformed reply from remote instance".to_string())?,
+    )
+    .map_err(|e| e.to_string())?;
+
+    let terminal = get_terminal!(manager, window);
+    let new_name = terminal.layout_tree.with_registry_mut(|r| {
+        let mut candidate = name.clone();
+        if r.dashboards.contains_key(&candidate) {
+            candidate = format!("{name} (copy)");
+            let mut n = 2;
+            while r.dashboards.contains_key(&candidate) {
+                candidate = format!("{name} (copy {n})");
+                n += 1;
+            }
+        }
+        r.create_from(candidate.clone(), dashboard);
+        candidate
+    });
+    terminal.layout_tree.persist_dashboards();
+    manager.emit_dashboards_all(&app);
+    Ok(new_name)
+}
+
 // ── Terminal lifecycle commands ───────────────────────────────────────────────
+
+/// Spawn a brand-new Terminal window (zero dashboards) in this process and
+/// register it in the `TerminalManager`.
+fn open_new_window(
+    manager: &TerminalManager,
+    app: &AppHandle,
+) -> Result<terminal::state::TerminalInfo, String> {
+    let label = manager.next_label();
+    let pool_size = std::env::var("OT_WEBVIEW_POOL_SIZE")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(1);
+    let info = terminal::spawn::spawn_terminal(&label, None, manager, app, pool_size, None)?;
+    manager.emit_terminals(app);
+    Ok(info)
+}
 
 /// Spawn a brand-new Terminal window with zero dashboards and register it in
 /// the TerminalManager. Called from the Desktop Agent tray "Open New Terminal"
@@ -1320,14 +1537,7 @@ fn wm_spawn_terminal(
     manager: State<'_, TerminalManager>,
     app: AppHandle,
 ) -> Result<terminal::state::TerminalInfo, String> {
-    let label = manager.next_label();
-    let pool_size = std::env::var("OT_WEBVIEW_POOL_SIZE")
-        .ok()
-        .and_then(|v| v.parse::<usize>().ok())
-        .unwrap_or(1);
-    let info = terminal::spawn::spawn_terminal(&label, None, &manager, &app, pool_size, None)?;
-    manager.emit_terminals(&app);
-    Ok(info)
+    open_new_window(&manager, &app)
 }
 
 /// Return the window labels of all saved non-main terminals by scanning the
@@ -1397,6 +1607,7 @@ pub fn run() {
         .and_then(|v| v.parse::<usize>().ok())
         .unwrap_or(1);
     let pool = WebviewPool::new(pool_size);
+    let instance_id = uuid::Uuid::new_v4().to_string();
     println!(
         "[wm] engine: {}@{} (runtime={:?})",
         identity.binding.family.as_dir(),
@@ -1421,6 +1632,7 @@ pub fn run() {
         .manage(identity.clone())
         .manage(manager.clone())
         .manage(cfg.clone())
+        .manage(InstanceId(instance_id.clone()))
         .setup(move |app| {
             // ── Load the shared dashboard registry ──────────────────────────
             // Must happen before any `LayoutTree::init` below, which resolves
@@ -1431,6 +1643,15 @@ pub fn run() {
                 if let Ok(data_dir) = app.path().app_data_dir() {
                     manager.load_dashboards_registry(&data_dir);
                 }
+            }
+
+            // ── Cross-instance discovery ────────────────────────────────────
+            // Lets another running instance find this one to pull a
+            // dashboard copy from it (wm_duplicate_from_instance) — see
+            // `terminal::instances`'s doc comment for why instances stay
+            // independent rather than sharing one process.
+            if let Ok(data_dir) = app.path().app_data_dir() {
+                start_instance_discovery(manager.clone(), instance_id.clone(), data_dir);
             }
 
             // ── Load persisted layout state ───────────────────────────────
@@ -1702,6 +1923,9 @@ pub fn run() {
             wm_set_auto_save,
             wm_duplicate_dashboard_to,
             wm_duplicate_dashboard,
+            wm_list_other_instances,
+            wm_list_remote_dashboards,
+            wm_duplicate_from_instance,
             wm_set_dashboard_default_channel,
             wm_set_dashboard_keep_alive_all,
             wm_spawn_terminal,

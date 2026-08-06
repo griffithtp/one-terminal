@@ -2,6 +2,58 @@
   "schemaVersion": 1,
   "versions": [
     {
+      "version": "0.1.12",
+      "releaseDate": "2026-08-02",
+      "breaking": true,
+      "changelogUrl": "https://github.com/one-terminal/one-terminal/releases/tag/v0.1.12",
+      "migrations": [
+        {
+          "type": "structural",
+          "id": "shared-dashboard-registry",
+          "target": "apps/one-terminal/src-tauri/src/layout/dashboard.rs",
+          "description": "Plan 15 — dashboards move from N per-Terminal lists to one process-wide shared registry (DashboardRegistry + DashboardSession split, stable dashboard ids, cross-window live sync, an in-memory active-dashboard exclusivity lock, and Duplicate/Move-here actions for a dashboard locked elsewhere). Replaces 7 backend files wholesale — they must all land together, since a partial apply will not compile. The on-disk data migration itself (merging each existing terminals/<id>/dashboards.json into one shared dashboards.json, disambiguating any name collisions) is NOT a scaffolder step: it runs automatically, once, the first time the upgraded app launches (TerminalManager::load_dashboards_registry / persist::load_or_migrate_registry) — nothing manual required here.",
+          "appliesTo": "both",
+          "operations": [
+            {
+              "op": "add-file",
+              "sourcePath": "apps/one-terminal/src-tauri/src/layout/dashboard.rs",
+              "targetPath": "apps/one-terminal/src-tauri/src/layout/dashboard.rs"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "apps/one-terminal/src-tauri/src/layout/store.rs",
+              "targetPath": "apps/one-terminal/src-tauri/src/layout/store.rs"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "apps/one-terminal/src-tauri/src/layout/persist.rs",
+              "targetPath": "apps/one-terminal/src-tauri/src/layout/persist.rs"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "apps/one-terminal/src-tauri/src/layout/commands.rs",
+              "targetPath": "apps/one-terminal/src-tauri/src/layout/commands.rs"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "apps/one-terminal/src-tauri/src/terminal/manager.rs",
+              "targetPath": "apps/one-terminal/src-tauri/src/terminal/manager.rs"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "apps/one-terminal/src-tauri/src/terminal/spawn.rs",
+              "targetPath": "apps/one-terminal/src-tauri/src/terminal/spawn.rs"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "apps/one-terminal/src-tauri/src/lib.rs",
+              "targetPath": "apps/one-terminal/src-tauri/src/lib.rs"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "version": "0.1.11",
       "releaseDate": "2026-07-16",
       "breaking": false,

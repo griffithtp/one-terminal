@@ -20,6 +20,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import type { UseDashboardsResult } from "../../hooks/useDashboards";
 import "./DashboardsSection.css";
 
@@ -317,6 +318,141 @@ export function DashboardsSection({ ds }: Props) {
           </ul>
         </section>
       )}
+
+      <CrossInstanceImport />
     </div>
+  );
+}
+
+// ── Cross-instance import ───────────────────────────────────────────────────
+//
+// Each Terminal window may belong to a completely separate OS process (see
+// `apps/one-terminal/src-tauri/src/terminal/instances.rs`) — there's no
+// shared registry across processes. This lets the user browse another
+// running instance's open dashboards and pull an independent copy of one
+// into *this* instance, without touching the source instance at all.
+
+interface RemoteInstance {
+  id: string;
+  label: string;
+}
+
+function CrossInstanceImport() {
+  const [instances, setInstances] = useState<RemoteInstance[]>([]);
+  const [selectedId, setSelectedId] = useState("");
+  const [remoteDashboards, setRemoteDashboards] = useState<string[]>([]);
+  const [loadingInstances, setLoadingInstances] = useState(false);
+  const [loadingDashboards, setLoadingDashboards] = useState(false);
+  const [duplicating, setDuplicating] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const refreshInstances = useCallback(() => {
+    setLoadingInstances(true);
+    setError(null);
+    invoke<RemoteInstance[]>("wm_list_other_instances")
+      .then((list) => {
+        setInstances(list);
+        setSelectedId((prev) => (list.some((i) => i.id === prev) ? prev : ""));
+      })
+      .catch((e) => setError(String(e)))
+      .finally(() => setLoadingInstances(false));
+  }, []);
+
+  useEffect(() => {
+    refreshInstances();
+  }, [refreshInstances]);
+
+  useEffect(() => {
+    if (!selectedId) {
+      setRemoteDashboards([]);
+      return;
+    }
+    setLoadingDashboards(true);
+    setError(null);
+    invoke<string[]>("wm_list_remote_dashboards", { instanceId: selectedId })
+      .then(setRemoteDashboards)
+      .catch((e) => setError(String(e)))
+      .finally(() => setLoadingDashboards(false));
+  }, [selectedId]);
+
+  const duplicate = useCallback(
+    (name: string) => {
+      if (!selectedId) return;
+      setDuplicating(name);
+      setError(null);
+      invoke("wm_duplicate_from_instance", { instanceId: selectedId, name })
+        .catch((e) => setError(String(e)))
+        .finally(() => setDuplicating(null));
+    },
+    [selectedId]
+  );
+
+  return (
+    <section className="ot-dashboards__cross-instance">
+      <h3 className="ot-dashboards__closed-title">Duplicate from another Terminal</h3>
+
+      {instances.length === 0 ? (
+        <p className="ot-dashboards__subtitle">
+          {loadingInstances
+            ? "Looking for other running Terminal instances…"
+            : "No other Terminal instances are currently running."}
+        </p>
+      ) : (
+        <>
+          <div className="ot-dashboards__row">
+            <select
+              className="ot-dashboards__input"
+              value={selectedId}
+              onChange={(e) => setSelectedId(e.target.value)}
+            >
+              <option value="">Select an instance…</option>
+              {instances.map((i) => (
+                <option key={i.id} value={i.id}>
+                  {i.label}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="ot-dashboards__btn"
+              onClick={refreshInstances}
+              disabled={loadingInstances}
+            >
+              Refresh
+            </button>
+          </div>
+
+          {selectedId && (
+            <ul className="ot-dashboards__list">
+              {loadingDashboards ? (
+                <li className="ot-dashboards__empty">Loading…</li>
+              ) : remoteDashboards.length === 0 ? (
+                <li className="ot-dashboards__empty">That instance has no open dashboards.</li>
+              ) : (
+                remoteDashboards.map((name) => (
+                  <li key={name} className="ot-dashboards__item">
+                    <span className="ot-dashboards__item-head">
+                      <span className="ot-dashboards__closed-name">{name}</span>
+                    </span>
+                    <span className="ot-dashboards__item-actions">
+                      <button
+                        type="button"
+                        className="ot-dashboards__btn ot-dashboards__btn--primary"
+                        onClick={() => duplicate(name)}
+                        disabled={duplicating === name}
+                      >
+                        {duplicating === name ? "Duplicating…" : "Duplicate"}
+                      </button>
+                    </span>
+                  </li>
+                ))
+              )}
+            </ul>
+          )}
+        </>
+      )}
+
+      {error && <p className="ot-dashboards__error">{error}</p>}
+    </section>
   );
 }

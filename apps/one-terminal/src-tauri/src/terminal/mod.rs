@@ -10,6 +10,7 @@
 //! private to `lib.rs` are defined here so they can be shared between the
 //! command layer and `TerminalState`.
 
+pub mod instances;
 pub mod manager;
 pub mod spawn;
 pub mod state;
