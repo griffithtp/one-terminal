@@ -472,7 +472,8 @@ pub fn load_terminal(data_dir: &Path) -> Option<TerminalPersist> {
                 auto_save: true,
                 ..Default::default()
             };
-            if save_registry(data_dir, &registry).is_ok() && save_terminal(&persist, data_dir).is_ok()
+            if save_registry(data_dir, &registry).is_ok()
+                && save_terminal(&persist, data_dir).is_ok()
             {
                 let _ = std::fs::remove_file(&old_path);
                 eprintln!("[layout] migrated layout.json → dashboards.json");
@@ -506,7 +507,12 @@ mod tests {
     /// shape, with `dashboards` embedded, that `load_or_migrate_registry`
     /// must be able to read even though the current `TerminalPersist` no
     /// longer has that field.
-    fn write_legacy_terminal(data_dir: &Path, dir_name: &str, name: &str, dashboard_names: &[&str]) {
+    fn write_legacy_terminal(
+        data_dir: &Path,
+        dir_name: &str,
+        name: &str,
+        dashboard_names: &[&str],
+    ) {
         let dir = data_dir.join("terminals").join(dir_name);
         std::fs::create_dir_all(&dir).unwrap();
         let dashboards_json: Vec<String> = dashboard_names
@@ -538,7 +544,11 @@ mod tests {
         write_legacy_terminal(&data_dir, "main", "", &["Trading", "Research"]);
 
         let registry = load_or_migrate_registry(&data_dir);
-        let names: Vec<&str> = registry.dashboards.iter().map(|d| d.name.as_str()).collect();
+        let names: Vec<&str> = registry
+            .dashboards
+            .iter()
+            .map(|d| d.name.as_str())
+            .collect();
         assert_eq!(
             names,
             vec!["Trading", "Research"],
@@ -563,7 +573,11 @@ mod tests {
             "both same-named dashboards must survive under distinct names"
         );
 
-        let names: Vec<&str> = registry.dashboards.iter().map(|d| d.name.as_str()).collect();
+        let names: Vec<&str> = registry
+            .dashboards
+            .iter()
+            .map(|d| d.name.as_str())
+            .collect();
         assert!(names.contains(&"Main"));
         assert!(
             names.iter().any(|n| n.starts_with("Main (from")),

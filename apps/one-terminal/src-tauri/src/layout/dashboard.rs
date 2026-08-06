@@ -253,7 +253,10 @@ impl DashboardRegistry {
     /// exact two-windows-same-dashboard conflict the lock exists to
     /// prevent. Pass an empty set if lock state isn't relevant (e.g. a
     /// single-window context).
-    pub fn first_open_name_excluding(&self, locked_elsewhere: &std::collections::HashSet<String>) -> Option<String> {
+    pub fn first_open_name_excluding(
+        &self,
+        locked_elsewhere: &std::collections::HashSet<String>,
+    ) -> Option<String> {
         self.dashboards
             .iter()
             .find(|(_, d)| !d.closed && !locked_elsewhere.contains(&d.id))
@@ -457,7 +460,10 @@ impl DashboardRegistry {
     /// duplicated per terminal). Callers that do a full write use
     /// `persist::save_terminal_dashboards`, which read-modify-writes the
     /// file so that `name` and `window` are preserved.
-    pub fn to_terminal_persist(&self, session: &DashboardSession) -> super::persist::TerminalPersist {
+    pub fn to_terminal_persist(
+        &self,
+        session: &DashboardSession,
+    ) -> super::persist::TerminalPersist {
         super::persist::TerminalPersist {
             active_dashboard: self.name_of(&session.active).unwrap_or_default(),
             auto_save: session.auto_save,
@@ -564,7 +570,10 @@ mod tests {
 
         let id_after = registry.id_of("Trading (EU)").unwrap();
         assert_eq!(id_before, id_after, "rename must not change identity");
-        assert!(registry.id_of("Trading").is_none(), "old name should no longer resolve");
+        assert!(
+            registry.id_of("Trading").is_none(),
+            "old name should no longer resolve"
+        );
         assert_eq!(registry.name_of(&id_after).as_deref(), Some("Trading (EU)"));
     }
 
@@ -598,7 +607,10 @@ mod tests {
         assert!(registry.create_from("Trading (copy)".to_string(), source));
 
         let copy_id = registry.id_of("Trading (copy)").unwrap();
-        assert_ne!(copy_id, source_id, "duplicate must not reuse the source's identity");
+        assert_ne!(
+            copy_id, source_id,
+            "duplicate must not reuse the source's identity"
+        );
     }
 
     #[test]

@@ -227,15 +227,18 @@ export function useDashboards(): UseDashboardsResult {
   // Both are reachable from wherever `lockConflict` is rendered — a blocked
   // switch/close/delete isn't a dead end.
 
-  const duplicateHere = useCallback(async (name: string) => {
-    try {
-      const newName = await invoke<string>("wm_duplicate_dashboard", { name });
-      setLockConflict(null);
-      await switchTo(newName);
-    } catch (e) {
-      console.error("[dashboards] duplicate:", e);
-    }
-  }, [switchTo]);
+  const duplicateHere = useCallback(
+    async (name: string) => {
+      try {
+        const newName = await invoke<string>("wm_duplicate_dashboard", { name });
+        setLockConflict(null);
+        await switchTo(newName);
+      } catch (e) {
+        console.error("[dashboards] duplicate:", e);
+      }
+    },
+    [switchTo]
+  );
 
   const performMove = useCallback(async (name: string, forceDiscard: boolean) => {
     try {

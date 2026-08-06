@@ -47,8 +47,16 @@ interface Props {
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function DashboardSwitcher({ ds, onManageDashboards }: Props) {
-  const { dashboards, switchTo, parkedCount, rename, lockConflict, clearLockConflict, duplicateHere, moveHere } =
-    ds;
+  const {
+    dashboards,
+    switchTo,
+    parkedCount,
+    rename,
+    lockConflict,
+    clearLockConflict,
+    duplicateHere,
+    moveHere,
+  } = ds;
 
   const [renamingName, setRenamingName] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");

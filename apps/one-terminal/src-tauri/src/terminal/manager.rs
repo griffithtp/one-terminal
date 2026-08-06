@@ -230,7 +230,11 @@ impl TerminalManager {
     /// Returns `Err(owning_terminal_name)` if `dashboard_id` is already
     /// locked by a *different* terminal. Re-acquiring a lock this same
     /// terminal already holds is a no-op success.
-    pub fn acquire_dashboard_lock(&self, dashboard_id: &str, terminal_id: &str) -> Result<(), String> {
+    pub fn acquire_dashboard_lock(
+        &self,
+        dashboard_id: &str,
+        terminal_id: &str,
+    ) -> Result<(), String> {
         let mut inner = self.inner.write().unwrap();
         if !dashboard_id.is_empty() {
             if let Some(owner) = inner.active_locks.get(dashboard_id) {
@@ -371,7 +375,9 @@ mod tests {
         test_terminal(&manager, "terminal-a", "Terminal A");
         test_terminal(&manager, "terminal-b", "Terminal B");
 
-        manager.acquire_dashboard_lock("dash-1", "terminal-a").unwrap();
+        manager
+            .acquire_dashboard_lock("dash-1", "terminal-a")
+            .unwrap();
 
         let err = manager
             .acquire_dashboard_lock("dash-1", "terminal-b")
@@ -383,7 +389,9 @@ mod tests {
     fn closing_releases_the_lock_immediately() {
         let manager = TerminalManager::new();
         test_terminal(&manager, "terminal-a", "Terminal A");
-        manager.acquire_dashboard_lock("dash-1", "terminal-a").unwrap();
+        manager
+            .acquire_dashboard_lock("dash-1", "terminal-a")
+            .unwrap();
 
         manager.release_dashboard_locks_for("terminal-a");
 
@@ -399,16 +407,24 @@ mod tests {
     fn reacquiring_ones_own_lock_is_a_no_op() {
         let manager = TerminalManager::new();
         test_terminal(&manager, "terminal-a", "Terminal A");
-        manager.acquire_dashboard_lock("dash-1", "terminal-a").unwrap();
-        assert!(manager.acquire_dashboard_lock("dash-1", "terminal-a").is_ok());
+        manager
+            .acquire_dashboard_lock("dash-1", "terminal-a")
+            .unwrap();
+        assert!(manager
+            .acquire_dashboard_lock("dash-1", "terminal-a")
+            .is_ok());
     }
 
     #[test]
     fn a_terminal_only_ever_holds_one_lock_at_a_time() {
         let manager = TerminalManager::new();
         test_terminal(&manager, "terminal-a", "Terminal A");
-        manager.acquire_dashboard_lock("dash-1", "terminal-a").unwrap();
-        manager.acquire_dashboard_lock("dash-2", "terminal-a").unwrap();
+        manager
+            .acquire_dashboard_lock("dash-1", "terminal-a")
+            .unwrap();
+        manager
+            .acquire_dashboard_lock("dash-2", "terminal-a")
+            .unwrap();
 
         assert!(
             manager
@@ -426,7 +442,9 @@ mod tests {
     fn empty_dashboard_id_is_never_locked() {
         let manager = TerminalManager::new();
         test_terminal(&manager, "terminal-a", "Terminal A");
-        manager.acquire_dashboard_lock("dash-1", "terminal-a").unwrap();
+        manager
+            .acquire_dashboard_lock("dash-1", "terminal-a")
+            .unwrap();
         // Switching to "no active dashboard" must release the prior lock.
         manager.acquire_dashboard_lock("", "terminal-a").unwrap();
 
@@ -440,8 +458,12 @@ mod tests {
         let manager = TerminalManager::new();
         test_terminal(&manager, "terminal-a", "Terminal A");
         test_terminal(&manager, "terminal-b", "Terminal B");
-        manager.acquire_dashboard_lock("dash-1", "terminal-a").unwrap();
-        manager.acquire_dashboard_lock("dash-2", "terminal-b").unwrap();
+        manager
+            .acquire_dashboard_lock("dash-1", "terminal-a")
+            .unwrap();
+        manager
+            .acquire_dashboard_lock("dash-2", "terminal-b")
+            .unwrap();
 
         let excluding_a = manager.locked_dashboard_ids_excluding("terminal-a");
         assert!(excluding_a.contains("dash-2"));
@@ -460,7 +482,9 @@ mod tests {
             registry.create("Trading".to_string());
             registry.id_of("Trading").unwrap()
         };
-        manager.acquire_dashboard_lock(&dash_id, "terminal-a").unwrap();
+        manager
+            .acquire_dashboard_lock(&dash_id, "terminal-a")
+            .unwrap();
 
         // Window B sees "Trading" locked by Terminal A.
         let snap_b = manager.dashboards_snapshot_for("terminal-b").unwrap();

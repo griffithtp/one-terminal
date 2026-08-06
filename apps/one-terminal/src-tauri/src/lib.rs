@@ -1064,9 +1064,10 @@ async fn wm_switch_dashboard(
         }
     }
 
-    if let Err(e) = terminal
-        .layout_tree
-        .switch_dashboard(&name, &window, &app, &cfg.panel_init_script())
+    if let Err(e) =
+        terminal
+            .layout_tree
+            .switch_dashboard(&name, &window, &app, &cfg.panel_init_script())
     {
         // The switch didn't actually happen (e.g. NeedsConfirm) — restore
         // whatever this terminal's lock state was before we reserved the
@@ -1129,12 +1130,16 @@ async fn wm_move_dashboard(
     // active dashboard does.
     if let Some(owner_id) = manager.dashboard_owner_id(&target_id) {
         if owner_id != terminal_id {
-            let owner_terminal = manager.get(&owner_id).ok_or_else(|| DashboardError::Other {
-                message: format!("owning terminal '{owner_id}' not found"),
-            })?;
-            let owner_window = app.get_window(&owner_id).ok_or_else(|| DashboardError::Other {
-                message: format!("window '{owner_id}' not found"),
-            })?;
+            let owner_terminal = manager
+                .get(&owner_id)
+                .ok_or_else(|| DashboardError::Other {
+                    message: format!("owning terminal '{owner_id}' not found"),
+                })?;
+            let owner_window = app
+                .get_window(&owner_id)
+                .ok_or_else(|| DashboardError::Other {
+                    message: format!("window '{owner_id}' not found"),
+                })?;
 
             if owner_terminal.layout_tree.session_dirty() {
                 if !force_discard {
@@ -1179,9 +1184,10 @@ async fn wm_move_dashboard(
             terminal_name: owner_name,
         });
     }
-    if let Err(e) = terminal
-        .layout_tree
-        .switch_dashboard(&name, &window, &app, &cfg.panel_init_script())
+    if let Err(e) =
+        terminal
+            .layout_tree
+            .switch_dashboard(&name, &window, &app, &cfg.panel_init_script())
     {
         if !previous_active_id.is_empty() {
             let _ = manager.acquire_dashboard_lock(&previous_active_id, &terminal_id);
@@ -1328,7 +1334,11 @@ struct InstanceId(String);
 /// instances can find it (see `terminal::instances`). Best-effort: if the
 /// bind fails for some reason, this instance just won't be discoverable by
 /// others — nothing else about it is affected.
-fn start_instance_discovery(manager: TerminalManager, instance_id: String, data_dir: std::path::PathBuf) {
+fn start_instance_discovery(
+    manager: TerminalManager,
+    instance_id: String,
+    data_dir: std::path::PathBuf,
+) {
     let listener = match std::net::TcpListener::bind(("127.0.0.1", 0)) {
         Ok(l) => l,
         Err(e) => {

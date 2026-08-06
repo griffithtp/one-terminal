@@ -1051,7 +1051,10 @@ impl LayoutTree {
         let (terminal_persist, registry_persist) = {
             let registry = self.dashboards.read().unwrap();
             let session = self.session.read().unwrap();
-            (registry.to_terminal_persist(&session), registry.to_persisted())
+            (
+                registry.to_terminal_persist(&session),
+                registry.to_persisted(),
+            )
         };
         if let Ok(data_dir) = app.path().app_data_dir() {
             let tid = self.terminal_id.to_string();
@@ -1147,7 +1150,10 @@ impl LayoutTree {
             let mut session = self.session.write().unwrap();
             registry.snapshot_current(&session.active, layout);
             session.dirty = false;
-            (registry.to_terminal_persist(&session), registry.to_persisted())
+            (
+                registry.to_terminal_persist(&session),
+                registry.to_persisted(),
+            )
         };
         let Some(app) = self.app.get() else { return };
         if let Ok(data_dir) = app.path().app_data_dir() {
@@ -1869,7 +1875,10 @@ impl LayoutTree {
             let mut registry = self.dashboards.write().unwrap();
             let session = self.session.read().unwrap();
             registry.snapshot_current(&session.active, layout);
-            (registry.to_terminal_persist(&session), registry.to_persisted())
+            (
+                registry.to_terminal_persist(&session),
+                registry.to_persisted(),
+            )
         };
 
         let terminal_id = self.terminal_id.to_string();

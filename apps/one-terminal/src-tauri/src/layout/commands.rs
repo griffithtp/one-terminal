@@ -525,7 +525,9 @@ pub fn wm_create_dashboard(
         return Err("dashboard name must not be empty".into());
     }
     let terminal = get_terminal!(manager, window);
-    let created = terminal.layout_tree.with_registry_mut(|r| r.create(trimmed));
+    let created = terminal
+        .layout_tree
+        .with_registry_mut(|r| r.create(trimmed));
     if created {
         terminal.layout_tree.persist_dashboards();
         manager.emit_dashboards_all(&app);
@@ -764,7 +766,9 @@ pub fn wm_reorder_dashboards(
         );
         return;
     };
-    terminal.layout_tree.with_registry_mut(|r| r.reorder(&order));
+    terminal
+        .layout_tree
+        .with_registry_mut(|r| r.reorder(&order));
     terminal.layout_tree.persist_dashboards();
     manager.emit_dashboards_all(&app);
 }
