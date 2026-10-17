@@ -369,7 +369,7 @@ try {
     await joinChannel(channelSel.value);
   }
 } catch (e) {
-  setStatus('CDA unavailable', 'error');
+  setStatus(e.message?.includes('NoAgentConfigured') ? 'No FDC3 agent configured' : 'CDA unavailable', 'error');
   addLog('✗', `Connection failed: ${e.message}`);
 }
 

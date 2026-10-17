@@ -53,16 +53,24 @@ impl Default for LayoutConfig {
 
 // ── FDC3 client configuration ─────────────────────────────────────────────────
 // Standalone scaffolds set `agent_url` to an external FDC3 agent's WS endpoint.
-// Enterprise scaffolds leave it empty — fdc3-plugin falls back to the bundled
-// Desktop Agent's bus at the OT_FDC3_BUS_URL default.
+// Enterprise scaffolds omit it — nothing is injected and fdc3-plugin falls back
+// to the bundled Desktop Agent's bus (ws://localhost:7891/fdc3).
+
+/// fdc3-plugin's built-in fallback when no agent URL is injected. Used only
+/// for the startup log line; the plugin owns the actual default.
+const PLUGIN_DEFAULT_AGENT_URL: &str = "ws://localhost:7891/fdc3";
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Fdc3Config {
-    /// External FDC3 agent WebSocket URL. Empty string means "no agent
-    /// configured" — widgets that call `getAgent()` get NoAgentConfigured.
-    #[serde(default)]
-    pub agent_url: String,
+    /// External FDC3 agent WebSocket URL.
+    /// - `None` (key absent): nothing injected; fdc3-plugin uses its default
+    ///   resolution chain (meta tag → `OT_FDC3_BUS_URL` → localhost:7891).
+    /// - `Some("")`: FDC3 explicitly disabled — `connect()` rejects with
+    ///   NoAgentConfigured.
+    /// - `Some(url)`: widgets connect to `url`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_url: Option<String>,
 }
 
 // ── Widget source ─────────────────────────────────────────────────────────────
@@ -135,7 +143,23 @@ impl TerminalConfig {
     /// the Tauri resource directory (release), then apply env var overrides.
     pub fn load() -> Self {
         let mut cfg = Self::from_file().unwrap_or_default();
+        let agent_url_in_file = cfg.fdc3.agent_url.is_some();
         cfg.apply_env_overrides();
+        let source = if std::env::var_os("OT_FDC3_AGENT_URL").is_some() {
+            "env OT_FDC3_AGENT_URL"
+        } else if agent_url_in_file {
+            "terminal.config.json"
+        } else {
+            "fdc3-plugin default"
+        };
+        match cfg.fdc3.agent_url.as_deref() {
+            None => println!("[config] fdc3.agentUrl = {PLUGIN_DEFAULT_AGENT_URL} (source: {source})"),
+            Some("") => eprintln!(
+                "[config] fdc3.agentUrl = \"\" (source: {source}) — FDC3 disabled for all widgets; \
+                 remove the key or set a ws:// URL to enable"
+            ),
+            Some(url) => println!("[config] fdc3.agentUrl = {url} (source: {source})"),
+        }
         cfg
     }
 
@@ -202,7 +226,7 @@ impl TerminalConfig {
             self.local_widgets_path = v;
         }
         if let Ok(v) = std::env::var("OT_FDC3_AGENT_URL") {
-            self.fdc3.agent_url = v;
+            self.fdc3.agent_url = Some(v);
         }
         if let Ok(v) = std::env::var("OT_WINDOW_WIDTH") {
             if let Ok(n) = v.parse() {
@@ -218,12 +242,17 @@ impl TerminalConfig {
 
     /// JS to inject into every panel webview before page load. Exposes the
     /// configured FDC3 agent URL on `window.OT_FDC3_AGENT_URL` so the
-    /// browser-side fdc3-plugin can pick it up.
+    /// browser-side fdc3-plugin can pick it up. When `agent_url` is unset the
+    /// variable is left undefined so the plugin uses its own default chain.
     pub fn panel_init_script(&self) -> String {
-        // JSON-encode the string to handle quotes/backslashes safely.
-        let encoded =
-            serde_json::to_string(&self.fdc3.agent_url).unwrap_or_else(|_| "\"\"".to_string());
-        format!("window.OT_FDC3_AGENT_URL = {encoded};")
+        match &self.fdc3.agent_url {
+            None => String::new(),
+            Some(url) => {
+                // JSON-encode the string to handle quotes/backslashes safely.
+                let encoded = serde_json::to_string(url).unwrap_or_else(|_| "\"\"".to_string());
+                format!("window.OT_FDC3_AGENT_URL = {encoded};")
+            }
+        }
     }
 }
 
@@ -242,5 +271,41 @@ pub fn append_initial_channel(base_script: &str, channel_id: Option<&str>) -> St
             format!("{base_script}\nwindow.OT_FDC3_INITIAL_CHANNEL = {encoded};")
         }
         None => base_script.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn cfg_from(json: &str) -> TerminalConfig {
+        serde_json::from_str(json).expect("valid config json")
+    }
+
+    const BASE: &str = r#""title":"t","appDirectoryUrl":"a","engineCatalogUrl":"e""#;
+
+    #[test]
+    fn agent_url_absent_injects_nothing() {
+        let cfg = cfg_from(&format!("{{{BASE}}}"));
+        assert_eq!(cfg.fdc3.agent_url, None);
+        assert_eq!(cfg.panel_init_script(), "");
+    }
+
+    #[test]
+    fn agent_url_empty_disables_fdc3() {
+        let cfg = cfg_from(&format!(r#"{{{BASE},"fdc3":{{"agentUrl":""}}}}"#));
+        assert_eq!(cfg.fdc3.agent_url.as_deref(), Some(""));
+        assert_eq!(cfg.panel_init_script(), r#"window.OT_FDC3_AGENT_URL = "";"#);
+    }
+
+    #[test]
+    fn agent_url_set_is_injected() {
+        let cfg = cfg_from(&format!(
+            r#"{{{BASE},"fdc3":{{"agentUrl":"ws://host:9/fdc3"}}}}"#
+        ));
+        assert_eq!(
+            cfg.panel_init_script(),
+            r#"window.OT_FDC3_AGENT_URL = "ws://host:9/fdc3";"#
+        );
     }
 }

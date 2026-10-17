@@ -92,7 +92,7 @@ export class DesktopAgentClient {
       this.#ws = new WebSocket(WS_URL);
 
       this.#ws.onopen    = () => resolve();
-      this.#ws.onerror   = () => reject(new Error('[fdc3] WebSocket connection to CDA failed'));
+      this.#ws.onerror   = () => reject(new Error(`[fdc3] WebSocket connection to ${WS_URL} failed — is the Desktop Agent running?`));
       this.#ws.onmessage = (ev) => {
         try {
           this.#onMessage(JSON.parse(ev.data));
@@ -114,7 +114,11 @@ export class DesktopAgentClient {
    */
   static async connect(appId) {
     if (_NO_AGENT) {
-      throw new Error('NoAgentConfigured: window.OT_FDC3_AGENT_URL is empty');
+      throw new Error(
+        'NoAgentConfigured: FDC3 is disabled for this Terminal (fdc3.agentUrl is ""). ' +
+        'Set fdc3.agentUrl in terminal.config.json or OT_FDC3_AGENT_URL to a ws:// URL, ' +
+        'or remove the key to use the bundled Desktop Agent.'
+      );
     }
     const id = appId
       ?? new URLSearchParams(globalThis.location?.search ?? '').get('fdc3AppId')
