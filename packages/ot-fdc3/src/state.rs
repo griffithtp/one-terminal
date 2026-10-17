@@ -3,7 +3,7 @@ use std::sync::atomic::AtomicBool;
 use dashmap::DashMap;
 use tokio::sync::{mpsc::UnboundedSender, oneshot, watch, Mutex, RwLock};
 
-use crate::types::{CdaRequest, ChannelInfoSummary, RaiseIntentResult};
+use crate::types::{new_uuid, CdaRequest, CdaResponse, ChannelInfoSummary, RaiseIntentResult};
 
 pub struct OtFdc3State {
     // ── Connection identity ───────────────────────────────────────────────────
@@ -27,6 +27,11 @@ pub struct OtFdc3State {
     /// until the CDA sends back `IntentResolved` (or errors out).
     pub pending_intents: DashMap<String, oneshot::Sender<Result<RaiseIntentResult, String>>>,
 
+    // ── Pending query requests ────────────────────────────────────────────────
+    /// Maps `request_id` → oneshot sender for request/response queries
+    /// (`GetCurrentContext`, `FindIntent`, …).  See [`OtFdc3State::query`].
+    pub pending_queries: DashMap<String, oneshot::Sender<Result<CdaResponse, String>>>,
+
     // ── Lifecycle ─────────────────────────────────────────────────────────────
     /// Guards TCP client startup — only the first `fdc3_register` call starts it.
     pub started: AtomicBool,
@@ -42,6 +47,7 @@ impl OtFdc3State {
             current_channel: RwLock::new(None),
             tx: Mutex::new(None),
             pending_intents: DashMap::new(),
+            pending_queries: DashMap::new(),
             started: AtomicBool::new(false),
         }
     }
@@ -55,6 +61,28 @@ impl OtFdc3State {
             Some(tx) => tx.send(json).map_err(|e| e.to_string()),
             None => Err("not connected to CDA".to_string()),
         }
+    }
+
+    /// Send a request built from a fresh `request_id` and wait (up to 10 s)
+    /// for the CDA response carrying the same id.
+    pub async fn query(
+        &self,
+        build: impl FnOnce(String) -> CdaRequest,
+    ) -> Result<CdaResponse, String> {
+        let request_id = new_uuid();
+        let (tx, rx) = oneshot::channel();
+        self.pending_queries.insert(request_id.clone(), tx);
+
+        if let Err(e) = self.send_request(&build(request_id.clone())).await {
+            self.pending_queries.remove(&request_id);
+            return Err(e);
+        }
+
+        let result = tokio::time::timeout(std::time::Duration::from_secs(10), rx).await;
+        self.pending_queries.remove(&request_id);
+        result
+            .map_err(|_| "timed out waiting for CDA response".to_string())?
+            .map_err(|_| "CDA response channel dropped".to_string())?
     }
 
     // ── Public helpers (for use by e.g. mock streamers) ───────────────────────

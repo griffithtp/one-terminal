@@ -74,27 +74,29 @@ app.emit("fdc3:context", FdcContextEvent {
 
 All commands are registered by the plugin — do not add them to `invoke_handler` manually.
 
-| Command                                                        | Description                                           |
-| -------------------------------------------------------------- | ----------------------------------------------------- |
-| `fdc3_register(appId, windowLabel)`                            | Connect to CDA, returns `{ appId, instanceId }`       |
-| `fdc3_get_system_channels()`                                   | List user channels from CDA Welcome                   |
-| `fdc3_join_user_channel(instanceId, channelId)`                | Join a channel, emits `fdc3:channel_joined`           |
-| `fdc3_leave_current_channel(instanceId)`                       | Leave current channel                                 |
-| `fdc3_get_current_channel(instanceId)`                         | Current channel or `null`                             |
-| `fdc3_broadcast(instanceId, context)`                          | Broadcast on current channel                          |
-| `fdc3_add_intent_listener(instanceId, intent)`                 | Register intent handler with CDA                      |
-| `fdc3_remove_intent_listener(instanceId, intent)`              | Deregister intent handler                             |
-| `fdc3_raise_intent(sourceInstanceId, intent, context, target)` | Raise intent, blocks until resolved                   |
-| `fdc3_get_registered_apps()`                                   | Stub — returns `[]`                                   |
-| `fdc3_get_current_context(channelId, contextType)`             | Stub — returns `null`                                 |
-| `fdc3_find_intent(intent, contextType)`                        | Stub — returns empty app list                         |
-| `fdc3_find_intents_for_context(contextType)`                   | Stub — returns `[]`                                   |
-| `fdc3_raise_intent_for_context(…)`                             | Stub — returns error                                  |
-| `fdc3_get_or_create_channel(id)`                               | Looks up known channels, or returns a plain `Channel` |
-| `fdc3_create_private_channel()`                                | Returns a stub private channel with a random ID       |
+| Command                                                        | Description                                                                                                  |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `fdc3_register(appId, windowLabel)`                            | Connect to CDA, returns `{ appId, instanceId }`                                                              |
+| `fdc3_get_system_channels()`                                   | List user channels from CDA Welcome                                                                          |
+| `fdc3_join_user_channel(instanceId, channelId)`                | Join a channel, emits `fdc3:channel_joined`                                                                  |
+| `fdc3_leave_current_channel(instanceId)`                       | Leave current channel                                                                                        |
+| `fdc3_get_current_channel(instanceId)`                         | Current channel or `null`                                                                                    |
+| `fdc3_broadcast(instanceId, context)`                          | Broadcast on current channel                                                                                 |
+| `fdc3_add_intent_listener(instanceId, intent)`                 | Register intent handler with CDA                                                                             |
+| `fdc3_remove_intent_listener(instanceId, intent)`              | Deregister intent handler                                                                                    |
+| `fdc3_raise_intent(sourceInstanceId, intent, context, target)` | Raise intent, blocks until resolved                                                                          |
+| `fdc3_get_registered_apps()`                                   | All spoke instances connected to the CDA (TCP + WS)                                                          |
+| `fdc3_get_current_context(channelId, contextType)`             | Last context on the channel from the CDA's last-value cache (`contextType = null` → most recent of any type) |
+| `fdc3_find_intent(intent, contextType)`                        | Running handlers (with `instanceId`) + App Directory apps declaring `listensFor` the intent                  |
+| `fdc3_find_intents_for_context(contextType)`                   | Intents whose App Directory declaration accepts the context type, with their apps                            |
+| `fdc3_raise_intent_for_context(…)`                             | One matching intent → raised; several → `needsResolution`; none → `NoAppsFound`                              |
+| `fdc3_get_or_create_channel(id)`                               | Known user channel, or a plain `app`-typed `Channel` descriptor                                              |
+| `fdc3_create_private_channel()`                                | Stub — returns a private channel descriptor with a random ID                                                 |
 
 ## Notes
 
 - **Single TCP connection per app process.** All Tauri windows in the same app share one `instanceId`. Multi-window per-instance support would require a per-window state map.
 - **`fdc3_register` blocks** up to 10 seconds waiting for the CDA `Welcome`. Ensure the Desktop Agent is running before the frontend calls `initFdc3()`.
 - The TCP port is read from `OT_TCP_PORT` at connect time, defaulting to `7890`.
+- **Query commands need a matching Desktop Agent.** `getCurrentContext`, `findIntent`, `findIntentsForContext`, `raiseIntentForContext` and `getRegisteredApps` send request/response messages (`get_current_context`, `find_intent`, …) that older Desktop Agent builds reject; against those they fail after a 10-second timeout.
+- **App and private channels are not supported yet.** `getOrCreateChannel` / `createPrivateChannel` return descriptors only: the CDA has no app/private channel routing, and `fdc3-client` channels are plain data objects without `broadcast` / `addContextListener` methods.

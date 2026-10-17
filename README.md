@@ -179,17 +179,19 @@ Open it inside OneTerminal alongside the sample ticker — switch both to the Gr
 
 ### Packages
 
-| Path                      | Purpose                                                                                                  |
-| ------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `apps/one-terminal`       | Window manager (Tauri 2 app)                                                                             |
-| `apps/desktop-agent`      | FDC3 desktop agent + engine launcher                                                                     |
-| `apps/tauri-webview-host` | Thin Tauri shell spawned for pinned WebView2/WKWebView apps                                              |
-| `apps/electron-host`      | Thin Electron shell spawned for Electron-engine apps                                                     |
-| `apps/app-directory`      | Express server serving FDC3 AppD REST API + management UI                                                |
-| `packages/ot-core`        | Tauri-agnostic shared Rust crate (engine abstraction, plugin manifests)                                  |
-| `packages/ot-fdc3`        | Tauri plugin: FDC3 2.2 TCP spoke client                                                                  |
-| `packages/fdc3-plugin`    | Browser-side FDC3 2.2 client (`DesktopAgentClient`) — ships in both variants                             |
-| `packages/fdc3-client`    | TypeScript FDC3 type definitions — Enterprise only (Tauri-bound, calls `fdc3_*` commands from `ot-fdc3`) |
+| Path                      | Purpose                                                                                                     |
+| ------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `apps/one-terminal`       | Window manager (Tauri 2 app)                                                                                |
+| `apps/desktop-agent`      | FDC3 desktop agent + engine launcher                                                                        |
+| `apps/tauri-webview-host` | Thin Tauri shell spawned for pinned WebView2/WKWebView apps                                                 |
+| `apps/electron-host`      | Thin Electron shell spawned for Electron-engine apps                                                        |
+| `apps/app-directory`      | Express server serving FDC3 AppD REST API + management UI                                                   |
+| `packages/ot-core`        | Tauri-agnostic shared Rust crate (engine abstraction, plugin manifests)                                     |
+| `packages/ot-fdc3`        | Tauri plugin: FDC3 2.2 TCP spoke client (Rust half of `fdc3-client`)                                        |
+| `packages/fdc3-plugin`    | Browser-side FDC3 2.2 client (`DesktopAgentClient`) — ships in both variants                                |
+| `packages/fdc3-client`    | TypeScript FDC3 types + `Fdc3Agent` — Enterprise only (Tauri-bound, calls `fdc3_*` commands from `ot-fdc3`) |
+
+See [FDC3 Client Libraries](#-fdc3-client-libraries-fdc3-plugin-vs-fdc3-client-vs-ot-fdc3) for when to use which.
 
 ### Sample apps
 
@@ -455,6 +457,88 @@ Override at the page level via:
 ```js
 window.OT_FDC3_BUS_URL = "ws://myhost:7891/fdc3";
 ```
+
+---
+
+## 🧩 FDC3 Client Libraries: `fdc3-plugin` vs `fdc3-client` vs `ot-fdc3`
+
+OneTerminal ships three FDC3 packages. They all give your app the same FDC3 2.2 `DesktopAgent` API (`window.fdc3`). What differs is **how messages reach the Desktop Agent**, and that depends on the kind of app you are building. `fdc3-plugin` works on its own. `fdc3-client` and `ot-fdc3` are **two halves of one pair** and are always used together.
+
+```
+Browser spoke app                      Tauri spoke app
+(plain web page)                       (has its own src-tauri)
+┌──────────────────┐                   ┌──────────────────────────┐
+│  fdc3-plugin.js  │                   │  @one-terminal/          │  ← TS frontend
+│  (vanilla JS)    │                   │     fdc3-client          │
+└────────┬─────────┘                   └────────────┬─────────────┘
+         │ WebSocket                                 │ Tauri IPC (invoke / listen)
+         │ :7891 /fdc3                               ▼
+         │                             ┌──────────────────────────┐
+         │                             │  ot-fdc3 (Rust plugin)   │  ← Rust backend
+         │                             └────────────┬─────────────┘
+         │                                          │ TCP, newline-delimited JSON :7890
+         ▼                                          ▼
+      ┌──────────────────────── Desktop Agent ────────────────────────┐
+      │      FDC3 Bus (WS 7891)            TCP Broker (7890)          │
+      └───────────────────────────────────────────────────────────────┘
+```
+
+|              | `fdc3-plugin`                                                           | `fdc3-client`                                                                  | `ot-fdc3`                                                    |
+| ------------ | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------ |
+| Package      | `packages/fdc3-plugin`                                                  | `packages/fdc3-client` (`@one-terminal/fdc3-client`)                           | `packages/ot-fdc3` (Rust crate)                              |
+| Runs in      | Any browser page                                                        | Frontend of a Tauri app                                                        | Rust backend of a Tauri app                                  |
+| Language     | Vanilla JS, single file, no build step                                  | TypeScript, compiled                                                           | Rust, Tauri 2 plugin                                         |
+| Transport    | WebSocket → FDC3 Bus (`OT_FDC3_BUS_PORT`, 7891)                         | Tauri IPC → `ot-fdc3`                                                          | TCP → Desktop Agent broker (`OT_TCP_PORT`, 7890)             |
+| Dependencies | None                                                                    | `@tauri-apps/api` + `ot-fdc3` in the Rust side                                 | `tauri`, `tokio`                                             |
+| Entry point  | `<script src="/fdc3-plugin.js">` or `DesktopAgentClient.connect(appId)` | `initFdc3(appId)` / `Fdc3Agent.create(…)`                                      | `.plugin(ot_fdc3::init())`; `ot_fdc3::get_state()` from Rust |
+| Extras       | Auto-sets `window.fdc3` + `window.fdc3Ready`                            | FDC3 TS types; `BridgeAgentProxy` for cross-agent routing over the FDC3 Bridge | Auto-reconnect; Rust-side broadcasting (e.g. mock streamers) |
+
+### `fdc3-plugin` is for browser apps
+
+A dependency-free JS shim for ordinary web pages launched as spokes, such as `sample-ticker`, `sample-chart` or any third-party HTTP(S) app. It opens a WebSocket to the Desktop Agent's FDC3 Bus. It can't use TCP or Tauri IPC, because neither is available to a web page. Serve the file as a static asset and add a `<script>` tag. See [FDC3 Integration (Browser Apps)](#-fdc3-integration-browser-apps) above.
+
+### `ot-fdc3` is the Rust side of a Tauri app
+
+A Tauri 2 plugin crate. It does four things:
+
+- Keeps a TCP connection to the Desktop Agent broker and reconnects when it drops.
+- Registers all the `fdc3_*` IPC commands.
+- Emits `fdc3:context`, `fdc3:intent`, `fdc3:channel_joined` and other events to the webview.
+- Exposes `OtFdc3State`, so Rust code can broadcast without a UI (for example, a background price streamer).
+
+It gives the frontend no API of its own. That is the job of `fdc3-client`.
+
+### `fdc3-client` is the TypeScript side of a Tauri app
+
+It provides:
+
+- FDC3 2.2 TypeScript types.
+- `Fdc3Agent`, which implements the FDC3 API by calling the `ot-fdc3` commands through `invoke`.
+- `BridgeAgentProxy`, which also connects to the FDC3 2.2 Bridge so contexts and intents can travel between Desktop Agent instances.
+
+It **only works if the app's Rust side loads `ot-fdc3`**.
+
+### Which one do I use?
+
+| Your app is…                                   | Use                                                     |
+| ---------------------------------------------- | ------------------------------------------------------- |
+| A web page (any URL loaded in a panel/browser) | `fdc3-plugin` only                                      |
+| A Tauri app with its own `src-tauri`           | `ot-fdc3` in Rust **and** `fdc3-client` in the frontend |
+| Rust code that needs FDC3 without a UI         | `ot-fdc3` alone, via `ot_fdc3::get_state()`             |
+| Code that only needs FDC3 TypeScript types     | `fdc3-client` for its types                             |
+
+### Feature coverage
+
+| API                                           |   `fdc3-plugin`   |       `fdc3-client` + `ot-fdc3`        |
+| --------------------------------------------- | :---------------: | :------------------------------------: |
+| User channels, `broadcast`, context listeners |        ✅         |                   ✅                   |
+| `raiseIntent`, intent listeners               |        ✅         |                   ✅                   |
+| `getCurrentContext`                           |       stub        |         ✅ (last-value cache)          |
+| `findIntent` / `findIntentsByContext`         |       stub        | ✅ (running instances + App Directory) |
+| `raiseIntentForContext`                       |       stub        |                   ✅                   |
+| `open`                                        |        ✅         |                   —                    |
+| App / private channels                        |         —         |            descriptors only            |
+| Cross-agent bridge routing                    | via Desktop Agent |        ✅ (`BridgeAgentProxy`)         |
 
 ---
 

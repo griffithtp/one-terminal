@@ -33,6 +33,7 @@ impl ChannelManager {
                 color: color.to_string(),
                 members: Vec::new(),
                 last_context: HashMap::new(),
+                latest_context: None,
             });
     }
 
@@ -84,20 +85,25 @@ impl ChannelManager {
     /// Update the last-value cache for a channel.
     pub fn set_last_context(&self, channel_id: &str, context_type: &str, value: serde_json::Value) {
         if let Some(mut ch) = self.inner.get_mut(channel_id) {
-            ch.last_context.insert(context_type.to_string(), value);
+            ch.last_context
+                .insert(context_type.to_string(), value.clone());
+            ch.latest_context = Some(value);
         }
     }
 
-    /// Return the last-value context for a specific type on a channel, if any.
-    #[allow(dead_code)]
+    /// Return the last-value context on a channel. `context_type = None`
+    /// returns the most recent broadcast of any type.
     pub fn get_last_context(
         &self,
         channel_id: &str,
-        context_type: &str,
+        context_type: Option<&str>,
     ) -> Option<serde_json::Value> {
         self.inner
             .get(channel_id)
-            .and_then(|ch| ch.last_context.get(context_type).cloned())
+            .and_then(|ch| match context_type {
+                Some(t) => ch.last_context.get(t).cloned(),
+                None => ch.latest_context.clone(),
+            })
     }
 
     /// Lightweight summaries for sending in the `Welcome` message.

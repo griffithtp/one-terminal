@@ -130,6 +130,13 @@ async fn handle_line<R: Runtime>(line: &str, state: &Arc<OtFdc3State>, app: &App
         }
     };
 
+    if let Some(rid) = msg.query_request_id() {
+        if let Some((_, tx)) = state.pending_queries.remove(rid) {
+            let _ = tx.send(Ok(msg));
+        }
+        return;
+    }
+
     match msg {
         CdaResponse::ContextBroadcast {
             channel_id,
@@ -201,9 +208,11 @@ async fn handle_line<R: Runtime>(line: &str, state: &Arc<OtFdc3State>, app: &App
             message,
             request_id,
         } => {
-            // Reject any pending intent waiting for this request_id.
+            // Reject any pending intent or query waiting for this request_id.
             if let Some(rid) = &request_id {
                 if let Some((_, tx)) = state.pending_intents.remove(rid) {
+                    let _ = tx.send(Err(format!("[{code}] {message}")));
+                } else if let Some((_, tx)) = state.pending_queries.remove(rid) {
                     let _ = tx.send(Err(format!("[{code}] {message}")));
                 }
             }
@@ -217,6 +226,11 @@ async fn handle_line<R: Runtime>(line: &str, state: &Arc<OtFdc3State>, app: &App
             );
         }
 
-        CdaResponse::Pong | CdaResponse::Welcome { .. } => {}
+        // Query responses are routed above via `query_request_id`.
+        CdaResponse::Pong
+        | CdaResponse::Welcome { .. }
+        | CdaResponse::CurrentContext { .. }
+        | CdaResponse::IntentApps { .. }
+        | CdaResponse::RegisteredApps { .. } => {}
     }
 }

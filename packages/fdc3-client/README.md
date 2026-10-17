@@ -4,7 +4,7 @@ TypeScript FDC3 2.2 types and a Tauri-native Desktop Agent client for **host app
 
 ## What it does
 
-This package provides two things:
+This package provides three things:
 
 1. **TypeScript types** — FDC3 2.2 interfaces (`Context`, `Channel`, `AppIdentifier`, BMP bridge types, etc.) that mirror the Rust types in `packages/ot-core`. See [src/types.ts](src/types.ts).
 
