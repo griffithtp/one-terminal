@@ -233,6 +233,10 @@
       "overlay": "shared"
     },
     {
+      "path": "apps/one-terminal/src-tauri/src/agent.rs",
+      "overlay": "shared"
+    },
+    {
       "path": "apps/one-terminal/src-tauri/src/config.rs",
       "overlay": "shared"
     },
@@ -493,6 +497,14 @@
       "overlay": "shared"
     },
     {
+      "path": "apps/one-terminal/src/components/sections/DesktopAgentSection.css",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/components/sections/DesktopAgentSection.tsx",
+      "overlay": "shared"
+    },
+    {
       "path": "apps/one-terminal/src/components/sections/KeybindingsSection.css",
       "overlay": "shared"
     },
@@ -542,6 +554,10 @@
     },
     {
       "path": "apps/one-terminal/src/hooks/useWidgetCatalog.ts",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/lib/desktopAgents.ts",
       "overlay": "shared"
     },
     {
