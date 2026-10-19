@@ -41,6 +41,13 @@ impl WebviewPool {
         self.available.lock().unwrap().pop_front()
     }
 
+    /// Remove and return every pre-warmed label. The caller is responsible for
+    /// closing the webviews — used when the FDC3 agent changes, since pool
+    /// webviews carry the old agent URL in their initialization script.
+    pub fn drain(&self) -> Vec<String> {
+        self.available.lock().unwrap().drain(..).collect()
+    }
+
     /// Spawn a background task to restore the pool to `target_size` by
     /// creating one additional blank webview child. No-op if already at
     /// capacity or the pool is disabled.

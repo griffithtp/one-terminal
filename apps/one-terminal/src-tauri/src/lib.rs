@@ -1,3 +1,4 @@
+mod agent;
 mod config;
 mod engine;
 mod engines;
@@ -298,10 +299,9 @@ async fn wm_open(
     window: Window,
     manager: State<'_, TerminalManager>,
     identity: State<'_, WmHostIdentity>,
-    cfg: State<'_, TerminalConfig>,
     app: AppHandle,
 ) -> Result<LayoutSnapshot, String> {
-    let panel_init_script = cfg.panel_init_script();
+    let panel_init_script = agent::panel_init_script(&app);
     let terminal = get_terminal!(manager, window);
     let tree = &terminal.layout_tree;
     let overlay = &terminal.overlay;
@@ -434,7 +434,7 @@ async fn wm_open(
         &app,
         overlay,
         window.label(),
-        &cfg.panel_init_script(),
+        &agent::panel_init_script(&app),
         tree,
     );
 
@@ -1039,7 +1039,6 @@ async fn wm_switch_dashboard(
     name: String,
     window: Window,
     manager: State<'_, TerminalManager>,
-    cfg: State<'_, TerminalConfig>,
     app: AppHandle,
 ) -> Result<(), DashboardError> {
     let terminal = manager
@@ -1067,7 +1066,7 @@ async fn wm_switch_dashboard(
     if let Err(e) =
         terminal
             .layout_tree
-            .switch_dashboard(&name, &window, &app, &cfg.panel_init_script())
+            .switch_dashboard(&name, &window, &app, &agent::panel_init_script(&app))
     {
         // The switch didn't actually happen (e.g. NeedsConfirm) — restore
         // whatever this terminal's lock state was before we reserved the
@@ -1109,7 +1108,6 @@ async fn wm_move_dashboard(
     force_discard: bool,
     window: Window,
     manager: State<'_, TerminalManager>,
-    cfg: State<'_, TerminalConfig>,
     app: AppHandle,
 ) -> Result<(), DashboardError> {
     let terminal = manager
@@ -1155,7 +1153,7 @@ async fn wm_move_dashboard(
                 &owner_locked_elsewhere,
                 &owner_window,
                 &app,
-                &cfg.panel_init_script(),
+                &agent::panel_init_script(&app),
             )?;
             owner_terminal.layout_tree.persist_dashboards();
 
@@ -1187,7 +1185,7 @@ async fn wm_move_dashboard(
     if let Err(e) =
         terminal
             .layout_tree
-            .switch_dashboard(&name, &window, &app, &cfg.panel_init_script())
+            .switch_dashboard(&name, &window, &app, &agent::panel_init_script(&app))
     {
         if !previous_active_id.is_empty() {
             let _ = manager.acquire_dashboard_lock(&previous_active_id, &terminal_id);
@@ -1214,7 +1212,6 @@ async fn wm_move_dashboard(
 async fn wm_discard_dashboard(
     window: Window,
     manager: State<'_, TerminalManager>,
-    cfg: State<'_, TerminalConfig>,
     app: AppHandle,
 ) -> Result<(), DashboardError> {
     let terminal = manager
@@ -1224,7 +1221,7 @@ async fn wm_discard_dashboard(
         })?;
     terminal
         .layout_tree
-        .discard_dashboard(&window, &app, &cfg.panel_init_script())?;
+        .discard_dashboard(&window, &app, &agent::panel_init_script(&app))?;
     {
         let mut inner = terminal.overlay.lock().unwrap();
         inner.stale = true;
@@ -1602,7 +1599,6 @@ pub fn run() {
     let fresh_start = std::env::var("OT_FRESH_START").is_ok();
 
     let cfg = TerminalConfig::load();
-    let panel_init_script = cfg.panel_init_script();
     let manager = TerminalManager::new();
     let tree = LayoutTree::new(
         WIN,
@@ -1644,6 +1640,15 @@ pub fn run() {
         .manage(cfg.clone())
         .manage(InstanceId(instance_id.clone()))
         .setup(move |app| {
+            // ── Resolve the FDC3 Desktop Agent (Plan 16) ────────────────────
+            // Needs app_data_dir for the user's saved choice, so it runs here
+            // rather than before the builder. Must be managed before any panel
+            // webview is created below.
+            let agent_selection =
+                agent::AgentSelection::load(&cfg.fdc3, app.path().app_data_dir().ok().as_deref());
+            app.manage(agent_selection);
+            let panel_init_script = agent::panel_init_script(app.handle());
+
             // ── Load the shared dashboard registry ──────────────────────────
             // Must happen before any `LayoutTree::init` below, which resolves
             // its terminal's `active_dashboard` against this registry. Runs
@@ -1878,6 +1883,9 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             wm_config,
+            agent::wm_agent_list,
+            agent::wm_agent_select,
+            agent::wm_agent_probe,
             widgets::wm_list_apps,
             wm_snapshot,
             wm_host_snapshot,

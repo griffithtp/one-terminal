@@ -27,6 +27,7 @@ import { useDashboards } from "../hooks/useDashboards";
 import { AddWidgetSection } from "./sections/AddWidgetSection";
 import { AppDirectorySection } from "./sections/AppDirectorySection";
 import { DashboardsSection } from "./sections/DashboardsSection";
+import { DesktopAgentSection } from "./sections/DesktopAgentSection";
 import { KeybindingsSection } from "./sections/KeybindingsSection";
 import { ThemeSection } from "./sections/ThemeSection";
 import { UserSettingsSection } from "./sections/UserSettingsSection";
@@ -118,6 +119,11 @@ export function OverlayMenu() {
         id: "app-directory",
         label: "App Directory",
         render: () => <AppDirectorySection />,
+      },
+      {
+        id: "desktop-agent",
+        label: "Desktop Agent",
+        render: () => <DesktopAgentSection />,
       },
       {
         id: "user-settings",

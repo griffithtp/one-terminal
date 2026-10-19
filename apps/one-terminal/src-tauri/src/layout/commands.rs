@@ -607,7 +607,6 @@ pub async fn wm_delete_dashboard(
     force: bool,
     window: Window,
     manager: State<'_, TerminalManager>,
-    cfg: State<'_, crate::config::TerminalConfig>,
     app: AppHandle,
 ) -> Result<bool, DashboardError> {
     let terminal = manager
@@ -649,7 +648,7 @@ pub async fn wm_delete_dashboard(
         &locked_elsewhere,
         &window,
         &app,
-        &cfg.panel_init_script(),
+        &crate::agent::panel_init_script(&app),
     )?;
     if deleted {
         terminal.layout_tree.persist_dashboards();
@@ -684,7 +683,6 @@ pub async fn wm_close_dashboard(
     force: bool,
     window: Window,
     manager: State<'_, TerminalManager>,
-    cfg: State<'_, crate::config::TerminalConfig>,
     app: AppHandle,
 ) -> Result<bool, DashboardError> {
     let terminal = manager
@@ -713,7 +711,7 @@ pub async fn wm_close_dashboard(
         &locked_elsewhere,
         &window,
         &app,
-        &cfg.panel_init_script(),
+        &crate::agent::panel_init_script(&app),
     )?;
     if closed {
         terminal.layout_tree.persist_dashboards();

@@ -161,6 +161,13 @@ function ChromeApp() {
     if (commandsRegistered.current) return;
     commandsRegistered.current = true;
     registerWidgetCommands(() => openMenuAtRef.current("shortcuts"));
+    registry.register({
+      id: "settings.desktopAgent",
+      label: "Switch Desktop Agent…",
+      keywords: ["fdc3", "desktop", "agent", "broker", "uat", "prod", "environment", "connect"],
+      group: "settings",
+      action: () => openMenuAtRef.current("desktop-agent"),
+    });
     applyKeybindingOverrides();
     initAppCommands((appId, url, title) =>
       openPanel(appId, url, title, null).catch(console.error)
@@ -325,6 +332,7 @@ function ChromeApp() {
         dashboards={dashboards}
         onMenuToggle={toggleMenu}
         onManageDashboards={() => openMenuAt("dashboards")}
+        onManageAgent={() => openMenuAt("desktop-agent")}
       />
 
       {/* Drawer + engine picker render inside the overlay webview — see

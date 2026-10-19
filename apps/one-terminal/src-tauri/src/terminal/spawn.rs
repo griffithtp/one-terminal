@@ -363,9 +363,7 @@ fn spawn_or_restore(
     // ── Restore persisted panel webviews ─────────────────────────────────────
     let panels_to_restore = tree.panels_for_restore();
     if !panels_to_restore.is_empty() {
-        let base_init_script = app
-            .state::<crate::config::TerminalConfig>()
-            .panel_init_script();
+        let base_init_script = crate::agent::panel_init_script(app);
         for (panel_label, url, channel) in &panels_to_restore {
             if let Ok(parsed_url) = url.parse::<tauri::Url>() {
                 let script =

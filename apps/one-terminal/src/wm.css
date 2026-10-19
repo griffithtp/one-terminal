@@ -425,6 +425,53 @@ body,
   font-size: 11px;
 }
 
+/* Active FDC3 Desktop Agent badge (Plan 16) */
+.wm-header__agent {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 8px;
+  padding: 3px 8px;
+  max-width: 220px;
+  border-radius: 4px;
+  border: 1px solid var(--ot-border-default);
+  background: transparent;
+  color: var(--ot-text-secondary);
+  font: inherit;
+  font-size: 11px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.wm-header__agent:hover {
+  background: var(--ot-bg-elevated-hover);
+  color: var(--ot-text-strong);
+}
+.wm-header__agent--prod {
+  border-color: var(--ot-danger-border-strong);
+  color: var(--ot-danger-text-strong);
+}
+.wm-header__agent-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.wm-header__agent-env {
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+.wm-header__agent-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ot-text-muted);
+}
+.wm-header__agent-dot--up {
+  background: var(--ot-success-text);
+}
+.wm-header__agent-dot--down {
+  background: var(--ot-danger);
+}
+
 /* Separator between app launchers and panel chips */
 .wm-header__apps + .wm-header__panels {
   border-left: 1px solid var(--ot-border-subtle);
