@@ -1,4 +1,4 @@
-//! FDC3 Desktop Agent selection (Plan 16).
+//! FDC3 Desktop Agent selection. User-facing docs: `docs/fdc3.md`.
 //!
 //! Decides which Desktop Agent this Terminal process's widgets connect to,
 //! and lets the user switch at runtime. The choice is expressed to widgets
@@ -78,7 +78,8 @@ pub struct AgentEntry {
     /// Endpoint shown to the user and probed for reachability. Empty for
     /// the `none` entry.
     pub url: String,
-    /// `false` for connector kinds that don't exist yet (Issue 16-G).
+    /// `false` for connector kinds that don't exist yet (see "Connector
+    /// kinds" in `docs/fdc3.md`).
     pub supported: bool,
     /// One of the built-in entries rather than a configured agent.
     pub builtin: bool,

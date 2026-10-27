@@ -57,7 +57,7 @@ impl Default for LayoutConfig {
 // to the bundled Desktop Agent's bus (ws://localhost:7891/fdc3).
 //
 // `agents` / `default_agent` / `allow_user_override` drive runtime agent
-// selection (Plan 16) — see `crate::agent` for how they resolve against the
+// selection — see `docs/fdc3.md` and `crate::agent` for how they resolve against the
 // `OT_FDC3_AGENT_URL` env var and the user's saved choice.
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -113,7 +113,7 @@ pub struct AgentProfile {
     /// Connector kind. Only `onet` (OneTerminal's `fdc3:*` WebSocket
     /// protocol) can be connected to today; other kinds (`openfin`,
     /// `interopio`, `finsemble`) are listed but disabled until their
-    /// connector lands (Plan 16, Issue 16-G).
+    /// connector lands (see "Connector kinds" in `docs/fdc3.md`).
     #[serde(default = "default_agent_kind")]
     pub kind: String,
     /// Agent endpoint, e.g. `ws://localhost:7891/fdc3`.

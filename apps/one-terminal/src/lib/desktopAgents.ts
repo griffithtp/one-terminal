@@ -1,5 +1,5 @@
 /**
- * Desktop Agent selection (Plan 16) — frontend bindings.
+ * Desktop Agent selection — frontend bindings. See docs/fdc3.md.
  *
  * The selection lives in Rust (`src-tauri/src/agent.rs`), not localStorage:
  * panel webviews are restored before the frontend loads, so Rust must know

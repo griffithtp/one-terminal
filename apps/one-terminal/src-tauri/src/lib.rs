@@ -1640,7 +1640,7 @@ pub fn run() {
         .manage(cfg.clone())
         .manage(InstanceId(instance_id.clone()))
         .setup(move |app| {
-            // ── Resolve the FDC3 Desktop Agent (Plan 16) ────────────────────
+            // ── Resolve the FDC3 Desktop Agent (docs/fdc3.md) ───────────────
             // Needs app_data_dir for the user's saved choice, so it runs here
             // rather than before the builder. Must be managed before any panel
             // webview is created below.

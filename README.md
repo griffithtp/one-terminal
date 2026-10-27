@@ -442,9 +442,11 @@ Browser apps use `fdc3-plugin.js` as the FDC3 desktop agent proxy over WebSocket
 The plugin resolves its agent URL in this order (first non-empty wins):
 
 1. `<meta name="ot-fdc3-bus-url">` in the host page
-2. `window.OT_FDC3_AGENT_URL` — injected by the Terminal at panel-load time when `fdc3.agentUrl` is configured (Standalone scaffolds)
+2. `window.OT_FDC3_AGENT_URL` — injected by the Terminal at panel-load time for the selected Desktop Agent (see [Choosing a Desktop Agent](docs/fdc3.md#choosing-a-desktop-agent-in-the-terminal))
 3. `window.OT_FDC3_BUS_URL` — legacy override
 4. `ws://localhost:7891/fdc3` — Enterprise-bundled Desktop Agent default
+
+For configuring several agents (UAT / Prod / third-party), letting users switch between them, and the Desktop Agent's layered config, see **[docs/fdc3.md](docs/fdc3.md)**.
 
 If the Terminal explicitly sets `window.OT_FDC3_AGENT_URL = ""` (no agent configured), `DesktopAgentClient.connect()` rejects with `NoAgentConfigured` instead of silently timing out — so Standalone widgets can surface a clear "no agent" state.
 

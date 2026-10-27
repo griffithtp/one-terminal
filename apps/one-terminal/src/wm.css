@@ -425,7 +425,7 @@ body,
   font-size: 11px;
 }
 
-/* Active FDC3 Desktop Agent badge (Plan 16) */
+/* Active FDC3 Desktop Agent badge (see docs/fdc3.md) */
 .wm-header__agent {
   display: inline-flex;
   align-items: center;

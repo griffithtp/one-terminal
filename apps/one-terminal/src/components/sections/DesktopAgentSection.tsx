@@ -2,7 +2,7 @@
  * DesktopAgentSection
  *
  * App Menu drawer section for choosing which FDC3 Desktop Agent this
- * Terminal's widgets connect to (Plan 16). The list and the active choice
+ * Terminal's widgets connect to (see docs/fdc3.md). The list and the active choice
  * come from Rust (`wm_agent_list`); switching calls `wm_agent_select`, which
  * persists the choice and recreates every panel webview so widgets reconnect.
  *

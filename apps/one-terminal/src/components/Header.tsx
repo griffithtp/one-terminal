@@ -161,7 +161,7 @@ export function Header({
 }
 
 /**
- * Active FDC3 Desktop Agent (Plan 16): name, PROD highlight and a
+ * Active FDC3 Desktop Agent (see docs/fdc3.md): name, PROD highlight and a
  * reachability dot. Opens the App Menu's Desktop Agent section.
  */
 function AgentBadge({ onClick }: { onClick: () => void }) {
