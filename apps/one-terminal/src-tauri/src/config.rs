@@ -274,7 +274,8 @@ impl TerminalConfig {
 }
 
 /// Append a `window.OT_FDC3_INITIAL_CHANNEL` assignment to `base_script` when
-/// `channel_id` is `Some`; returns `base_script` unchanged otherwise.
+/// `channel_id` is `Some`; returns `base_script` unchanged otherwise (it
+/// already sets the variable to `null` — see `agent::panel_init_script`).
 /// `fdc3-plugin.js` reads this once its handshake completes, to auto-rejoin
 /// a panel's previously-selected FDC3 channel after the webview is destroyed
 /// and recreated (dashboard switch, restart). Used at every panel-webview

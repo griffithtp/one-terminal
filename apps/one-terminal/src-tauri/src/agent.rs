@@ -441,8 +441,16 @@ fn write_saved(path: &Path, id: &str) -> std::io::Result<()> {
 
 /// The script injected into every panel webview at creation. Call at each
 /// creation site so webviews created after a switch get the new agent.
+///
+/// Always defines `window.OT_FDC3_INITIAL_CHANNEL` (as `null`; restore sites
+/// override it via `config::append_initial_channel`) so widgets can tell
+/// they're hosted by a Terminal that manages their FDC3 channel — and must
+/// not auto-join a channel of their own — by checking `!== undefined`.
 pub fn panel_init_script(app: &AppHandle) -> String {
-    app.state::<AgentSelection>().init_script()
+    format!(
+        "window.OT_FDC3_INITIAL_CHANNEL = null;\n{}",
+        app.state::<AgentSelection>().init_script()
+    )
 }
 
 // ── Switching: recreate webviews in place ─────────────────────────────────────
@@ -490,6 +498,10 @@ fn recreate_webviews(terminal: &Arc<TerminalState>, app: &AppHandle) -> Result<(
                         .on_navigation(crate::address_bar_navigation_handler(
                             app_main.clone(),
                             terminal_id.clone(),
+                            label.clone(),
+                            tree.clone(),
+                        ))
+                        .on_page_load(crate::channel_sync_page_load_handler(
                             label.clone(),
                             tree.clone(),
                         )),

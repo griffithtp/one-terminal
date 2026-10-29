@@ -82,6 +82,10 @@ export class DesktopAgentClient {
   // registered intent listeners: intent → Set<handler>
   #intentListeners = new Map();
 
+  // registered DesktopAgent event listeners (FDC3 2.2 addEventListener):
+  // event type | '*' → Set<handler>
+  #eventListeners = new Map();
+
   /** Private — use DesktopAgentClient.connect() */
   constructor(appId) {
     this.#appId            = appId;
@@ -109,7 +113,8 @@ export class DesktopAgentClient {
   /**
    * Perform the CDA handshake and return a ready agent.
    *
-   * @param {string} [appId]  Logical app name; defaults to `document.title`.
+   * @param {string} [appId]  Logical app name; defaults to the page's
+   *   `<meta name="ot-fdc3-app-id">`, then `?fdc3AppId=`, then `document.title`.
    * @returns {Promise<DesktopAgentClient>}
    */
   static async connect(appId) {
@@ -121,6 +126,7 @@ export class DesktopAgentClient {
       );
     }
     const id = appId
+      ?? (globalThis.document?.querySelector?.('meta[name="ot-fdc3-app-id"]')?.content || null)
       ?? new URLSearchParams(globalThis.location?.search ?? '').get('fdc3AppId')
       ?? (typeof document !== 'undefined' ? document.title : null)
       ?? 'unknown-app';
@@ -336,7 +342,7 @@ export class DesktopAgentClient {
       channelId,
       requestId,
     });
-    this.#currentChannelId = channelId;
+    this.#setCurrentChannel(channelId);
   }
 
   async leaveCurrentChannel() {
@@ -345,7 +351,21 @@ export class DesktopAgentClient {
       type:       'fdc3:leaveChannel',
       instanceId: this.#instanceId,
     });
-    this.#currentChannelId = null;
+    this.#setCurrentChannel(null);
+  }
+
+  /**
+   * Record the joined channel and, if it changed, fire `userChannelChanged`.
+   * Covers joins made by the app itself and by its host (the Terminal
+   * pushes channel changes into the panel via `window.fdc3Ready`).
+   */
+  #setCurrentChannel(channelId) {
+    if (this.#currentChannelId === channelId) return;
+    this.#currentChannelId = channelId;
+    this.#emitEvent({
+      type:    'userChannelChanged',
+      details: { currentChannelId: channelId },
+    });
   }
 
   async getCurrentChannel() {
@@ -358,6 +378,29 @@ export class DesktopAgentClient {
 
   async getCurrentContext(_contextType) {
     return null;
+  }
+
+  // ── FDC3 2.2 — Desktop Agent events ───────────────────────────────────────
+
+  /**
+   * Subscribe to Desktop Agent events. Supported type: `'userChannelChanged'`
+   * (`details.currentChannelId` is the new channel id, or `null` when the app
+   * left its channel). Pass `null` to receive every event type.
+   */
+  async addEventListener(type, handler) {
+    const key = type ?? '*';
+    if (!this.#eventListeners.has(key)) {
+      this.#eventListeners.set(key, new Set());
+    }
+    this.#eventListeners.get(key).add(handler);
+    return {
+      unsubscribe: () => { this.#eventListeners.get(key)?.delete(handler); },
+    };
+  }
+
+  #emitEvent(event) {
+    this.#eventListeners.get(event.type)?.forEach((h) => this.#safeCall(h, event));
+    this.#eventListeners.get('*')?.forEach((h) => this.#safeCall(h, event));
   }
 
   // ── FDC3 2.2 — App open / find ────────────────────────────────────────────
@@ -392,6 +435,7 @@ export class DesktopAgentClient {
     this.#ws?.close();
     this.#contextListeners.clear();
     this.#intentListeners.clear();
+    this.#eventListeners.clear();
     this.#pending.forEach(({ reject, timer }) => {
       clearTimeout(timer);
       reject(new Error('[fdc3] agent disconnected'));
@@ -424,31 +468,43 @@ export class DesktopAgentClient {
 
 // ── Auto-initialisation ───────────────────────────────────────────────────────
 //
-// When loaded as a plain <script>, automatically set window.fdc3.
-// `window.fdc3Ready` resolves with the DesktopAgentClient once the
-// handshake completes.
+// When loaded as a plain <script> (or imported as a module), automatically
+// set window.fdc3. `window.fdc3Ready` resolves with the DesktopAgentClient
+// once the handshake (and any initial channel rejoin) completes. Apps should
+// use this shared connection rather than calling `connect()` again — a second
+// connection is invisible to the Terminal, which drives channel membership
+// through `window.fdc3Ready`. Set `<meta name="ot-fdc3-app-id">` to control
+// the appId this connection registers under.
+//
+// window.OT_FDC3_INITIAL_CHANNEL is injected by the Terminal host into every
+// panel (see one-terminal's `agent::panel_init_script` and
+// `config::append_initial_channel`): a channel id when the panel was
+// previously joined to one, `null` otherwise. `undefined` means the page is
+// not hosted by a Terminal, so the app may choose its own default channel.
 
 if (typeof window !== 'undefined') {
   const _ready = DesktopAgentClient.connect()
-    .then((client) => {
+    .then(async (client) => {
       window.fdc3 = client;
-      window.dispatchEvent(new CustomEvent('fdc3Ready', { detail: client }));
-      // window.OT_FDC3_INITIAL_CHANNEL is injected by the Terminal host at
-      // webview-creation time (see one-terminal's `config::append_initial_channel`)
-      // when this panel was previously joined to a channel — re-join it now
-      // that the connection is live, so a webview reload/dashboard-switch/
-      // restart doesn't silently drop the panel off its channel.
+      // Re-join before resolving so a webview reload/dashboard-switch/restart
+      // doesn't silently drop the panel off its channel, and so apps see the
+      // restored channel from getCurrentChannel() as soon as fdc3Ready resolves.
       if (window.OT_FDC3_INITIAL_CHANNEL) {
-        client.joinUserChannel(window.OT_FDC3_INITIAL_CHANNEL).catch((err) => {
+        await client.joinUserChannel(window.OT_FDC3_INITIAL_CHANNEL).catch((err) => {
           console.warn('[fdc3-plugin] Could not rejoin initial channel:', err.message);
         });
       }
+      window.dispatchEvent(new CustomEvent('fdc3Ready', { detail: client }));
       return client;
     })
     .catch((err) => {
       console.warn('[fdc3-plugin] Could not connect to CDA hub:', err.message);
+      // fdc3Ready resolves `undefined` on failure; keep the reason for apps
+      // that want to show it (e.g. NoAgentConfigured vs. agent not running).
+      window.fdc3Error = err;
     });
 
-  /** Resolves with the DesktopAgentClient once the handshake completes. */
+  /** Resolves with the DesktopAgentClient once the handshake completes,
+   *  or `undefined` if it failed (see `window.fdc3Error`). */
   window.fdc3Ready = _ready;
 }

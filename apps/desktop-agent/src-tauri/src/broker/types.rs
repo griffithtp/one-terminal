@@ -255,6 +255,17 @@ pub struct CdaDisconnectedEvent {
     pub app_id: String,
 }
 
+/// Emitted as `cda:channel_changed` whenever a connection joins or leaves a
+/// user channel, so the Desktop Agent UI reflects membership immediately.
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CdaChannelChangedEvent {
+    pub instance_id: String,
+    pub app_id: String,
+    /// The newly joined channel, or `None` after leaving.
+    pub channel_id: Option<String>,
+}
+
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CdaContextEvent {

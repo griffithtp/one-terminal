@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="ot-fdc3-app-id" content="chart-viewer" />
   <title>Chart-Viewer</title>
   <style>
     :root {
@@ -197,6 +198,7 @@
     <span class="listener-badge">Intent: ViewChart</span>
     <span class="listener-badge">Intent: ViewQuote</span>
     <span class="listener-badge context">Context: fdc3.instrument</span>
+    <span class="listener-badge" id="channel-badge">Channel: none</span>
   </div>
 
   <!-- Instrument card -->
@@ -251,9 +253,13 @@
 </main>
 
 <script type="module">
-import { DesktopAgentClient } from '/fdc3-plugin.js';
+// Imported for its side effect: auto-connects and sets window.fdc3Ready.
+// Using that shared connection lets the Terminal's "Set channel" menu
+// (which drives window.fdc3Ready) control this widget's channel.
+import '/fdc3-plugin.js';
 
 // ── DOM refs ─────────────────────────────────────────────────────────────────
+const channelBadge = document.getElementById('channel-badge');
 const statusDot    = document.getElementById('status-dot');
 const statusText   = document.getElementById('status-text');
 const symbolEl     = document.getElementById('symbol-display');
@@ -416,11 +422,25 @@ function setStatus(text, cls) {
 setStatus('Connecting to CDA…', '');
 
 try {
-  const fdc3 = await DesktopAgentClient.connect('chart-viewer');
+  const fdc3 = await window.fdc3Ready;
+  if (!fdc3) throw window.fdc3Error ?? new Error('CDA unavailable');
   setStatus(`Connected  ·  instance: ${fdc3.getIdentity().instanceId.slice(0, 8)}`, 'connected');
 
-  // Join Green channel to receive context broadcasts
-  await fdc3.joinUserChannel('Green');
+  const channels = await fdc3.getUserChannels();
+  const showChannel = (channelId) => {
+    const ch = channels.find((c) => c.id === channelId);
+    channelBadge.textContent = `Channel: ${channelId ? ch?.displayMetadata?.name ?? channelId : 'none'}`;
+    channelBadge.style.color = (channelId && ch?.displayMetadata?.color) || '';
+  };
+  await fdc3.addEventListener('userChannelChanged', (e) => showChannel(e.details.currentChannelId));
+
+  // Inside a Terminal (OT_FDC3_INITIAL_CHANNEL defined, even as null) the
+  // Terminal owns channel membership. Standalone, join Green to receive
+  // context broadcasts.
+  if (window.OT_FDC3_INITIAL_CHANNEL === undefined) {
+    await fdc3.joinUserChannel('Green');
+  }
+  showChannel((await fdc3.getCurrentChannel())?.id ?? null);
 
   // ── Intent: ViewChart ──────────────────────────────────────────────────────
   await fdc3.addIntentListener('ViewChart', (context, meta) => {

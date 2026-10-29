@@ -9,21 +9,26 @@ use crate::terminal::TerminalManager;
 use super::dashboard::{DashboardError, DashboardsSnapshot};
 use super::docking::DropZone;
 use super::node::LayoutNode;
+use super::persist::USER_CHANNEL_IDS;
 
-/// The 8 standard FDC3 2.2 system channel ids. Mirrors `FDC3_CHANNELS` in
-/// `Header.tsx` / `OverlayApp.tsx` — kept as a fixed allowlist since
-/// `wm_set_panel_fdc3_channel` interpolates the id into a JS snippet
-/// evaluated in the target panel's webview.
-const SYSTEM_CHANNEL_IDS: [&str; 8] = [
-    "fdc3.channel.1",
-    "fdc3.channel.2",
-    "fdc3.channel.3",
-    "fdc3.channel.4",
-    "fdc3.channel.5",
-    "fdc3.channel.6",
-    "fdc3.channel.7",
-    "fdc3.channel.8",
-];
+/// Build the JS snippet that joins (or, for `None`, leaves) an FDC3 user
+/// channel on a panel's `fdc3-plugin.js` connection. `channel_id` must
+/// already be validated against [`USER_CHANNEL_IDS`]. Failures (e.g. the
+/// Desktop Agent rejecting the id) are logged to the panel's console rather
+/// than surfacing as an unhandled rejection.
+pub(crate) fn channel_join_script(channel_id: &Option<String>) -> Result<String, String> {
+    let call = match channel_id {
+        Some(id) => {
+            let encoded = serde_json::to_string(id).map_err(|e| e.to_string())?;
+            format!("c.joinUserChannel({encoded})")
+        }
+        None => "c.leaveCurrentChannel()".to_string(),
+    };
+    Ok(format!(
+        "window.fdc3Ready && window.fdc3Ready.then(function(c) {{ return c && {call}; }})\
+         .catch(function(e) {{ console.warn('[one-terminal] FDC3 channel change failed:', e); }});"
+    ))
+}
 
 // ── Helper ────────────────────────────────────────────────────────────────────
 
@@ -348,7 +353,7 @@ pub fn wm_set_panel_fdc3_channel(
     app: AppHandle,
 ) -> Result<(), String> {
     if let Some(id) = &channel_id {
-        if !SYSTEM_CHANNEL_IDS.contains(&id.as_str()) {
+        if !USER_CHANNEL_IDS.contains(&id.as_str()) {
             return Err(format!("unknown FDC3 channel id '{id}'"));
         }
     }
@@ -361,18 +366,7 @@ pub fn wm_set_panel_fdc3_channel(
         return Err(format!("no panel with label '{label}'"));
     }
 
-    let script = match &channel_id {
-        Some(id) => {
-            let encoded = serde_json::to_string(id).map_err(|e| e.to_string())?;
-            format!(
-                "window.fdc3Ready && window.fdc3Ready.then(function(c) {{ c.joinUserChannel({encoded}); }});"
-            )
-        }
-        None => {
-            "window.fdc3Ready && window.fdc3Ready.then(function(c) { c.leaveCurrentChannel(); });"
-                .to_string()
-        }
-    };
+    let script = channel_join_script(&channel_id)?;
     if let Some(wv) = app.get_webview(&label) {
         wv.eval(&script).map_err(|e| e.to_string())?;
     }
@@ -787,7 +781,7 @@ pub fn wm_set_dashboard_default_channel(
     app: AppHandle,
 ) -> Result<(), String> {
     if let Some(id) = &channel_id {
-        if !SYSTEM_CHANNEL_IDS.contains(&id.as_str()) {
+        if !USER_CHANNEL_IDS.contains(&id.as_str()) {
             return Err(format!("unknown FDC3 channel id '{id}'"));
         }
     }
@@ -806,18 +800,7 @@ pub fn wm_set_dashboard_default_channel(
         let labels = terminal
             .layout_tree
             .set_fdc3_channel_for_all(channel_id.clone());
-        let script = match &channel_id {
-            Some(id) => {
-                let encoded = serde_json::to_string(id).map_err(|e| e.to_string())?;
-                format!(
-                    "window.fdc3Ready && window.fdc3Ready.then(function(c) {{ c.joinUserChannel({encoded}); }});"
-                )
-            }
-            None => {
-                "window.fdc3Ready && window.fdc3Ready.then(function(c) { c.leaveCurrentChannel(); });"
-                    .to_string()
-            }
-        };
+        let script = channel_join_script(&channel_id)?;
         for label in &labels {
             if let Some(wv) = app.get_webview(label) {
                 wv.eval(&script).map_err(|e| e.to_string())?;

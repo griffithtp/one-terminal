@@ -346,12 +346,14 @@ fn spawn_or_restore(
                 &lbl,
                 WebviewUrl::External("about:blank".parse().expect("about:blank is valid")),
             )
+            .initialization_script(&crate::agent::panel_init_script(app))
             .on_navigation(crate::address_bar_navigation_handler(
                 app.clone(),
                 label.to_string(),
                 lbl.clone(),
                 tree.clone(),
-            )),
+            ))
+            .on_page_load(crate::channel_sync_page_load_handler(lbl.clone(), tree.clone())),
             LogicalPosition::new(-20000.0, -20000.0),
             LogicalSize::new(init_w, init_h),
         ) {
@@ -374,6 +376,10 @@ fn spawn_or_restore(
                         .on_navigation(crate::address_bar_navigation_handler(
                             app.clone(),
                             label.to_string(),
+                            panel_label.clone(),
+                            tree.clone(),
+                        ))
+                        .on_page_load(crate::channel_sync_page_load_handler(
                             panel_label.clone(),
                             tree.clone(),
                         )),

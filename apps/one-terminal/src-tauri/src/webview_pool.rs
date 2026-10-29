@@ -112,7 +112,11 @@ impl WebviewPool {
                                     label_main.clone(),
                                     tree_main.clone(),
                                 ),
-                            ),
+                            )
+                            .on_page_load(crate::channel_sync_page_load_handler(
+                                label_main.clone(),
+                                tree_main.clone(),
+                            )),
                             LogicalPosition::new(-20000.0, -20000.0),
                             LogicalSize::new(w, h),
                         )

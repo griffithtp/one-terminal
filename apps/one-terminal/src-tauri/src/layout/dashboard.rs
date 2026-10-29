@@ -57,7 +57,11 @@ pub struct PersistedDashboard {
     /// before this field existed). Set via the dashboard tab context menu's
     /// "Set default channel…" item, which also applies the channel to every
     /// widget already in the dashboard at the time it's set.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "super::persist::deserialize_channel_id"
+    )]
     pub default_fdc3_channel: Option<String>,
     /// When `true`, this dashboard is hidden from the switcher and Manage
     /// drawer's main list — "closed" rather than deleted. Its layout, meta,

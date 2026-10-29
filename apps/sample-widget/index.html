@@ -3,6 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="ot-fdc3-app-id" content="sample-widget" />
     <title>Sample Widget</title>
     <style>
       :root {
@@ -57,6 +58,10 @@
       }
       #status.err {
         color: var(--red);
+      }
+      #channel {
+        font-size: 11px;
+        color: var(--muted);
       }
 
       .row {
@@ -127,6 +132,7 @@
       <span class="title">Sample Widget</span>
       <span class="badge">FDC3 2.2</span>
       <span id="status">Connecting…</span>
+      <span id="channel">○ No channel</span>
     </header>
 
     <div class="row">
@@ -145,9 +151,13 @@
     </div>
 
     <script type="module">
-      import { DesktopAgentClient } from "/fdc3-plugin.js";
+      // Imported for its side effect: auto-connects and sets window.fdc3Ready.
+      // The widget uses that shared connection so the Terminal's "Set channel"
+      // menu (which drives window.fdc3Ready) controls this widget's channel.
+      import "/fdc3-plugin.js";
 
       const statusEl = document.getElementById("status");
+      const channelEl = document.getElementById("channel");
       const lastEl = document.getElementById("last");
       const logEl = document.getElementById("log");
       const tickerEl = document.getElementById("ticker");
@@ -162,17 +172,34 @@
       }
 
       let fdc3 = null;
+      let channels = [];
+
+      function showChannel(channelId) {
+        const ch = channels.find((c) => c.id === channelId);
+        channelEl.textContent = channelId ? `● ${ch?.displayMetadata?.name ?? channelId}` : "○ No channel";
+        channelEl.style.color = (channelId && ch?.displayMetadata?.color) || "";
+      }
+
       try {
-        fdc3 = await DesktopAgentClient.connect("sample-widget");
+        fdc3 = await window.fdc3Ready;
+        if (!fdc3) throw window.fdc3Error ?? new Error("Agent unavailable");
         statusEl.textContent = `Connected · ${fdc3.getIdentity().instanceId.slice(0, 8)}`;
         statusEl.className = "ok";
         log("Connected to FDC3 agent");
 
-        const channels = await fdc3.getUserChannels();
-        if (channels.length > 0) {
+        channels = await fdc3.getUserChannels();
+        await fdc3.addEventListener("userChannelChanged", (e) => {
+          const id = e.details.currentChannelId;
+          showChannel(id);
+          log(id ? `Joined channel <strong>${id}</strong>` : "Left channel");
+        });
+
+        // Inside a Terminal (OT_FDC3_INITIAL_CHANNEL defined, even as null)
+        // the Terminal owns channel membership. Standalone, join a default.
+        if (window.OT_FDC3_INITIAL_CHANNEL === undefined && channels.length > 0) {
           await fdc3.joinUserChannel(channels[0].id);
-          log(`Joined channel <strong>${channels[0].id}</strong>`);
         }
+        showChannel((await fdc3.getCurrentChannel())?.id ?? null);
 
         await fdc3.addContextListener("fdc3.instrument", (ctx) => {
           lastEl.textContent = JSON.stringify(ctx, null, 2);
