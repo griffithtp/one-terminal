@@ -176,7 +176,9 @@
 
       function showChannel(channelId) {
         const ch = channels.find((c) => c.id === channelId);
-        channelEl.textContent = channelId ? `● ${ch?.displayMetadata?.name ?? channelId}` : "○ No channel";
+        channelEl.textContent = channelId
+          ? `● ${ch?.displayMetadata?.name ?? channelId}`
+          : "○ No channel";
         channelEl.style.color = (channelId && ch?.displayMetadata?.color) || "";
       }
 

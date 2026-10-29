@@ -1,5 +1,5 @@
-const CACHE = 'chart-v1';
-const PRECACHE = ['/fdc3-plugin.js'];
+const CACHE = 'chart-v2';
+const PRECACHE = ['./fdc3-plugin.js'];
 
 self.addEventListener('install', (e) =>
   e.waitUntil(caches.open(CACHE).then((c) => c.addAll(PRECACHE)))

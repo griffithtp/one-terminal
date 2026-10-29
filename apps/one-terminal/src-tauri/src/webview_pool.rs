@@ -105,18 +105,18 @@ impl WebviewPool {
                                 ),
                             )
                             .initialization_script(&init_script_main)
-                            .on_navigation(
-                                crate::address_bar_navigation_handler(
-                                    app_main.clone(),
-                                    terminal_id_main.clone(),
+                            .on_navigation(crate::address_bar_navigation_handler(
+                                app_main.clone(),
+                                terminal_id_main.clone(),
+                                label_main.clone(),
+                                tree_main.clone(),
+                            ))
+                            .on_page_load(
+                                crate::channel_sync_page_load_handler(
                                     label_main.clone(),
                                     tree_main.clone(),
                                 ),
-                            )
-                            .on_page_load(crate::channel_sync_page_load_handler(
-                                label_main.clone(),
-                                tree_main.clone(),
-                            )),
+                            ),
                             LogicalPosition::new(-20000.0, -20000.0),
                             LogicalSize::new(w, h),
                         )

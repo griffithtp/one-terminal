@@ -5,9 +5,9 @@ use tokio::sync::mpsc;
 
 use crate::app_dir::{AppDirectoryCache, AppRecord, CdaIntentNeedsResolutionEvent};
 use crate::broker::{
-    now_ms, AppIntentInfo, CdaChannelChangedEvent, CdaConnectedEvent, CdaContextEvent, CdaDisconnectedEvent, CdaErrorCode,
-    CdaIntentEvent, CdaRequest, CdaResponse, ChannelManager, IntentAppInfo, IntentRegistry,
-    WindowManager,
+    now_ms, AppIntentInfo, CdaChannelChangedEvent, CdaConnectedEvent, CdaContextEvent,
+    CdaDisconnectedEvent, CdaErrorCode, CdaIntentEvent, CdaRequest, CdaResponse, ChannelManager,
+    IntentAppInfo, IntentRegistry, WindowManager,
 };
 use crate::dacp::PeerRegistry;
 

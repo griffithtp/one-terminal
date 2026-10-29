@@ -14,7 +14,7 @@
 
 use axum::extract::Path as AxPath;
 use axum::http::{header, StatusCode};
-use axum::response::{IntoResponse, Response};
+use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::get;
 use axum::Router;
 use rust_embed::RustEmbed;
@@ -44,11 +44,20 @@ pub fn router() -> Router {
         serve_chart(AxPath(String::new())).await
     }
 
+    // The apps load `./fdc3-plugin.js` and `./sw.js` relative to the page, so
+    // the slash-less URL must redirect — served in place, `./` would resolve
+    // against `/apps/` and miss these routes.
     Router::new()
-        .route("/apps/ticker-plant", get(ticker_index))
+        .route(
+            "/apps/ticker-plant",
+            get(|| async { Redirect::permanent("/apps/ticker-plant/") }),
+        )
         .route("/apps/ticker-plant/", get(ticker_index))
         .route("/apps/ticker-plant/*path", get(serve_ticker))
-        .route("/apps/chart-viewer", get(chart_index))
+        .route(
+            "/apps/chart-viewer",
+            get(|| async { Redirect::permanent("/apps/chart-viewer/") }),
+        )
         .route("/apps/chart-viewer/", get(chart_index))
         .route("/apps/chart-viewer/*path", get(serve_chart))
 }
@@ -92,4 +101,54 @@ fn asset_response(path: &str, file: rust_embed::EmbeddedFile) -> Response {
         file.data,
     )
         .into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use axum::body::Body;
+    use axum::http::{Request, StatusCode};
+    use tower::ServiceExt;
+
+    async fn get(path: &str) -> (StatusCode, String, String) {
+        let app = crate::ui::serve_ui(super::router());
+        let res = app
+            .oneshot(Request::get(path).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        let header = |name| {
+            res.headers()
+                .get(name)
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or("")
+                .to_string()
+        };
+        (res.status(), header("content-type"), header("location"))
+    }
+
+    /// The apps import `./fdc3-plugin.js` relative to `/apps/<id>/`; it must
+    /// come back as JavaScript, not the admin UI's SPA fallback.
+    #[tokio::test]
+    async fn plugin_served_as_javascript_under_each_app() {
+        for app in ["ticker-plant", "chart-viewer"] {
+            let (status, mime, _) = get(&format!("/apps/{app}/fdc3-plugin.js")).await;
+            assert_eq!(status, StatusCode::OK, "{app}");
+            assert!(mime.contains("javascript"), "{app}: {mime}");
+            let (status, mime, _) = get(&format!("/apps/{app}/sw.js")).await;
+            assert_eq!(status, StatusCode::OK, "{app}");
+            assert!(mime.contains("javascript"), "{app}: {mime}");
+        }
+    }
+
+    #[tokio::test]
+    async fn slashless_app_url_redirects_so_relative_paths_resolve() {
+        let (status, _, location) = get("/apps/ticker-plant").await;
+        assert!(status.is_redirection());
+        assert_eq!(location, "/apps/ticker-plant/");
+    }
+
+    #[tokio::test]
+    async fn missing_file_is_404_not_spa_fallback() {
+        let (status, _, _) = get("/fdc3-plugin.js").await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+    }
 }

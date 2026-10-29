@@ -35,7 +35,8 @@ use tokio::sync::mpsc;
 
 use crate::app_dir::AppDirectoryCache;
 use crate::broker::{
-    now_ms, CdaChannelChangedEvent, CdaConnectedEvent, CdaDisconnectedEvent, ChannelManager, IntentRegistry, WindowManager,
+    now_ms, CdaChannelChangedEvent, CdaConnectedEvent, CdaDisconnectedEvent, ChannelManager,
+    IntentRegistry, WindowManager,
 };
 use crate::dacp::PeerRegistry;
 use crate::tcp::handler::{deliver_intent, fan_out_broadcast};

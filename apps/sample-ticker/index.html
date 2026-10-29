@@ -224,7 +224,7 @@
 // Imported for its side effect: auto-connects and sets window.fdc3Ready.
 // Using that shared connection lets the Terminal's "Set channel" menu
 // (which drives window.fdc3Ready) control this widget's channel.
-import '/fdc3-plugin.js';
+import './fdc3-plugin.js';
 
 // ── Mock rate data ──────────────────────────────────────────────────────────
 
@@ -462,7 +462,7 @@ ratesBody.addEventListener('click', async (e) => {
 </script>
 
 <script>
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(console.error);
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(console.error);
 </script>
 </body>
 </html>
