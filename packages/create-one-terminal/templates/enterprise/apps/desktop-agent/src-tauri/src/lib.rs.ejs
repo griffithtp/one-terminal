@@ -195,6 +195,7 @@ fn cda_raise_intent_from_dashboard(
                 intent: intent.clone(),
                 context,
                 source_instance_id: source.to_string(),
+                source_app_id: source.to_string(),
                 request_id: request_id.clone(),
             })
             .map_err(|e| e.to_string())?;

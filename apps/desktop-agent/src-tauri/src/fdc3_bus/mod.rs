@@ -401,6 +401,7 @@ fn cda_to_fdc3(s: &str) -> Option<String> {
             "intent":           v["intent"],
             "context":          v["context"],
             "sourceInstanceId": v["source_instance_id"],
+            "sourceAppId":      v["source_app_id"],
             "targetInstanceId": Value::Null,
             "deliveryId":       v["request_id"],
         }),

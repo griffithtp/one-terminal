@@ -20,6 +20,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { DashboardSwitcher } from "./DashboardSwitcher";
 import type { UseDashboardsResult } from "../hooks/useDashboards";
 import { getTerminalConfig } from "../lib/terminalConfig";
+import { isProd, useDesktopAgents, useReachability } from "../lib/desktopAgents";
 
 interface Props {
   /** Most recent launch error from useAppLaunch (null when clean). */
@@ -32,6 +33,8 @@ interface Props {
   onMenuToggle: () => void;
   /** Deep-link callback: open the drawer at the Dashboards section. */
   onManageDashboards: () => void;
+  /** Deep-link callback: open the drawer at the Desktop Agent section. */
+  onManageAgent: () => void;
 }
 
 export function Header({
@@ -40,6 +43,7 @@ export function Header({
   dashboards,
   onMenuToggle,
   onManageDashboards,
+  onManageAgent,
 }: Props) {
   const [terminalTitle, setTerminalTitle] = useState<string>("OneTerminal");
 
@@ -121,6 +125,8 @@ export function Header({
         </div>
       )}
 
+      <AgentBadge onClick={onManageAgent} />
+
       <div className="wm-header__controls">
         <button
           type="button"
@@ -151,5 +157,40 @@ export function Header({
         </button>
       </div>
     </header>
+  );
+}
+
+/**
+ * Active FDC3 Desktop Agent (see docs/fdc3.md): name, PROD highlight and a
+ * reachability dot. Opens the App Menu's Desktop Agent section.
+ */
+function AgentBadge({ onClick }: { onClick: () => void }) {
+  const { listing } = useDesktopAgents();
+  const active = listing?.agents.find((a) => a.id === listing.selectedId);
+  const reach = useReachability(active ? [active] : undefined, 15_000);
+  if (!listing || !active) return null;
+
+  const status = active.url ? (reach[active.id] ?? "unknown") : "off";
+  const statusText =
+    status === "up"
+      ? "reachable"
+      : status === "down"
+        ? "unreachable"
+        : status === "off"
+          ? "FDC3 off"
+          : "checking";
+
+  return (
+    <button
+      type="button"
+      className={"wm-header__agent" + (isProd(active) ? " wm-header__agent--prod" : "")}
+      onClick={onClick}
+      title={`Desktop Agent: ${active.name}${active.url ? ` (${active.url})` : ""} — ${statusText}`}
+      aria-label={`Desktop Agent: ${active.name}, ${statusText}. Change agent`}
+    >
+      <span className={`wm-header__agent-dot wm-header__agent-dot--${status}`} aria-hidden />
+      {isProd(active) && <span className="wm-header__agent-env">PROD</span>}
+      <span className="wm-header__agent-name">{active.name}</span>
+    </button>
   );
 }

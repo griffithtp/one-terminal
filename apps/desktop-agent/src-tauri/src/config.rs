@@ -1,11 +1,26 @@
-use serde::Deserialize;
+//! Desktop Agent configuration — loaded once at startup.
+//!
+//! Layers, later overriding earlier (objects merge per key; arrays replace):
+//!   1. Compiled-in defaults
+//!   2. Bundled `agent.config.json` (next to the binary / in app resources)
+//!   3. User `agent.config.json` in the per-user config dir (see
+//!      [`user_config_path`]) — survives app updates, needs no rebuild
+//!   4. `OT_*` environment variables
+//!
+//! Each file may be partial, e.g. `{ "ports": { "fdc3Bus": 7999 } }`. The
+//! effective value of every setting and the layer it came from is logged at
+//! startup.
+
+use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use std::collections::BTreeMap;
 use std::fs;
 use std::net::TcpListener;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 // ── Sub-structs ───────────────────────────────────────────────────────────────
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PortsConfig {
     pub tcp_broker: u16,
@@ -18,15 +33,17 @@ impl PortsConfig {
     /// Returns `Err` listing every conflict so the caller can print them all at once.
     pub fn check_availability(&self) -> Result<(), String> {
         let checks = [
-            (self.tcp_broker, "OT_TCP_PORT"),
-            (self.fdc3_bus, "OT_FDC3_BUS_PORT"),
-            (self.dacp_bridge, "OT_DACP_PORT"),
+            (self.tcp_broker, "OT_TCP_PORT", "ports.tcpBroker"),
+            (self.fdc3_bus, "OT_FDC3_BUS_PORT", "ports.fdc3Bus"),
+            (self.dacp_bridge, "OT_DACP_PORT", "ports.dacpBridge"),
         ];
         let conflicts: Vec<String> = checks
             .iter()
-            .filter_map(|&(port, env_var)| {
+            .filter_map(|&(port, env_var, key)| {
                 TcpListener::bind(("127.0.0.1", port)).err().map(|_| {
-                    format!("  port {port} is already in use — set {env_var}=<port> to override")
+                    format!(
+                        "  port {port} is already in use — set {key} in the user config or {env_var}=<port> to override"
+                    )
                 })
             })
             .collect();
@@ -42,7 +59,7 @@ impl PortsConfig {
     }
 }
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UserChannel {
     pub id: String,
@@ -52,7 +69,7 @@ pub struct UserChannel {
 
 // ── AgentConfig ───────────────────────────────────────────────────────────────
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentConfig {
     pub title: String,
@@ -84,8 +101,89 @@ pub fn port_from_url(url: &str) -> u16 {
 
 impl AgentConfig {
     pub fn load() -> Self {
-        let file_cfg = Self::from_file().unwrap_or_else(Self::defaults);
-        Self::apply_env_overrides(file_cfg)
+        let bundled = Self::search_paths().into_iter().find(|p| p.is_file());
+        let user = user_config_path();
+        let (cfg, sources) = Self::load_layers(bundled.as_deref(), user.as_deref());
+        cfg.log_effective(&sources, bundled.as_deref(), user.as_deref());
+        cfg
+    }
+
+    /// Merge defaults → bundled file → user file, then apply env overrides.
+    /// Returns the config plus a map of setting path → source label.
+    fn load_layers(bundled: Option<&Path>, user: Option<&Path>) -> (Self, Sources) {
+        let defaults = Self::defaults();
+        let mut sources = Sources::new();
+        let mut merged = serde_json::to_value(&defaults).expect("defaults serialize");
+        let mut without_user = None;
+
+        if let Some(path) = bundled {
+            if let Some(v) = read_json(path) {
+                merge(&mut merged, v, "", "bundled config", &mut sources);
+            }
+        }
+        if let Some(path) = user.filter(|p| p.is_file()) {
+            if let Some(v) = read_json(path) {
+                without_user = Some((merged.clone(), sources.clone()));
+                merge(&mut merged, v, "", "user config", &mut sources);
+            }
+        }
+
+        let cfg = match serde_json::from_value::<Self>(merged) {
+            Ok(cfg) => cfg,
+            Err(e) => {
+                // A bad value type (e.g. a port given as a string) — drop the
+                // most recent layer rather than refusing to start.
+                eprintln!("[desktop-agent] config: invalid value ({e}); ignoring user config");
+                match without_user {
+                    Some((v, s)) => {
+                        sources = s;
+                        serde_json::from_value(v).unwrap_or_else(|e| {
+                            eprintln!("[desktop-agent] config: bundled config also invalid ({e}); using defaults");
+                            sources.clear();
+                            defaults
+                        })
+                    }
+                    None => {
+                        sources.clear();
+                        defaults
+                    }
+                }
+            }
+        };
+        (Self::apply_env_overrides(cfg, &mut sources), sources)
+    }
+
+    /// Print every setting with the layer it came from.
+    fn log_effective(&self, sources: &Sources, bundled: Option<&Path>, user: Option<&Path>) {
+        match bundled {
+            Some(p) => println!("[desktop-agent] bundled config: {}", p.display()),
+            None => println!("[desktop-agent] bundled config: none found"),
+        }
+        match user {
+            Some(p) if p.is_file() => println!("[desktop-agent] user config: {}", p.display()),
+            Some(p) => println!(
+                "[desktop-agent] user config: {} (not present — create it to override settings)",
+                p.display()
+            ),
+            None => {}
+        }
+        let src = |key: &str| sources.get(key).map(String::as_str).unwrap_or("default");
+        let rows: [(&str, String); 8] = [
+            ("title", self.title.clone()),
+            ("appDirectoryUrl", self.app_directory_url.clone()),
+            ("engineCatalogUrl", self.engine_catalog_url.clone()),
+            ("appdEmbedded", self.appd_embedded.to_string()),
+            ("ports.tcpBroker", self.ports.tcp_broker.to_string()),
+            ("ports.fdc3Bus", self.ports.fdc3_bus.to_string()),
+            ("ports.dacpBridge", self.ports.dacp_bridge.to_string()),
+            (
+                "userChannels",
+                format!("{} channels", self.user_channels.len()),
+            ),
+        ];
+        for (key, value) in rows {
+            println!("[desktop-agent] config {key} = {value} ({})", src(key));
+        }
     }
 
     fn defaults() -> Self {
@@ -148,27 +246,6 @@ impl AgentConfig {
         ]
     }
 
-    fn from_file() -> Option<Self> {
-        let paths = Self::search_paths();
-        for path in paths {
-            if path.exists() {
-                if let Ok(json) = fs::read_to_string(&path) {
-                    match serde_json::from_str(&json) {
-                        Ok(cfg) => {
-                            println!("[desktop-agent] config loaded from {}", path.display());
-                            return Some(cfg);
-                        }
-                        Err(e) => eprintln!(
-                            "[desktop-agent] config parse error at {}: {e}",
-                            path.display()
-                        ),
-                    }
-                }
-            }
-        }
-        None
-    }
-
     fn search_paths() -> Vec<PathBuf> {
         let mut paths = Vec::new();
         // Next to binary (release).
@@ -202,34 +279,212 @@ impl AgentConfig {
         paths
     }
 
-    fn apply_env_overrides(mut cfg: Self) -> Self {
+    fn apply_env_overrides(mut cfg: Self, sources: &mut Sources) -> Self {
+        let mut set = |key: &str, var: &str| {
+            sources.insert(key.to_string(), format!("env {var}"));
+        };
         if let Ok(v) = std::env::var("OT_TITLE") {
             cfg.title = v;
+            set("title", "OT_TITLE");
         }
         if let Ok(v) = std::env::var("OT_APP_DIR_URL") {
             cfg.app_directory_url = v;
+            set("appDirectoryUrl", "OT_APP_DIR_URL");
         }
         if let Ok(v) = std::env::var("OT_CATALOG_URL") {
             cfg.engine_catalog_url = v;
+            set("engineCatalogUrl", "OT_CATALOG_URL");
         }
-        if let Ok(v) = std::env::var("OT_TCP_PORT") {
-            if let Ok(p) = v.parse() {
-                cfg.ports.tcp_broker = p;
-            }
-        }
-        if let Ok(v) = std::env::var("OT_FDC3_BUS_PORT") {
-            if let Ok(p) = v.parse() {
-                cfg.ports.fdc3_bus = p;
-            }
-        }
-        if let Ok(v) = std::env::var("OT_DACP_PORT") {
-            if let Ok(p) = v.parse() {
-                cfg.ports.dacp_bridge = p;
+        for (var, key, slot) in [
+            ("OT_TCP_PORT", "ports.tcpBroker", &mut cfg.ports.tcp_broker),
+            ("OT_FDC3_BUS_PORT", "ports.fdc3Bus", &mut cfg.ports.fdc3_bus),
+            (
+                "OT_DACP_PORT",
+                "ports.dacpBridge",
+                &mut cfg.ports.dacp_bridge,
+            ),
+        ] {
+            if let Ok(v) = std::env::var(var) {
+                match v.parse() {
+                    Ok(p) => {
+                        *slot = p;
+                        set(key, var);
+                    }
+                    Err(_) => eprintln!(
+                        "[desktop-agent] config: ignoring {var}={v:?} (not a port number)"
+                    ),
+                }
             }
         }
         if let Ok(v) = std::env::var("OT_APPD_EMBEDDED") {
             cfg.appd_embedded = !matches!(v.as_str(), "0" | "false" | "FALSE" | "False");
+            set("appdEmbedded", "OT_APPD_EMBEDDED");
         }
         cfg
+    }
+}
+
+// ── Layer helpers ─────────────────────────────────────────────────────────────
+
+/// Setting path (e.g. `ports.fdc3Bus`) → label of the layer that last set it.
+type Sources = BTreeMap<String, String>;
+
+/// Per-user `agent.config.json`, shared `one-terminal` product dir (same
+/// convention as `ot_core::engine::default_cache_root`):
+/// - macOS:   `~/Library/Application Support/one-terminal/agent.config.json`
+/// - Windows: `%APPDATA%\one-terminal\agent.config.json`
+/// - Linux:   `$XDG_CONFIG_HOME/one-terminal/…` or `~/.config/one-terminal/…`
+pub fn user_config_path() -> Option<PathBuf> {
+    let product = "one-terminal";
+    let file = "agent.config.json";
+
+    #[cfg(target_os = "macos")]
+    {
+        std::env::var("HOME").ok().map(|home| {
+            PathBuf::from(home)
+                .join("Library")
+                .join("Application Support")
+                .join(product)
+                .join(file)
+        })
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        std::env::var("APPDATA")
+            .ok()
+            .map(|appdata| PathBuf::from(appdata).join(product).join(file))
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        std::env::var("XDG_CONFIG_HOME")
+            .ok()
+            .map(PathBuf::from)
+            .or_else(|| {
+                std::env::var("HOME")
+                    .ok()
+                    .map(|h| PathBuf::from(h).join(".config"))
+            })
+            .map(|dir| dir.join(product).join(file))
+    }
+}
+
+fn read_json(path: &Path) -> Option<Value> {
+    let text = match fs::read_to_string(path) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!(
+                "[desktop-agent] config read error at {}: {e}",
+                path.display()
+            );
+            return None;
+        }
+    };
+    match serde_json::from_str(&text) {
+        Ok(v) => Some(v),
+        Err(e) => {
+            eprintln!(
+                "[desktop-agent] config parse error at {}: {e}",
+                path.display()
+            );
+            None
+        }
+    }
+}
+
+/// Deep-merge `overlay` into `base`. Objects merge per key; any other value
+/// (including arrays) replaces. Keys unknown to `base` are warned about and
+/// skipped so typos don't fail silently.
+fn merge(base: &mut Value, overlay: Value, prefix: &str, source: &str, sources: &mut Sources) {
+    let (Value::Object(base), Value::Object(overlay)) = (base, overlay) else {
+        return;
+    };
+    for (key, value) in overlay {
+        let path = if prefix.is_empty() {
+            key.clone()
+        } else {
+            format!("{prefix}.{key}")
+        };
+        match base.get_mut(&key) {
+            None => eprintln!("[desktop-agent] config: unknown key '{path}' in {source} — ignored"),
+            Some(slot @ Value::Object(_)) if value.is_object() => {
+                merge(slot, value, &path, source, sources)
+            }
+            Some(slot) => {
+                *slot = value;
+                sources.insert(path, source.to_string());
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn write(dir: &Path, name: &str, json: &str) -> PathBuf {
+        let p = dir.join(name);
+        fs::write(&p, json).unwrap();
+        p
+    }
+
+    fn tmp_dir(tag: &str) -> PathBuf {
+        let d = std::env::temp_dir().join(format!("ot-agent-cfg-{tag}-{}", std::process::id()));
+        fs::create_dir_all(&d).unwrap();
+        d
+    }
+
+    #[test]
+    fn user_file_overrides_bundled_per_key() {
+        let d = tmp_dir("merge");
+        let bundled = write(
+            &d,
+            "b.json",
+            r#"{"title":"Bundled","ports":{"tcpBroker":1000,"fdc3Bus":1001,"dacpBridge":1002}}"#,
+        );
+        let user = write(&d, "u.json", r#"{"ports":{"fdc3Bus":7999}}"#);
+        let (cfg, sources) = AgentConfig::load_layers(Some(&bundled), Some(&user));
+        assert_eq!(cfg.title, "Bundled");
+        assert_eq!(cfg.ports.tcp_broker, 1000);
+        assert_eq!(cfg.ports.fdc3_bus, 7999);
+        assert_eq!(sources["ports.fdc3Bus"], "user config");
+        assert_eq!(cfg.user_channels.len(), 8, "untouched arrays keep defaults");
+    }
+
+    #[test]
+    fn missing_files_give_defaults() {
+        let d = tmp_dir("none");
+        let (cfg, sources) = AgentConfig::load_layers(None, Some(&d.join("absent.json")));
+        assert_eq!(cfg.ports.fdc3_bus, 7891);
+        assert!(sources.keys().all(|k| !k.starts_with("ports")));
+    }
+
+    #[test]
+    fn invalid_user_value_falls_back_to_bundled() {
+        let d = tmp_dir("bad");
+        let bundled = write(
+            &d,
+            "b.json",
+            r#"{"ports":{"tcpBroker":1000,"fdc3Bus":1001,"dacpBridge":1002}}"#,
+        );
+        let user = write(&d, "u.json", r#"{"ports":{"fdc3Bus":"nope"}}"#);
+        let (cfg, _) = AgentConfig::load_layers(Some(&bundled), Some(&user));
+        assert_eq!(cfg.ports.fdc3_bus, 1001);
+    }
+
+    #[test]
+    fn unknown_keys_are_ignored() {
+        let mut base = serde_json::json!({"ports":{"fdc3Bus":1}});
+        let mut sources = Sources::new();
+        merge(
+            &mut base,
+            serde_json::json!({"ports":{"fdc3bus":2},"typo":true}),
+            "",
+            "u",
+            &mut sources,
+        );
+        assert_eq!(base, serde_json::json!({"ports":{"fdc3Bus":1}}));
+        assert!(sources.is_empty());
     }
 }

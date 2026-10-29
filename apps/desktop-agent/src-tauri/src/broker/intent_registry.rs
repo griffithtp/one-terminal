@@ -48,6 +48,14 @@ impl IntentRegistry {
         self.inner.get(intent).and_then(|v| v.first().cloned())
     }
 
+    /// Return every `instance_id` registered for `intent`, in registration order.
+    pub fn handlers(&self, intent: &str) -> Vec<String> {
+        self.inner
+            .get(intent)
+            .map(|v| v.clone())
+            .unwrap_or_default()
+    }
+
     /// Return all (intent, Vec<instance_id>) pairs with at least one handler.
     /// Used by the dashboard InteropDashboard intent resolver.
     pub fn list_all(&self) -> Vec<(String, Vec<String>)> {

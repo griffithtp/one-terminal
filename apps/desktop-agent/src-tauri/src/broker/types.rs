@@ -57,6 +57,9 @@ pub struct ChannelInfo {
     /// Last-value cache: context_type → last broadcast Context JSON value.
     #[serde(skip)]
     pub last_context: HashMap<String, serde_json::Value>,
+    /// Most recent broadcast on this channel, regardless of context type.
+    #[serde(skip)]
+    pub latest_context: Option<serde_json::Value>,
 }
 
 /// Lightweight channel descriptor sent inside `Welcome` — omits member list
@@ -102,6 +105,27 @@ pub enum CdaRequest {
     AddIntentListener { intent: String },
     /// Deregister this spoke as a handler for a named intent.
     RemoveIntentListener { intent: String },
+    /// Query the last context broadcast on a channel. `context_type = None`
+    /// returns the most recent context of any type. Answered by `CurrentContext`.
+    GetCurrentContext {
+        channel_id: String,
+        context_type: Option<String>,
+        request_id: String,
+    },
+    /// Query apps that can handle `intent` (running instances + App Directory),
+    /// optionally filtered by context type. Answered by `IntentApps`.
+    FindIntent {
+        intent: String,
+        context_type: Option<String>,
+        request_id: String,
+    },
+    /// Query all intents that accept `context_type`. Answered by `IntentApps`.
+    FindIntentsForContext {
+        context_type: String,
+        request_id: String,
+    },
+    /// Query all connected spoke instances. Answered by `RegisteredApps`.
+    GetRegisteredApps { request_id: String },
     /// Keep-alive ping; CDA replies with `Pong`.
     Ping,
 }
@@ -134,6 +158,7 @@ pub enum CdaResponse {
         intent: String,
         context: serde_json::Value,
         source_instance_id: String,
+        source_app_id: String,
         request_id: String,
     },
     /// Pushed back to the intent raiser confirming a handler was found.
@@ -150,8 +175,40 @@ pub enum CdaResponse {
         #[serde(skip_serializing_if = "Option::is_none")]
         request_id: Option<String>,
     },
+    /// Response to `GetCurrentContext`.
+    CurrentContext {
+        context: Option<serde_json::Value>,
+        request_id: String,
+    },
+    /// Response to `FindIntent` / `FindIntentsForContext`.
+    IntentApps {
+        app_intents: Vec<AppIntentInfo>,
+        request_id: String,
+    },
+    /// Response to `GetRegisteredApps`.
+    RegisteredApps {
+        apps: Vec<IntentAppInfo>,
+        request_id: String,
+    },
     /// Response to `Ping`.
     Pong,
+}
+
+/// One intent and the apps that can handle it — wire form of FDC3 `AppIntent`.
+#[derive(Debug, Clone, Serialize)]
+pub struct AppIntentInfo {
+    pub intent: String,
+    pub display_name: String,
+    pub apps: Vec<IntentAppInfo>,
+}
+
+/// Wire form of FDC3 `AppMetadata`. `instance_id` is `Some` for a running
+/// spoke and `None` for an App Directory entry that is not running.
+#[derive(Debug, Clone, Serialize)]
+pub struct IntentAppInfo {
+    pub app_id: String,
+    pub instance_id: Option<String>,
+    pub name: Option<String>,
 }
 
 /// Wire-safe error code variants.

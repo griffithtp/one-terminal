@@ -53,16 +53,75 @@ impl Default for LayoutConfig {
 
 // ── FDC3 client configuration ─────────────────────────────────────────────────
 // Standalone scaffolds set `agent_url` to an external FDC3 agent's WS endpoint.
-// Enterprise scaffolds leave it empty — fdc3-plugin falls back to the bundled
-// Desktop Agent's bus at the OT_FDC3_BUS_URL default.
+// Enterprise scaffolds omit it — nothing is injected and fdc3-plugin falls back
+// to the bundled Desktop Agent's bus (ws://localhost:7891/fdc3).
+//
+// `agents` / `default_agent` / `allow_user_override` drive runtime agent
+// selection — see `docs/fdc3.md` and `crate::agent` for how they resolve against the
+// `OT_FDC3_AGENT_URL` env var and the user's saved choice.
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Fdc3Config {
-    /// External FDC3 agent WebSocket URL. Empty string means "no agent
-    /// configured" — widgets that call `getAgent()` get NoAgentConfigured.
+    /// Legacy single-agent URL.
+    /// - `None` (key absent): nothing injected; fdc3-plugin uses its default
+    ///   resolution chain (meta tag → `OT_FDC3_BUS_URL` → localhost:7891).
+    /// - `Some("")`: FDC3 explicitly disabled — `connect()` rejects with
+    ///   NoAgentConfigured.
+    /// - `Some(url)`: widgets connect to `url`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub agent_url: Option<String>,
+    /// Agents the user can choose between in App Menu → Desktop Agent.
     #[serde(default)]
-    pub agent_url: String,
+    pub agents: Vec<AgentProfile>,
+    /// `id` of the agent used when the user hasn't chosen one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub default_agent: Option<String>,
+    /// When `false`, the user's saved choice is ignored and the Desktop Agent
+    /// section is read-only.
+    #[serde(default = "default_true")]
+    pub allow_user_override: bool,
+}
+
+impl Default for Fdc3Config {
+    fn default() -> Self {
+        Self {
+            agent_url: None,
+            agents: Vec::new(),
+            default_agent: None,
+            allow_user_override: true,
+        }
+    }
+}
+
+fn default_true() -> bool {
+    true
+}
+
+/// One selectable FDC3 Desktop Agent.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentProfile {
+    /// Stable id — what the user's saved choice and `defaultAgent` refer to.
+    pub id: String,
+    /// Display name, e.g. "OneTerminal UAT".
+    pub name: String,
+    /// Environment label used for grouping and the header badge colour
+    /// (`prod` is highlighted), e.g. "uat", "prod".
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub env: Option<String>,
+    /// Connector kind. Only `onet` (OneTerminal's `fdc3:*` WebSocket
+    /// protocol) can be connected to today; other kinds (`openfin`,
+    /// `interopio`, `finsemble`) are listed but disabled until their
+    /// connector lands (see "Connector kinds" in `docs/fdc3.md`).
+    #[serde(default = "default_agent_kind")]
+    pub kind: String,
+    /// Agent endpoint, e.g. `ws://localhost:7891/fdc3`.
+    pub url: String,
+}
+
+fn default_agent_kind() -> String {
+    "onet".into()
 }
 
 // ── Widget source ─────────────────────────────────────────────────────────────
@@ -201,9 +260,6 @@ impl TerminalConfig {
         if let Ok(v) = std::env::var("OT_WIDGETS_CONFIG_PATH") {
             self.local_widgets_path = v;
         }
-        if let Ok(v) = std::env::var("OT_FDC3_AGENT_URL") {
-            self.fdc3.agent_url = v;
-        }
         if let Ok(v) = std::env::var("OT_WINDOW_WIDTH") {
             if let Ok(n) = v.parse() {
                 self.window.width = n;
@@ -214,16 +270,6 @@ impl TerminalConfig {
                 self.window.height = n;
             }
         }
-    }
-
-    /// JS to inject into every panel webview before page load. Exposes the
-    /// configured FDC3 agent URL on `window.OT_FDC3_AGENT_URL` so the
-    /// browser-side fdc3-plugin can pick it up.
-    pub fn panel_init_script(&self) -> String {
-        // JSON-encode the string to handle quotes/backslashes safely.
-        let encoded =
-            serde_json::to_string(&self.fdc3.agent_url).unwrap_or_else(|_| "\"\"".to_string());
-        format!("window.OT_FDC3_AGENT_URL = {encoded};")
     }
 }
 

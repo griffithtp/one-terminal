@@ -3,10 +3,11 @@ use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
 use tokio::sync::mpsc;
 
-use crate::app_dir::{AppDirectoryCache, CdaIntentNeedsResolutionEvent};
+use crate::app_dir::{AppDirectoryCache, AppRecord, CdaIntentNeedsResolutionEvent};
 use crate::broker::{
-    now_ms, CdaConnectedEvent, CdaContextEvent, CdaDisconnectedEvent, CdaErrorCode, CdaIntentEvent,
-    CdaRequest, CdaResponse, ChannelManager, IntentRegistry, WindowManager,
+    now_ms, AppIntentInfo, CdaConnectedEvent, CdaContextEvent, CdaDisconnectedEvent, CdaErrorCode,
+    CdaIntentEvent, CdaRequest, CdaResponse, ChannelManager, IntentAppInfo, IntentRegistry,
+    WindowManager,
 };
 use crate::dacp::PeerRegistry;
 
@@ -247,6 +248,83 @@ async fn dispatch(
             println!("[cda] {app_id} ({instance_id}) removed intent listener: {intent}");
         }
 
+        CdaRequest::GetCurrentContext {
+            channel_id,
+            context_type,
+            request_id,
+        } => {
+            let context = channel_manager.get_last_context(&channel_id, context_type.as_deref());
+            reply(
+                instance_id,
+                &CdaResponse::CurrentContext {
+                    context,
+                    request_id,
+                },
+                window_manager,
+            );
+        }
+
+        CdaRequest::FindIntent {
+            intent,
+            context_type,
+            request_id,
+        } => {
+            let app_intent = find_intent_apps(
+                &intent,
+                context_type.as_deref(),
+                window_manager,
+                intent_registry,
+                app_dir_cache,
+            )
+            .await;
+            reply(
+                instance_id,
+                &CdaResponse::IntentApps {
+                    app_intents: vec![app_intent],
+                    request_id,
+                },
+                window_manager,
+            );
+        }
+
+        CdaRequest::FindIntentsForContext {
+            context_type,
+            request_id,
+        } => {
+            let app_intents = find_intents_for_context(
+                &context_type,
+                window_manager,
+                intent_registry,
+                app_dir_cache,
+            )
+            .await;
+            reply(
+                instance_id,
+                &CdaResponse::IntentApps {
+                    app_intents,
+                    request_id,
+                },
+                window_manager,
+            );
+        }
+
+        CdaRequest::GetRegisteredApps { request_id } => {
+            let apps = window_manager
+                .list_all()
+                .into_iter()
+                .map(|h| IntentAppInfo {
+                    app_id: h.app_id,
+                    instance_id: Some(h.instance_id),
+                    name: h.display_name,
+                })
+                .collect();
+            reply(
+                instance_id,
+                &CdaResponse::RegisteredApps { apps, request_id },
+                window_manager,
+            );
+        }
+
         CdaRequest::Ping => {
             let pong = serde_json::to_string(&CdaResponse::Pong).unwrap_or_default();
             window_manager.send_to(instance_id, &pong);
@@ -358,10 +436,15 @@ pub(crate) async fn deliver_intent(
                 }
             };
 
+            let source_app_id = window_manager
+                .get(source_instance_id)
+                .map(|h| h.app_id)
+                .unwrap_or_default();
             let delivery = serde_json::to_string(&CdaResponse::IntentDelivery {
                 intent: intent.to_string(),
                 context,
                 source_instance_id: source_instance_id.to_string(),
+                source_app_id,
                 request_id: request_id.to_string(),
             })
             .unwrap_or_default();
@@ -417,6 +500,127 @@ pub(crate) async fn deliver_intent(
             }
         }
     }
+}
+
+// ── Intent discovery ──────────────────────────────────────────────────────────
+
+/// Whether `app` declares `listensFor[intent]` and that declaration accepts
+/// `context_type`. An empty `contexts` list is treated as "accepts any".
+fn app_accepts(app: &AppRecord, intent: &str, context_type: Option<&str>) -> Option<bool> {
+    let def = app
+        .interop
+        .as_ref()?
+        .intents
+        .as_ref()?
+        .listens_for
+        .as_ref()?
+        .get(intent)?;
+    Some(match context_type {
+        Some(ct) => def.contexts.is_empty() || def.contexts.iter().any(|c| c == ct),
+        None => true,
+    })
+}
+
+/// Collect every app that can handle `intent`: running spokes that registered
+/// an intent listener, then App Directory entries that declare `listensFor`
+/// the intent. Running spokes whose App Directory record explicitly rejects
+/// `context_type` are excluded.
+pub(crate) async fn find_intent_apps(
+    intent: &str,
+    context_type: Option<&str>,
+    window_manager: &WindowManager,
+    intent_registry: &IntentRegistry,
+    app_dir_cache: &AppDirectoryCache,
+) -> AppIntentInfo {
+    let directory = app_dir_cache.list_all().await;
+    let mut apps = Vec::new();
+
+    for iid in intent_registry.handlers(intent) {
+        let Some(handle) = window_manager.get(&iid) else {
+            continue;
+        };
+        let record = directory.iter().find(|a| a.app_id == handle.app_id);
+        if record.and_then(|r| app_accepts(r, intent, context_type)) == Some(false) {
+            continue;
+        }
+        apps.push(IntentAppInfo {
+            app_id: handle.app_id,
+            instance_id: Some(handle.instance_id),
+            name: handle.display_name,
+        });
+    }
+
+    let mut display_name = None;
+    for app in &directory {
+        if app_accepts(app, intent, context_type) != Some(true) {
+            continue;
+        }
+        if display_name.is_none() {
+            display_name = app
+                .interop
+                .as_ref()
+                .and_then(|i| i.intents.as_ref())
+                .and_then(|i| i.listens_for.as_ref())
+                .and_then(|lf| lf.get(intent))
+                .and_then(|d| d.display_name.clone());
+        }
+        apps.push(IntentAppInfo {
+            app_id: app.app_id.clone(),
+            instance_id: None,
+            name: Some(app.title.clone().unwrap_or_else(|| app.name.clone())),
+        });
+    }
+
+    AppIntentInfo {
+        intent: intent.to_string(),
+        display_name: display_name.unwrap_or_else(|| intent.to_string()),
+        apps,
+    }
+}
+
+/// Collect every intent whose App Directory declaration lists `context_type`
+/// in its `contexts`, each with its handling apps. Intents with no apps are
+/// omitted.
+pub(crate) async fn find_intents_for_context(
+    context_type: &str,
+    window_manager: &WindowManager,
+    intent_registry: &IntentRegistry,
+    app_dir_cache: &AppDirectoryCache,
+) -> Vec<AppIntentInfo> {
+    let mut intents: Vec<String> = app_dir_cache
+        .list_all()
+        .await
+        .iter()
+        .filter_map(|a| a.interop.as_ref()?.intents.as_ref()?.listens_for.as_ref())
+        .flat_map(|lf| {
+            lf.iter()
+                .filter(|(_, def)| def.contexts.iter().any(|c| c == context_type))
+                .map(|(name, _)| name.clone())
+        })
+        .collect();
+    intents.sort();
+    intents.dedup();
+
+    let mut out = Vec::new();
+    for intent in intents {
+        let ai = find_intent_apps(
+            &intent,
+            Some(context_type),
+            window_manager,
+            intent_registry,
+            app_dir_cache,
+        )
+        .await;
+        if !ai.apps.is_empty() {
+            out.push(ai);
+        }
+    }
+    out
+}
+
+fn reply(instance_id: &str, resp: &CdaResponse, window_manager: &WindowManager) {
+    let json = serde_json::to_string(resp).unwrap_or_default();
+    window_manager.send_to(instance_id, &json);
 }
 
 fn send_no_handler_error(

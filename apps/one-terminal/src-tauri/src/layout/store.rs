@@ -1758,6 +1758,20 @@ impl LayoutTree {
         }
     }
 
+    /// Remove every entry from the `parked` registry and return the labels.
+    /// The caller is responsible for closing the webviews. Used when the
+    /// FDC3 agent changes: parked webviews carry the old agent URL, and with
+    /// no parked entry they are recreated fresh (with the new URL) when
+    /// their owning Dashboard is next activated.
+    pub fn take_parked_labels(&self) -> Vec<String> {
+        self.parked
+            .write()
+            .unwrap()
+            .drain()
+            .map(|(label, _)| label)
+            .collect()
+    }
+
     /// Close every parked (kept-alive) webview owned by `dashboard_name` and
     /// remove them from the `parked` registry. Called when that Dashboard is
     /// deleted — there is no home left for the panel to be reused by, so it

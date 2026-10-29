@@ -451,7 +451,7 @@ try {
   drawChart(chartData);
 
 } catch (e) {
-  setStatus('CDA unavailable', 'error');
+  setStatus(e.message?.includes('NoAgentConfigured') ? 'No FDC3 agent configured' : 'CDA unavailable', 'error');
   const el = document.createElement('div');
   el.className = 'log-entry';
   el.innerHTML = `<span class="ts">${new Date().toTimeString().slice(0,8)}</span><span style="color:var(--red)">✗ ${e.message}</span>`;
