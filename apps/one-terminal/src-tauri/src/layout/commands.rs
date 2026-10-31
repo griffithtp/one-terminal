@@ -25,7 +25,7 @@ pub(crate) fn channel_join_script(channel_id: &Option<String>) -> Result<String,
         None => "c.leaveCurrentChannel()".to_string(),
     };
     Ok(format!(
-        "window.fdc3Ready && window.fdc3Ready.then(function(c) {{ return c && {call}; }})\
+        "window.__otFdc3Ready && window.__otFdc3Ready.then(function(c) {{ return c && {call}; }})\
          .catch(function(e) {{ console.warn('[one-terminal] FDC3 channel change failed:', e); }});"
     ))
 }

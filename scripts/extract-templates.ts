@@ -41,10 +41,25 @@ const STATIC_FILENAMES = new Set(["build.rs", "vite-env.d.ts"]);
 // and EJS-process it, producing a corrupted, single-platform binary.ejs file.
 const SKIP_DIRS = new Set(["node_modules", "target", "dist", "gen", ".git", "binaries"]);
 
+// ── Framework-only paths ──────────────────────────────────────────────────────
+// Workspaces receive the built fdc3-plugin.js, not its sources, build or contract
+// tests (which need the Desktop Agent, absent from Standalone). Its slim
+// package.json comes from overlay-overrides.
+const SKIP_PATHS = new Set(
+  [
+    "packages/fdc3-plugin/src",
+    "packages/fdc3-plugin/test",
+    "packages/fdc3-plugin/build.mjs",
+    "packages/fdc3-plugin/tsconfig.json",
+    "packages/fdc3-plugin/vitest.config.ts",
+    "apps/desktop-agent/src-tauri/examples",
+  ].map((path) => join(ROOT, path))
+);
+
 // ── Overlay model ──────────────────────────────────────────────────────────────
 // Templates are partitioned across three overlays:
 //   shared      — common to all variants (Terminal shell, fdc3 browser/TS, ot-core)
-//   enterprise  — full-stack-only (Desktop Agent, App Directory, ot-fdc3, samples)
+//   enterprise  — full-stack-only (Desktop Agent, App Directory, samples)
 //   standalone  — slim-variant-only (sample-widget, slim Cargo/package — added in Phase B)
 //
 // render.ts walks `shared/` then `<variant>/`. variant-overlay-wins on collision.
@@ -59,18 +74,17 @@ const SOURCES: Array<{ src: string; templateBase: string; overlay: Overlay }> = 
     templateBase: "packages/fdc3-plugin",
     overlay: "shared",
   },
+  // The Terminal embeds sample-widget (src-tauri/src/sample_widget.rs), so every
+  // variant needs it to compile.
+  {
+    src: join(ROOT, "apps/sample-widget"),
+    templateBase: "apps/sample-widget",
+    overlay: "shared",
+  },
 
   {
     src: join(ROOT, "apps/desktop-agent"),
     templateBase: "apps/desktop-agent",
-    overlay: "enterprise",
-  },
-  // fdc3-client is Tauri-bound — every method invokes an `fdc3_*` Tauri
-  // command registered by ot-fdc3 (Enterprise only). Including it in
-  // Standalone would ship dead code that throws on first call.
-  {
-    src: join(ROOT, "packages/fdc3-client"),
-    templateBase: "packages/fdc3-client",
     overlay: "enterprise",
   },
   {
@@ -108,14 +122,6 @@ const SOURCES: Array<{ src: string; templateBase: string; overlay: Overlay }> = 
     templateBase: "apps/electron-host",
     overlay: "enterprise",
   },
-  { src: join(ROOT, "packages/ot-fdc3"), templateBase: "packages/ot-fdc3", overlay: "enterprise" },
-
-  // Standalone-only sources
-  {
-    src: join(ROOT, "apps/sample-widget"),
-    templateBase: "apps/sample-widget",
-    overlay: "standalone",
-  },
 ];
 
 // ── Overlay override directories ──────────────────────────────────────────────
@@ -142,6 +148,8 @@ const ROOT_PACKAGE_SCRIPTS_OMIT = new Set([
   "build:scaffolder",
   "scaffold",
   "test:scaffold",
+  "build:fdc3-plugin",
+  "test:fdc3-plugin",
   // sample-widget is standalone-only; its dev script lives in the
   // standalone overlay-overrides package.json, not in the extracted one.
   "dev:sample-widget",
@@ -166,7 +174,6 @@ const SUBSTITUTIONS: Array<[string, string]> = [
   // npm scoped package names (specific before catch-all)
   ["@one-terminal/one-terminal", "@<%= orgScope %>/one-terminal"],
   ["@one-terminal/desktop-agent", "@<%= orgScope %>/desktop-agent"],
-  ["@one-terminal/fdc3-client", "@<%= orgScope %>/fdc3-client"],
   ["@one-terminal/fdc3-plugin", "@<%= orgScope %>/fdc3-plugin"],
   ["@one-terminal/app-directory", "@<%= orgScope %>/app-directory"],
   ["@one-terminal/sample-ticker", "@<%= orgScope %>/sample-ticker"],
@@ -207,10 +214,8 @@ const SUBSTITUTIONS: Array<[string, string]> = [
   ["vite --port 1422", "vite --port <%= terminalDevPort %>"],
   ["vite --port 1421", "vite --port <%= agentDevPort %>"],
 
-  // Broker / bus / dacp ports
-  ['"tcpBroker": 7890', '"tcpBroker": <%= tcpBrokerPort %>'],
+  // FDC3 bus port
   ['"fdc3Bus": 7891', '"fdc3Bus": <%= fdc3BusPort %>'],
-  ['"dacpBridge": 4475', '"dacpBridge": <%= dacpBridgePort %>'],
 
   // App Directory URLs
   [
@@ -243,9 +248,7 @@ const CONTEXT_VARS = [
   "snakeWorkspaceName",
   "terminalDevPort",
   "agentDevPort",
-  "tcpBrokerPort",
   "fdc3BusPort",
-  "dacpBridgePort",
   "appDirectoryPort",
   "includeFdc3",
   "variant",
@@ -332,6 +335,7 @@ async function walkAndProcess(srcDir: string, destDir: string, overlay: Overlay)
   }
 
   for (const item of items) {
+    if (SKIP_PATHS.has(join(srcDir, item))) continue;
     if (SKIP_DIRS.has(item)) {
       // Carve-out: a `dist/` directory containing only an `index.html` stub
       // is the frontendDist placeholder for tauri-webview-host (and any other

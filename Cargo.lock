@@ -826,7 +826,6 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-opener",
  "tokio",
- "tokio-tungstenite",
  "tower-http 0.5.2",
  "zip",
 ]
@@ -2595,18 +2594,6 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "serde_json",
-]
-
-[[package]]
-name = "ot-fdc3"
-version = "0.1.0"
-dependencies = [
- "dashmap",
- "rand 0.8.5",
- "serde",
- "serde_json",
- "tauri",
- "tokio",
 ]
 
 [[package]]

@@ -1,230 +1,153 @@
-mod app_dir;
-mod broker;
+pub mod app_dir;
+pub mod broker;
 mod config;
-mod dacp;
 mod engines;
-mod fdc3_bus;
-mod tcp;
+pub mod fdc3_bus;
 
 use app_dir::{AppDirectoryCache, AppRecord};
-use broker::{
-    new_uuid, ChannelInfo, ChannelManager, IntentHandlerInfo, IntentRegistry, WindowHandle,
-    WindowManager,
-};
+use broker::{Broker, BrokerEvent, BrokerEvents, ChannelInfo, IntentHandlerInfo, WindowHandle};
 use config::AgentConfig;
-use dacp::{PeerInfo, PeerRegistry};
 use engines::{EngineCatalogClient, EngineRuntimeStore};
+use futures_util::future::BoxFuture;
+use std::sync::Arc;
 use tauri::menu::{MenuBuilder, MenuItemBuilder, SubmenuBuilder};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager, State};
 
+// ── Broker wiring ──────────────────────────────────────────────────────────────
+
+/// Forwards broker events to the dashboard window as `cda:*` Tauri events.
+struct TauriEvents(AppHandle);
+
+impl BrokerEvents for TauriEvents {
+    fn emit(&self, event: BrokerEvent) {
+        use tauri::Emitter;
+        let _ = match event {
+            BrokerEvent::Connected(e) => self.0.emit("cda:connected", e),
+            BrokerEvent::Disconnected(e) => self.0.emit("cda:disconnected", e),
+            BrokerEvent::ChannelChanged(e) => self.0.emit("cda:channel_changed", e),
+            BrokerEvent::Context(e) => self.0.emit("cda:context", e),
+            BrokerEvent::Intent(e) => self.0.emit("cda:intent", e),
+        };
+    }
+}
+
+/// Gives the FDC3 bus access to the App Directory and the app launcher.
+struct TauriBusHost(AppHandle);
+
+impl fdc3_bus::BusHost for TauriBusHost {
+    fn directory(&self) -> BoxFuture<'_, Vec<AppRecord>> {
+        Box::pin(async move {
+            self.0
+                .state::<AppDirectoryCache>()
+                .list_fdc3_compatible()
+                .await
+        })
+    }
+
+    fn launch(&self, app: AppRecord) -> BoxFuture<'_, Result<Option<String>, String>> {
+        Box::pin(launch_new_instance(self.0.clone(), app))
+    }
+
+    fn close_window(&self, label: &str) -> Result<(), String> {
+        let window = self
+            .0
+            .get_webview_window(label)
+            .ok_or_else(|| format!("window '{label}' not found"))?;
+        window.close().map_err(|e| e.to_string())
+    }
+}
+
+/// Launch a new instance of `app` for `fdc3.open` or intent resolution. Each
+/// call gets its own window, unlike the launcher, which focuses an existing one.
+/// Returns the window label only for windows this process owns and can close.
+async fn launch_new_instance(
+    app_handle: AppHandle,
+    app: AppRecord,
+) -> Result<Option<String>, String> {
+    use engines::router::{plan_launch, resolve_binding, LaunchContext, LaunchPlan};
+
+    let url = app.details.as_ref().and_then(|d| d.url.clone());
+    if app.app_type != "onlineNative" {
+        let url = url.ok_or_else(|| format!("App '{}' has no launch URL", app.app_id))?;
+        tauri_plugin_opener::open_url(url, None::<&str>)
+            .map_err(|e| format!("Failed to launch app: {e}"))?;
+        return Ok(None);
+    }
+
+    let label = format!(
+        "app-{}-{}",
+        app.app_id
+            .replace(|c: char| !c.is_alphanumeric() && c != '-', "-"),
+        &broker::new_uuid()[..8],
+    );
+    let installed = match resolve_binding(&app) {
+        Some(binding) => {
+            let snapshot = app_handle.state::<EngineCatalogClient>().snapshot().await;
+            let store = app_handle.state::<EngineRuntimeStore>();
+            Some(store.ensure(&binding, &snapshot, &app_handle).await?)
+        }
+        None => None,
+    };
+    let manifests = app_handle.state::<EngineRuntimeStore>().plugins().to_vec();
+    let plan = plan_launch(
+        &app,
+        &LaunchContext::Standalone,
+        installed.as_ref(),
+        &manifests,
+    )?;
+    let closeable = matches!(plan, LaunchPlan::InProcessWebview { .. });
+    execute_plan(&app_handle, &label, plan).await?;
+    Ok(closeable.then_some(label))
+}
+
 // ── Tauri commands ─────────────────────────────────────────────────────────────
 
-/// Return all currently connected spoke instances.
+/// Return all currently connected app instances.
 #[tauri::command]
-fn cda_list_connections(window_manager: State<WindowManager>) -> Vec<WindowHandle> {
-    window_manager.list_all()
+fn cda_list_connections(broker: State<Broker>) -> Vec<WindowHandle> {
+    broker.list_connections()
 }
 
-/// Return all channels with their member lists.
+/// Return all user channels with their member lists.
 #[tauri::command]
-fn cda_list_channels(channel_manager: State<ChannelManager>) -> Vec<ChannelInfo> {
-    channel_manager.list_all()
+fn cda_list_channels(broker: State<Broker>) -> Vec<ChannelInfo> {
+    broker.list_channels()
 }
 
-/// Return the channel a specific spoke is currently joined to, if any.
+/// Force-disconnect an instance. Cleans up its state and drops its sender,
+/// which closes the socket.
 #[tauri::command]
-fn cda_get_spoke_channel(
-    instance_id: String,
-    window_manager: State<WindowManager>,
-) -> Option<String> {
-    window_manager
-        .get(&instance_id)
-        .and_then(|h| h.current_channel)
+fn cda_disconnect_spoke(instance_id: String, broker: State<Broker>) -> bool {
+    broker.disconnect(&instance_id)
 }
 
-/// Force-disconnect a spoke.  Cleans up all registries and drops the TCP sender.
-#[tauri::command]
-fn cda_disconnect_spoke(
-    instance_id: String,
-    window_manager: State<WindowManager>,
-    channel_manager: State<ChannelManager>,
-    intent_registry: State<IntentRegistry>,
-) -> bool {
-    intent_registry.remove_all(&instance_id);
-    channel_manager.remove_member(&instance_id);
-    window_manager.close(&instance_id)
-}
-
-/// Broadcast a context from the CDA dashboard itself (useful for testing).
-/// Returns the total number of recipients reached (local spokes + bridge peers).
+/// Broadcast a context from the dashboard (useful for testing).
+/// Returns the number of instances reached.
 #[tauri::command]
 fn cda_broadcast_from_dashboard(
     channel_id: String,
     context: serde_json::Value,
-    window_manager: State<WindowManager>,
-    channel_manager: State<ChannelManager>,
-    peer_registry: State<PeerRegistry>,
-    app: AppHandle,
+    broker: State<Broker>,
 ) -> Result<usize, String> {
-    use broker::{CdaContextEvent, CdaResponse};
-
-    let context_type = context
-        .get("type")
-        .and_then(|v| v.as_str())
-        .unwrap_or("unknown")
-        .to_string();
-
-    channel_manager.set_last_context(&channel_id, &context_type, context.clone());
-
-    let targets = channel_manager.members_except(&channel_id, "__dashboard__");
-    let payload = serde_json::to_string(&CdaResponse::ContextBroadcast {
-        channel_id: channel_id.clone(),
-        context: context.clone(),
-        source_instance_id: "__dashboard__".to_string(),
-        source_app_id: "desktop-agent".to_string(),
-    })
-    .map_err(|e| e.to_string())?;
-
-    let mut count = 0usize;
-    for target_id in &targets {
-        if window_manager.send_to(target_id, &payload) {
-            count += 1;
-        }
-    }
-
-    count += peer_registry.forward_broadcast(&channel_id, &context, "desktop-agent");
-
-    let _ = tauri::Emitter::emit(
-        &app,
-        "cda:context",
-        CdaContextEvent {
-            channel_id,
-            context,
-            source_instance_id: "__dashboard__".to_string(),
-            source_app_id: "desktop-agent".to_string(),
-            recipient_count: count,
-        },
-    );
-
-    Ok(count)
+    broker.broadcast_from_dashboard(&channel_id, context)
 }
 
-/// Return all currently connected external bridge peers.
+/// Return every registered intent listener.
 #[tauri::command]
-fn cda_list_peers(peer_registry: State<PeerRegistry>) -> Vec<PeerInfo> {
-    peer_registry.list_all()
+fn cda_list_intent_handlers(broker: State<Broker>) -> Vec<IntentHandlerInfo> {
+    broker.list_intent_handlers()
 }
 
-/// Return every intent handler visible to the CDA:
-///   - Local handlers from the `IntentRegistry` (spoke apps).
-///   - Remote handlers from each connected peer's intent-listener set.
-#[tauri::command]
-fn cda_list_intent_handlers(
-    intent_registry: State<IntentRegistry>,
-    window_manager: State<WindowManager>,
-    peer_registry: State<PeerRegistry>,
-) -> Vec<IntentHandlerInfo> {
-    let mut handlers = Vec::new();
-
-    for (intent, instance_ids) in intent_registry.list_all() {
-        for iid in instance_ids {
-            let (app_id, display_name) = window_manager
-                .get(&iid)
-                .map(|h| (h.app_id, h.display_name))
-                .unwrap_or_else(|| (iid.clone(), None));
-            handlers.push(IntentHandlerInfo {
-                intent: intent.clone(),
-                app_id,
-                instance_id: iid,
-                display_name,
-                desktop_agent_id: None,
-            });
-        }
-    }
-
-    for peer in peer_registry.list_all() {
-        for intent in peer.intent_listeners {
-            handlers.push(IntentHandlerInfo {
-                intent,
-                app_id: peer.desktop_agent_id.clone(),
-                instance_id: peer.desktop_agent_id.clone(),
-                display_name: None,
-                desktop_agent_id: Some(peer.desktop_agent_id.clone()),
-            });
-        }
-    }
-
-    handlers
-}
-
-/// Raise an intent from the CDA dashboard (3-tier local resolution).
+/// Raise an intent from the dashboard.
 #[tauri::command]
 fn cda_raise_intent_from_dashboard(
     intent: String,
     context: serde_json::Value,
     target_instance_id: Option<String>,
-    window_manager: State<WindowManager>,
-    intent_registry: State<IntentRegistry>,
-    peer_registry: State<PeerRegistry>,
-    app: AppHandle,
+    broker: State<Broker>,
 ) -> Result<String, String> {
-    use broker::{CdaIntentEvent, CdaResponse};
-
-    let request_id = new_uuid();
-    let source = "__dashboard__";
-
-    let resolved = match &target_instance_id {
-        Some(tid) => {
-            if window_manager.get(tid).is_some() {
-                Some(tid.clone())
-            } else {
-                None
-            }
-        }
-        None => intent_registry.find_handler(&intent),
-    };
-
-    match resolved {
-        Some(target_id) => {
-            let handler = window_manager
-                .get(&target_id)
-                .ok_or_else(|| format!("Instance '{target_id}' not found"))?;
-
-            let delivery = serde_json::to_string(&CdaResponse::IntentDelivery {
-                intent: intent.clone(),
-                context,
-                source_instance_id: source.to_string(),
-                source_app_id: source.to_string(),
-                request_id: request_id.clone(),
-            })
-            .map_err(|e| e.to_string())?;
-
-            window_manager.send_to(&target_id, &delivery);
-
-            let _ = tauri::Emitter::emit(
-                &app,
-                "cda:intent",
-                CdaIntentEvent {
-                    intent,
-                    source_instance_id: source.to_string(),
-                    handler_instance_id: target_id,
-                    request_id: request_id.clone(),
-                },
-            );
-
-            drop(handler);
-            Ok(request_id)
-        }
-
-        None => {
-            if peer_registry.forward_raise_intent(&intent, &context, source, &request_id) {
-                Ok(request_id)
-            } else {
-                Err(format!("No handler found for intent '{intent}'"))
-            }
-        }
-    }
+    broker.raise_from_dashboard(&intent, context, target_instance_id.as_deref())
 }
 
 // ── App Directory commands ─────────────────────────────────────────────────────
@@ -357,17 +280,12 @@ async fn cda_launch_app(
         None => {
             appd_owned = AppRecord {
                 app_id: app_id.clone(),
-                name: app_title.clone().unwrap_or_else(|| app_id.clone()),
                 app_type: app_type.clone(),
                 title: app_title.clone(),
-                description: None,
-                version: None,
                 details: Some(app_dir::AppDetails {
                     url: Some(app_url.clone()),
                 }),
-                categories: Vec::new(),
-                interop: None,
-                engine_bindings: None,
+                ..Default::default()
             };
             &appd_owned
         }
@@ -704,9 +622,11 @@ async fn build_tray_menu(app: &AppHandle) -> tauri::Result<tauri::menu::Menu<tau
         sub = sub.item(&placeholder);
     } else {
         for record in &apps {
-            let label = record.title.as_deref().unwrap_or(&record.name);
-            let item =
-                MenuItemBuilder::with_id(format!("launch:{}", record.app_id), label).build(app)?;
+            let item = MenuItemBuilder::with_id(
+                format!("launch:{}", record.app_id),
+                record.display_title(),
+            )
+            .build(app)?;
             sub = sub.item(&item);
         }
     }
@@ -823,27 +743,13 @@ pub fn run() {
 
     let app_dir_cache = AppDirectoryCache::new(&cfg.app_directory_url);
     let engine_catalog = EngineCatalogClient::new(&cfg.engine_catalog_url);
-    let channel_manager = ChannelManager::new();
-
-    // Seed user channels from config.
-    for ch in &cfg.user_channels {
-        channel_manager.create(&ch.id, &ch.display_name, &ch.color);
-    }
 
     tauri::Builder::default()
-        .manage(WindowManager::new())
-        .manage(channel_manager)
-        .manage(IntentRegistry::new())
-        .manage(PeerRegistry::new())
         .manage(app_dir_cache.clone())
         .manage(engine_catalog.clone())
         .manage(cfg.clone())
         .manage(TerminalRegistry::default())
         .setup(|app| {
-            let wm = app.state::<WindowManager>().inner().clone();
-            let cm = app.state::<ChannelManager>().inner().clone();
-            let ir = app.state::<IntentRegistry>().inner().clone();
-            let pr = app.state::<PeerRegistry>().inner().clone();
             let adc = app.state::<AppDirectoryCache>().inner().clone();
             let app_handle = app.handle().clone();
             let ports = app.state::<AgentConfig>().ports.clone();
@@ -885,37 +791,20 @@ pub fn run() {
                 });
             }
 
-            // TCP loopback server for spoke apps.
-            tauri::async_runtime::spawn(tcp::server::start(
-                ports.tcp_broker,
-                wm.clone(),
-                cm.clone(),
-                ir.clone(),
-                pr.clone(),
-                adc.clone(),
-                app_handle.clone(),
-            ));
-
-            // FDC3 Bus WebSocket server for browser apps.
+            // FDC3 broker, seeded with user channels from config, and the
+            // WebSocket server browser apps reach it through.
+            let broker = Broker::new(Arc::new(TauriEvents(app_handle.clone())));
+            for ch in &app.state::<AgentConfig>().user_channels {
+                broker.add_user_channel(&ch.id, &ch.display_name, &ch.color);
+            }
+            app.manage(broker.clone());
             tauri::async_runtime::spawn(fdc3_bus::start(
                 ports.fdc3_bus,
-                wm,
-                cm,
-                ir,
-                pr.clone(),
-                adc.clone(),
-                app_handle.clone(),
+                broker,
+                Arc::new(TauriBusHost(app_handle.clone())),
             ));
 
-            // DACP subsystem: discovery, inbound WS server, file announce.
-            let dacp_instance_id = new_uuid();
-            let app_handle_tray = app_handle.clone();
-            tauri::async_runtime::spawn(dacp::start(
-                pr,
-                app_handle,
-                dacp_instance_id,
-                ports.dacp_bridge,
-            ));
+            let app_handle_tray = app_handle;
 
             // Initial App Directory fetch (non-fatal if the service is not running).
             tauri::async_runtime::spawn(async move {
@@ -1029,10 +918,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             cda_list_connections,
             cda_list_channels,
-            cda_get_spoke_channel,
             cda_disconnect_spoke,
             cda_broadcast_from_dashboard,
-            cda_list_peers,
             cda_list_intent_handlers,
             cda_raise_intent_from_dashboard,
             cda_open_terminal,

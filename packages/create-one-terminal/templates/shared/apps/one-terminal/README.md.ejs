@@ -438,7 +438,7 @@ Three ways, in precedence order (later wins):
 2. **Environment** — `OT_APP_DIR_URL` overrides the config default at launch.
 3. **Per-user, live** — App Menu → **App Directory** section. The entered URL is stored per-user (localStorage) and the catalog re-fetches immediately, no restart. "Reset to default" clears it. Handled by [`src/settings/appDirectorySettings.ts`](src/settings/appDirectorySettings.ts) and [`src/hooks/useWidgetCatalog.ts`](src/hooks/useWidgetCatalog.ts).
 
-The effective URL is passed to the `wm_list_apps` Tauri command, which fetches it and merges the result with the local `widgets.config.json`. The endpoint must return the FDC3 2.2 shape — `{ applications: AppRecord[] }`; see [`src/types.ts:AppRecord`](src/types.ts) for the fields consumed (records are additionally tagged with `source` / `catalogId`).
+The effective URL is passed to the `wm_list_apps` Tauri command, which fetches it and merges the result with the local `widgets.config.json`. The endpoint must return the FDC3 3.0 shape — `{ applications: AppRecord[] }`; see [`src/types.ts:AppRecord`](src/types.ts) for the fields consumed (records are additionally tagged with `source` / `catalogId`).
 
 ### Vite / Tauri config
 
@@ -526,7 +526,7 @@ Leaves referencing labels that aren't alive are silently skipped by `reflow`, so
 
 | Service                       | URL                             | Used by                                                                                               |
 | ----------------------------- | ------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| App Directory (FDC3 2.2 AppD) | `http://localhost:3005/v2/apps` | Add Widget catalog — optional; without it the catalog still shows local `widgets.config.json` widgets |
+| App Directory (FDC3 3.0 AppD) | `http://localhost:3005/v2/apps` | Add Widget catalog — optional; without it the catalog still shows local `widgets.config.json` widgets |
 
 ---
 

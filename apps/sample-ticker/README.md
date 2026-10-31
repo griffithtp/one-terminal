@@ -1,12 +1,12 @@
 # sample-ticker
 
-Demo FDC3 spoke app — market data ticker plant.
+Demo FDC3 app — market data ticker plant.
 
 Served at **http://localhost:3010** via `npm run dev:sample-ticker`.
 
 ## What it does
 
-- Connects to the Desktop Agent over FDC3 2.2 (WebSocket)
+- Connects to the Desktop Agent over FDC3 3.0 (WebSocket)
 - Joins the **Green** user channel on startup
 - Periodically broadcasts a mock `fx.rate` context object with a simulated EUR/USD mid price
 - Raises **ViewChart** and **ViewQuote** intents when the user clicks on a rate row

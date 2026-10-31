@@ -20,7 +20,6 @@ fn seed_apps() -> Vec<AppD> {
         // ── Ticker-Plant ────────────────────────────────────────────────────
         AppD {
             app_id: "ticker-plant".into(),
-            name: "Ticker-Plant".into(),
             app_type: AppType::Web,
             details: AppDetails {
                 // Served by the embedded App Directory itself (samples.rs) so
@@ -29,7 +28,9 @@ fn seed_apps() -> Vec<AppD> {
                 url: "http://localhost:3005/apps/ticker-plant/".into(),
             },
 
-            title: Some("Market Data Ticker Plant".into()),
+            title: "Market Data Ticker Plant".into(),
+            legacy_name: None,
+            fdc3_version: Some(">=3.0".into()),
             description: Some(
                 "High-throughput market data distribution service for FX spot rates. \
                  Ingests raw tick data from upstream liquidity providers and normalises \
@@ -88,6 +89,7 @@ fn seed_apps() -> Vec<AppD> {
                     broadcasts: vec!["fdc3.instrument".into(), "fx.rate".into()],
                     listens_for: vec![],
                 }),
+                app_channels: None,
             }),
 
             host_manifests: Some(HashMap::from([(
@@ -102,15 +104,6 @@ fn seed_apps() -> Vec<AppD> {
                     }
                 }),
             )])),
-
-            custom_config: Some(HashMap::from([
-                (
-                    "symbols".to_string(),
-                    json!(["EUR/USD", "GBP/USD", "USD/JPY", "AUD/USD", "USD/CHF"]),
-                ),
-                ("tickIntervalMs".to_string(), json!(250)),
-                ("precisionOverride".to_string(), json!({ "USD/JPY": 3 })),
-            ])),
 
             engine_bindings: Some(HashMap::from([
                 (
@@ -132,7 +125,6 @@ fn seed_apps() -> Vec<AppD> {
         // ── Chart-Viewer ────────────────────────────────────────────────────
         AppD {
             app_id: "chart-viewer".into(),
-            name: "Chart-Viewer".into(),
             app_type: AppType::Web,
             details: AppDetails {
                 // Served by the embedded App Directory itself (samples.rs) so
@@ -141,7 +133,9 @@ fn seed_apps() -> Vec<AppD> {
                 url: "http://localhost:3005/apps/chart-viewer/".into(),
             },
 
-            title: Some("FX Candlestick Chart Viewer".into()),
+            title: "FX Candlestick Chart Viewer".into(),
+            legacy_name: None,
+            fdc3_version: Some(">=3.0".into()),
             description: Some(
                 "Interactive candlestick charting application for FX pairs. \
                  Responds to ViewChart intents and fdc3.instrument / fx.rate context \
@@ -218,6 +212,7 @@ fn seed_apps() -> Vec<AppD> {
                     broadcasts: vec![],
                     listens_for: vec!["fdc3.instrument".into(), "fx.rate".into()],
                 }),
+                app_channels: None,
             }),
 
             host_manifests: Some(HashMap::from([(
@@ -233,22 +228,6 @@ fn seed_apps() -> Vec<AppD> {
                     }
                 }),
             )])),
-
-            custom_config: Some(HashMap::from([
-                ("defaultSymbol".to_string(), json!("EUR/USD")),
-                ("defaultTimeframe".to_string(), json!("1H")),
-                (
-                    "availableTimeframes".to_string(),
-                    json!(["1M", "5M", "15M", "30M", "1H", "4H", "1D", "1W"]),
-                ),
-                (
-                    "indicators".to_string(),
-                    json!({
-                        "default": ["EMA(20)", "EMA(50)", "Volume"],
-                        "available": ["SMA", "EMA", "VWAP", "Bollinger", "RSI", "MACD", "ATR"]
-                    }),
-                ),
-            ])),
 
             engine_bindings: Some(HashMap::from([
                 (

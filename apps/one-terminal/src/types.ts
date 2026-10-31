@@ -146,7 +146,6 @@ export interface EngineBinding {
 
 export interface AppRecord {
   appId: string;
-  name: string;
   type: string;
   title?: string;
   description?: string;

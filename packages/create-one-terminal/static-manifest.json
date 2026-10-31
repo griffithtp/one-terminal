@@ -65,11 +65,15 @@
       "overlay": "enterprise"
     },
     {
-      "path": "apps/desktop-agent/src-tauri/src/broker/channel_manager.rs",
+      "path": "apps/desktop-agent/src-tauri/src/broker/apps.rs",
       "overlay": "enterprise"
     },
     {
-      "path": "apps/desktop-agent/src-tauri/src/broker/intent_registry.rs",
+      "path": "apps/desktop-agent/src-tauri/src/broker/channels.rs",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/desktop-agent/src-tauri/src/broker/intents.rs",
       "overlay": "enterprise"
     },
     {
@@ -77,35 +81,11 @@
       "overlay": "enterprise"
     },
     {
+      "path": "apps/desktop-agent/src-tauri/src/broker/tests.rs",
+      "overlay": "enterprise"
+    },
+    {
       "path": "apps/desktop-agent/src-tauri/src/broker/types.rs",
-      "overlay": "enterprise"
-    },
-    {
-      "path": "apps/desktop-agent/src-tauri/src/broker/window_manager.rs",
-      "overlay": "enterprise"
-    },
-    {
-      "path": "apps/desktop-agent/src-tauri/src/dacp/discovery.rs",
-      "overlay": "enterprise"
-    },
-    {
-      "path": "apps/desktop-agent/src-tauri/src/dacp/mod.rs",
-      "overlay": "enterprise"
-    },
-    {
-      "path": "apps/desktop-agent/src-tauri/src/dacp/peer.rs",
-      "overlay": "enterprise"
-    },
-    {
-      "path": "apps/desktop-agent/src-tauri/src/dacp/registry.rs",
-      "overlay": "enterprise"
-    },
-    {
-      "path": "apps/desktop-agent/src-tauri/src/dacp/server.rs",
-      "overlay": "enterprise"
-    },
-    {
-      "path": "apps/desktop-agent/src-tauri/src/dacp/types.rs",
       "overlay": "enterprise"
     },
     {
@@ -133,27 +113,7 @@
       "overlay": "enterprise"
     },
     {
-      "path": "apps/desktop-agent/src-tauri/src/tcp/handler.rs",
-      "overlay": "enterprise"
-    },
-    {
-      "path": "apps/desktop-agent/src-tauri/src/tcp/mod.rs",
-      "overlay": "enterprise"
-    },
-    {
-      "path": "apps/desktop-agent/src-tauri/src/tcp/server.rs",
-      "overlay": "enterprise"
-    },
-    {
-      "path": "apps/desktop-agent/src/bus/index.ts",
-      "overlay": "enterprise"
-    },
-    {
       "path": "apps/desktop-agent/src/components/ActivityFeed.tsx",
-      "overlay": "enterprise"
-    },
-    {
-      "path": "apps/desktop-agent/src/components/BridgeVisualizer.tsx",
       "overlay": "enterprise"
     },
     {
@@ -166,10 +126,6 @@
     },
     {
       "path": "apps/desktop-agent/src/components/EngineDevOverride.tsx",
-      "overlay": "enterprise"
-    },
-    {
-      "path": "apps/desktop-agent/src/components/IntentResolverModal.tsx",
       "overlay": "enterprise"
     },
     {
@@ -194,10 +150,6 @@
     },
     {
       "path": "apps/desktop-agent/src/hooks/useEngineOverride.ts",
-      "overlay": "enterprise"
-    },
-    {
-      "path": "apps/desktop-agent/src/hooks/useFdcBus.ts",
       "overlay": "enterprise"
     },
     {
@@ -638,15 +590,15 @@
     },
     {
       "path": "apps/sample-widget/README.md",
-      "overlay": "standalone"
+      "overlay": "shared"
     },
     {
       "path": "apps/sample-widget/index.html",
-      "overlay": "standalone"
+      "overlay": "shared"
     },
     {
       "path": "apps/sample-widget/server.js",
-      "overlay": "standalone"
+      "overlay": "shared"
     },
     {
       "path": "apps/tauri-webview-host/dist/index.html",
@@ -662,26 +614,6 @@
     },
     {
       "path": "apps/tauri-webview-host/src-tauri/src/main.rs",
-      "overlay": "enterprise"
-    },
-    {
-      "path": "packages/fdc3-client/src/agent.ts",
-      "overlay": "enterprise"
-    },
-    {
-      "path": "packages/fdc3-client/src/bridge-agent.ts",
-      "overlay": "enterprise"
-    },
-    {
-      "path": "packages/fdc3-client/src/index.ts",
-      "overlay": "enterprise"
-    },
-    {
-      "path": "packages/fdc3-client/src/types.ts",
-      "overlay": "enterprise"
-    },
-    {
-      "path": "packages/fdc3-client/tsconfig.json",
       "overlay": "enterprise"
     },
     {
@@ -747,30 +679,6 @@
     {
       "path": "packages/ot-core/src/plugin.rs",
       "overlay": "shared"
-    },
-    {
-      "path": "packages/ot-fdc3/Cargo.toml",
-      "overlay": "enterprise"
-    },
-    {
-      "path": "packages/ot-fdc3/src/client.rs",
-      "overlay": "enterprise"
-    },
-    {
-      "path": "packages/ot-fdc3/src/commands.rs",
-      "overlay": "enterprise"
-    },
-    {
-      "path": "packages/ot-fdc3/src/lib.rs",
-      "overlay": "enterprise"
-    },
-    {
-      "path": "packages/ot-fdc3/src/state.rs",
-      "overlay": "enterprise"
-    },
-    {
-      "path": "packages/ot-fdc3/src/types.rs",
-      "overlay": "enterprise"
     }
   ]
 }

@@ -132,7 +132,7 @@ export function useAppLaunch({ onOpenTab }: UseAppLaunchOpts): UseAppLaunchResul
 
   const doOpenTab = useCallback(
     (app: AppRecord, engineBinding: EngineBinding | null, target?: string | null) => {
-      onOpenTab(app.appId, app.details?.url ?? "", app.title ?? app.name, engineBinding, target);
+      onOpenTab(app.appId, app.details?.url ?? "", app.title ?? app.appId, engineBinding, target);
     },
     [onOpenTab]
   );

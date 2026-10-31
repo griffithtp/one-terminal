@@ -647,7 +647,7 @@ export function OverlayApp() {
                           ) : (
                             apps.map((app) => {
                               const engineCount = enginesFor(app).length;
-                              const cardTitle = app.title ?? app.name;
+                              const cardTitle = app.title ?? app.appId;
                               return (
                                 <button
                                   key={app.appId}

@@ -570,7 +570,7 @@ async function promptStructural(
   } else if (opType === "insert-after-line-matching") {
     const pattern = await p.text({
       message: "Pattern — unique substring of the line to anchor on",
-      placeholder: "e.g. .plugin(ot_fdc3::init())",
+      placeholder: "e.g. .plugin(tauri_plugin_opener::init())",
     });
     if (p.isCancel(pattern)) return null;
     const content = await p.text({
@@ -585,7 +585,7 @@ async function promptStructural(
   } else {
     const pattern = await p.text({
       message: "Pattern — unique substring of the line to anchor on",
-      placeholder: "e.g. .plugin(ot_fdc3::init())",
+      placeholder: "e.g. .plugin(tauri_plugin_opener::init())",
     });
     if (p.isCancel(pattern)) return null;
     const replacement = await p.text({ message: "Replacement line (exact indentation included)" });

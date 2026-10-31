@@ -23,7 +23,7 @@ export function ConnectionsPanel({ connections, channels, onDisconnect }: Props)
         <span className="panel__badge">{connections.length}</span>
       </h2>
       {connections.length === 0 ? (
-        <p className="panel__empty">No spokes connected. Start a spoke app to see it here.</p>
+        <p className="panel__empty">No apps connected. Start an FDC3 app to see it here.</p>
       ) : (
         <table className="table">
           <thead>

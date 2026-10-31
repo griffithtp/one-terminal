@@ -14,9 +14,7 @@ const RESERVED_NAMES = new Set([
   "tauri-webview-host",
   "electron-host",
   "ot-core",
-  "ot-fdc3",
   "fdc3-plugin",
-  "fdc3-client",
 ]);
 
 export interface WidgetSpec {

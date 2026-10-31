@@ -1,4 +1,4 @@
-//! Shared FDC3 2.2 App Directory server logic — no Tauri deps.
+//! Shared FDC3 3.0 App Directory server logic — no Tauri deps.
 //!
 //! Mounted in-process by `desktop-agent` and served standalone by
 //! `apps/app-directory-server`. See docs/plans/07-deployment-and-hosting.md

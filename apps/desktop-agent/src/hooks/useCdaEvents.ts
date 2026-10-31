@@ -8,16 +8,12 @@ import type {
   CdaContextEvent,
   CdaDisconnectedEvent,
   CdaIntentEvent,
-  CdaPeerConnectedEvent,
-  CdaPeerDisconnectedEvent,
-  PeerInfo,
   WindowHandle,
 } from "../types";
 
 export function useCdaEvents() {
   const [connections, setConnections] = useState<WindowHandle[]>([]);
   const [channels, setChannels] = useState<ChannelInfo[]>([]);
-  const [peers, setPeers] = useState<PeerInfo[]>([]);
   const [activityLog, setActivityLog] = useState<string[]>([]);
 
   const log = useCallback((msg: string) => {
@@ -26,14 +22,12 @@ export function useCdaEvents() {
   }, []);
 
   const refresh = useCallback(async () => {
-    const [conns, chans, prs] = await Promise.all([
+    const [conns, chans] = await Promise.all([
       invoke<WindowHandle[]>("cda_list_connections"),
       invoke<ChannelInfo[]>("cda_list_channels"),
-      invoke<PeerInfo[]>("cda_list_peers"),
     ]);
     setConnections(conns);
     setChannels(chans);
-    setPeers(prs);
   }, []);
 
   useEffect(() => {
@@ -68,14 +62,6 @@ export function useCdaEvents() {
           `intent  ${intent}  ${sourceInstanceId.slice(0, 8)}… → ${handlerInstanceId.slice(0, 8)}…`
         );
       }),
-      listen<CdaPeerConnectedEvent>("cda:peer_connected", (e) => {
-        refresh();
-        log(`peer connected  ${e.payload.desktopAgentId} (${e.payload.url})`);
-      }),
-      listen<CdaPeerDisconnectedEvent>("cda:peer_disconnected", (e) => {
-        refresh();
-        log(`peer disconnected  ${e.payload.desktopAgentId}`);
-      }),
     ]);
 
     return () => {
@@ -91,5 +77,5 @@ export function useCdaEvents() {
     [refresh]
   );
 
-  return { connections, channels, peers, activityLog, refresh, disconnectSpoke };
+  return { connections, channels, activityLog, refresh, disconnectSpoke };
 }

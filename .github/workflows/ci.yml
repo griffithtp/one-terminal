@@ -48,6 +48,16 @@ jobs:
       - name: Tests
         run: cargo test --workspace
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: FDC3 contract tests
+        run: |
+          npm ci --ignore-scripts
+          npm run test:fdc3-plugin
+
   typescript:
     name: TypeScript lint, format & build
     runs-on: ubuntu-latest
@@ -70,6 +80,9 @@ jobs:
 
       - name: Typecheck
         run: npm run typecheck
+
+      - name: fdc3-plugin bundle is up to date
+        run: npm -w @one-terminal/fdc3-plugin run check:bundle
 
       - name: Build app-directory
         run: npm run build:app-directory

@@ -45,8 +45,7 @@ export function WidgetCatalog({
     const q = query.trim().toLowerCase();
     if (!q) return apps;
     return apps.filter((app) => {
-      const haystack =
-        `${app.title ?? ""} ${app.name ?? ""} ${app.description ?? ""}`.toLowerCase();
+      const haystack = `${app.title ?? ""} ${app.appId} ${app.description ?? ""}`.toLowerCase();
       return haystack.includes(q);
     });
   }, [apps, query]);
@@ -86,7 +85,7 @@ export function WidgetCatalog({
         ) : (
           filtered.map((app) => {
             const engineCount = enginesFor(app).length;
-            const cardTitle = app.title ?? app.name;
+            const cardTitle = app.title ?? app.appId;
             const tooltip =
               engineCount > 1
                 ? `${app.description ?? `Launch ${cardTitle}`} — choose engine (${engineCount} available)`

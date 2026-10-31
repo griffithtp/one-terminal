@@ -6,7 +6,6 @@ members = [
     "apps/tauri-webview-host/src-tauri",
     "apps/app-directory-server",
     "packages/ot-core",
-    "packages/ot-fdc3",
     "packages/ot-appdirectory",
 ]
 
@@ -36,7 +35,6 @@ dashmap  = { version = "6", features = ["serde"] }
 indexmap = { version = "2", features = ["serde"] }
 
 # WebSocket client
-tokio-tungstenite = "0.24"
 futures-util      = "0.3"
 
 # HTTP client (used by CDA app-directory fetch)
@@ -49,5 +47,4 @@ zip  = { version = "0.6", default-features = false, features = ["deflate"] }
 
 # Internal crates
 ot-core = { path = "packages/ot-core" }
-ot-fdc3  = { path = "packages/ot-fdc3" }
 ot-appdirectory = { path = "packages/ot-appdirectory" }

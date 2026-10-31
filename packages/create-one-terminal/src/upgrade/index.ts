@@ -1,7 +1,9 @@
 import { join, dirname } from "node:path";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import * as p from "@clack/prompts";
+import ejs from "ejs";
+import { buildContext, type ScaffoldContext, type Variant } from "../create/context.js";
 import { detectProject } from "./detect.js";
 import { fetchManifest } from "./manifest.js";
 import { buildChain, latestVersion } from "./chain.js";
@@ -56,7 +58,7 @@ export async function runUpgrade(cwd = process.cwd()): Promise<void> {
   }
 
   // Snapshot all targets before touching anything
-  const allTargets = [...new Set(chain.map(({ migration }) => migration.target))];
+  const allTargets = [...new Set(chain.flatMap(({ migration }) => touchedPaths(migration)))];
   await snapshot(cwd, targetVersion, allTargets);
 
   const results: MigrationResult[] = [];
@@ -95,6 +97,58 @@ export async function runUpgrade(cwd = process.cwd()): Promise<void> {
   );
 }
 
+/** Every path a migration can overwrite or delete, so a rollback can restore it. */
+function touchedPaths(migration: MigrationSpec): string[] {
+  const paths = [migration.target];
+  if (migration.type === "structural") {
+    for (const op of migration.operations) {
+      if (op.op === "add-file" || op.op === "remove-path") paths.push(op.targetPath);
+    }
+  }
+  return paths;
+}
+
+/** The fields read from a workspace's package.json, tauri.conf.json and agent.config.json. */
+interface WorkspaceJson {
+  name?: string;
+  identifier?: string;
+  appDirectoryUrl?: string;
+  ports?: { fdc3Bus?: number };
+  oneTerminal?: { variant?: Variant };
+}
+
+/**
+ * The values needed to render a template into an existing workspace, read from
+ * the workspace itself so that its identifiers and ports are preserved.
+ */
+async function workspaceContext(cwd: string): Promise<ScaffoldContext> {
+  const readJson = async (rel: string): Promise<WorkspaceJson | null> =>
+    readFile(join(cwd, rel), "utf8")
+      .then((text) => JSON.parse(text) as WorkspaceJson)
+      .catch(() => null);
+
+  const pkg = await readJson("package.json");
+  const tauri = await readJson("apps/one-terminal/src-tauri/tauri.conf.json");
+  const agent = await readJson("apps/desktop-agent/src-tauri/resources/agent.config.json");
+  const appDirectoryPort = Number(
+    String(agent?.appDirectoryUrl ?? "")
+      .split(":")
+      .pop()
+  );
+
+  return buildContext({
+    workspaceName: String(pkg?.name ?? "one-terminal"),
+    tauriIdentifier: String(tauri?.identifier ?? "com.one-terminal.terminal").replace(
+      /\.terminal$/,
+      ""
+    ),
+    includeFdc3: true,
+    variant: pkg?.oneTerminal?.variant,
+    fdc3BusPort: agent?.ports?.fdc3Bus,
+    appDirectoryPort: Number.isNaN(appDirectoryPort) ? undefined : appDirectoryPort,
+  });
+}
+
 async function applyMigration(
   cwd: string,
   migration: MigrationSpec,
@@ -131,13 +185,18 @@ async function applyStructural(
   // Templates live under per-variant overlays; try each in order.
   // shared first (most common), then enterprise/standalone for variant-specific files.
   const OVERLAYS = ["shared", "enterprise", "standalone"];
+  let context: ScaffoldContext | undefined;
 
   async function readOverlaySource(sourcePath: string): Promise<string | null> {
     for (const overlay of OVERLAYS) {
       for (const candidate of [sourcePath + ".ejs", sourcePath]) {
         try {
-          return await readFile(join(templatesDir, overlay, candidate), "utf8");
-        } catch {
+          const content = await readFile(join(templatesDir, overlay, candidate), "utf8");
+          if (!candidate.endsWith(".ejs")) return content;
+          context ??= await workspaceContext(cwd);
+          return ejs.render(content, context);
+        } catch (err) {
+          if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
           // try next
         }
       }
@@ -164,7 +223,15 @@ async function applyStructural(
     await writeFile(destPath, srcContent, "utf8");
   }
 
-  const patchOps = migration.operations.filter((op) => op.op !== "add-file");
+  for (const op of migration.operations) {
+    if (op.op === "remove-path") {
+      await rm(join(cwd, op.targetPath), { recursive: true, force: true });
+    }
+  }
+
+  const patchOps = migration.operations.filter(
+    (op) => op.op !== "add-file" && op.op !== "remove-path"
+  );
   if (patchOps.length === 0) {
     return { id: migration.id, description: migration.description, status: "applied" };
   }

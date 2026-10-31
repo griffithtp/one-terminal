@@ -89,7 +89,7 @@ pub fn plan_launch(
         .as_ref()
         .and_then(|d| d.url.clone())
         .ok_or_else(|| format!("App {} has no launch URL", appd.app_id))?;
-    let title = appd.title.clone().unwrap_or_else(|| appd.name.clone());
+    let title = appd.display_title().to_string();
 
     // No engine binding for this OS → keep today's behavior (in-process).
     let Some(installed) = installed else {
@@ -215,17 +215,12 @@ mod tests {
     fn app(url: &str, bindings: Option<HashMap<OsKey, Vec<EngineBinding>>>) -> AppRecord {
         AppRecord {
             app_id: "t".into(),
-            name: "T".into(),
             app_type: "web".into(),
-            title: None,
-            description: None,
-            version: None,
             details: Some(AppDetails {
                 url: Some(url.into()),
             }),
-            categories: vec![],
-            interop: None,
             engine_bindings: bindings,
+            ..Default::default()
         }
     }
 

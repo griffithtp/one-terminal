@@ -1,4 +1,4 @@
-//! FDC3 2.2 App Directory type definitions.
+//! FDC3 3.0 App Directory type definitions.
 //! Ported from `apps/app-directory/src/types.ts`; aligned with the FDC3 AppD
 //! REST API spec: <https://fdc3.finos.org/docs/app-directory/overview>.
 
@@ -119,6 +119,19 @@ pub struct UserChannelInterop {
     pub listens_for: Vec<String>,
 }
 
+/// An app channel the app uses, so it can be found by purpose in the directory.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppChannelInterop {
+    pub id: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub broadcasts: Vec<String>,
+    #[serde(default)]
+    pub listens_for: Vec<String>,
+}
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct Interop {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -126,29 +139,39 @@ pub struct Interop {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[serde(rename = "userChannels")]
     pub user_channels: Option<UserChannelInterop>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(rename = "appChannels")]
+    pub app_channels: Option<Vec<AppChannelInterop>>,
 }
 
 // ── AppD record ────────────────────────────────────────────────────────────────
 
-/// Full FDC3 2.2 App Directory application record.
+/// Full FDC3 3.0 App Directory application record.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppD {
     /// Unique, stable application identifier within this directory.
     pub app_id: String,
-    pub name: String,
+    /// Required, but records from before FDC3 3.0 may only have `name`: see
+    /// [`AppD::apply_legacy_name`].
+    #[serde(default)]
+    pub title: String,
+    /// `name` was removed in FDC3 3.0. Accepted on input, never written back.
+    #[serde(default, rename = "name", skip_serializing)]
+    pub legacy_name: Option<String>,
     #[serde(rename = "type")]
     pub app_type: AppType,
     pub details: AppDetails,
 
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub title: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub version: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tooltip: Option<String>,
+    /// Range of FDC3 versions the app supports, e.g. `>=2.2`. Absent means any.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub fdc3_version: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub lang: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -171,14 +194,23 @@ pub struct AppD {
 
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub host_manifests: Option<HashMap<String, serde_json::Value>>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub custom_config: Option<HashMap<String, serde_json::Value>>,
 
     /// Per-OS list of browser engines this app supports. The user picks which
     /// one to launch with at tab-open time; a missing or empty list falls
     /// back to the launcher default (system-native webview).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub engine_bindings: Option<HashMap<OsKey, Vec<EngineBinding>>>,
+}
+
+impl AppD {
+    /// Use a pre-3.0 `name` as the title when a record has no `title`.
+    pub fn apply_legacy_name(&mut self) {
+        if let Some(name) = self.legacy_name.take() {
+            if self.title.is_empty() {
+                self.title = name;
+            }
+        }
+    }
 }
 
 // ── REST API envelopes ─────────────────────────────────────────────────────────

@@ -5,7 +5,10 @@ use tokio::sync::RwLock;
 
 use crate::engines::{EngineBinding, OsKey};
 
-// ── AppD subset types (mirrors FDC3 2.2 App Directory response) ───────────────
+/// The FDC3 version this agent implements, as `(major, minor)`.
+const AGENT_FDC3_VERSION: (u32, u32) = (3, 0);
+
+// ── AppD subset types (mirrors the FDC3 3.0 App Directory response) ───────────────
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -37,17 +40,24 @@ pub struct AppInterop {
     pub intents: Option<AppIntents>,
 }
 
-/// Slim App Directory record — a subset of FDC3 2.2 AppD.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+/// Slim App Directory record — a subset of the FDC3 3.0 AppD.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppRecord {
     pub app_id: String,
-    pub name: String,
     #[serde(rename = "type", default)]
     pub app_type: String,
     pub title: Option<String>,
+    /// `name` was removed in FDC3 3.0, but a remote directory may still send it.
+    #[serde(default, rename = "name", skip_serializing)]
+    pub legacy_name: Option<String>,
     pub description: Option<String>,
+    pub tooltip: Option<String>,
     pub version: Option<String>,
+    /// Range of FDC3 versions the app supports, e.g. `>=2.2`. Absent means any.
+    pub fdc3_version: Option<String>,
+    pub icons: Option<serde_json::Value>,
+    pub screenshots: Option<serde_json::Value>,
     pub details: Option<AppDetails>,
     #[serde(default)]
     pub categories: Vec<String>,
@@ -59,6 +69,20 @@ pub struct AppRecord {
 }
 
 impl AppRecord {
+    /// The title to show for this app, falling back to a legacy name, then its id.
+    pub fn display_title(&self) -> &str {
+        self.title
+            .as_deref()
+            .or(self.legacy_name.as_deref())
+            .unwrap_or(&self.app_id)
+    }
+
+    fn supports_agent_fdc3_version(&self) -> bool {
+        self.fdc3_version
+            .as_deref()
+            .is_none_or(|range| range_includes(range, AGENT_FDC3_VERSION))
+    }
+
     /// All supported engines for `os`, in directory-declared order. Returns
     /// an empty slice if the app has no entry for this OS.
     pub fn bindings_for(&self, os: OsKey) -> &[EngineBinding] {
@@ -76,23 +100,52 @@ impl AppRecord {
     }
 }
 
+/// Whether an AppD `fdc3Version` range such as `>=2.2`, `2.2 || 3.0` or
+/// `2.0 - 3.0` includes `version`. A range that doesn't parse excludes the app.
+fn range_includes(range: &str, version: (u32, u32)) -> bool {
+    fn parse(v: &str) -> Option<(u32, u32)> {
+        let (major, minor) = v.trim().split_once('.')?;
+        Some((major.parse().ok()?, minor.parse().ok()?))
+    }
+    fn comparator(part: &str, version: (u32, u32)) -> Option<bool> {
+        for op in [">=", "<=", ">", "<", "=", "~", "^"] {
+            if let Some(rest) = part.strip_prefix(op) {
+                let v = parse(rest)?;
+                return Some(match op {
+                    ">=" => version >= v,
+                    "<=" => version <= v,
+                    ">" => version > v,
+                    "<" => version < v,
+                    "~" => version == v,
+                    "^" => version.0 == v.0 && version >= v,
+                    _ => version == v,
+                });
+            }
+        }
+        Some(version == parse(part)?)
+    }
+    range.split("||").any(|alternative| {
+        let alternative = alternative.trim();
+        if let Some((low, high)) = alternative.split_once(" - ") {
+            return matches!((parse(low), parse(high)), (Some(l), Some(h)) if version >= l && version <= h);
+        }
+        // Attach an operator separated from its version by a space (">= 2.2").
+        let compact = alternative
+            .replace(">= ", ">=")
+            .replace("<= ", "<=")
+            .replace("> ", ">")
+            .replace("< ", "<");
+        !compact.is_empty()
+            && compact
+                .split_whitespace()
+                .all(|part| comparator(part, version) == Some(true))
+    })
+}
+
 /// Response envelope from `GET /v2/apps`.
 #[derive(Debug, Deserialize)]
 struct AppsListResponse {
     applications: Vec<AppRecord>,
-}
-
-// ── Tauri event: emitted when tier-4 intent resolution finds App Dir candidates
-
-#[derive(Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct CdaIntentNeedsResolutionEvent {
-    pub intent: String,
-    pub context: serde_json::Value,
-    pub source_instance_id: String,
-    pub request_id: String,
-    /// App Directory apps that declare `listensFor` this intent.
-    pub candidates: Vec<AppRecord>,
 }
 
 // ── AppDirectoryCache ─────────────────────────────────────────────────────────
@@ -145,20 +198,57 @@ impl AppDirectoryCache {
         self.inner.read().await.clone()
     }
 
-    /// Return all cached apps that declare `listensFor` the given intent name.
-    pub async fn handlers_for_intent(&self, intent: &str) -> Vec<AppRecord> {
-        let guard = self.inner.read().await;
-        guard
+    /// Records usable by this agent over FDC3: those whose `fdc3Version` range,
+    /// if any, includes the version it implements.
+    pub async fn list_fdc3_compatible(&self) -> Vec<AppRecord> {
+        self.inner
+            .read()
+            .await
             .iter()
-            .filter(|app| {
-                app.interop
-                    .as_ref()
-                    .and_then(|i| i.intents.as_ref())
-                    .and_then(|intents| intents.listens_for.as_ref())
-                    .map(|lf| lf.contains_key(intent))
-                    .unwrap_or(false)
-            })
+            .filter(|a| a.supports_agent_fdc3_version())
             .cloned()
             .collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::range_includes;
+
+    #[test]
+    fn fdc3_version_ranges() {
+        let v3 = (3, 0);
+        for included in [
+            "3.0",
+            "=3.0",
+            ">=2.2",
+            ">= 2.2",
+            "<=3.0",
+            "2.2 || 3.0",
+            "2.0 - 3.0",
+            "^3.0",
+            "~3.0",
+            ">=2.0 <4.0",
+        ] {
+            assert!(
+                range_includes(included, v3),
+                "{included} should include 3.0"
+            );
+        }
+        for excluded in [
+            "2.2",
+            "<3.0",
+            ">3.0",
+            "^2.0",
+            "2.0 - 2.2",
+            ">=2.0 <3.0",
+            "nonsense",
+            "",
+        ] {
+            assert!(
+                !range_includes(excluded, v3),
+                "{excluded} should exclude 3.0"
+            );
+        }
     }
 }

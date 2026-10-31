@@ -31,11 +31,11 @@ interface IntentRaise {
 interface FormState {
   // Required
   appId: string;
-  name: string;
   type: AppType;
   url: string;
   // Optional metadata
   title: string;
+  fdc3Version: string;
   description: string;
   version: string;
   tooltip: string;
@@ -60,10 +60,10 @@ interface FormState {
 function appDToForm(app: AppD): FormState {
   return {
     appId: app.appId,
-    name: app.name,
     type: app.type,
     url: app.details.url,
-    title: app.title ?? "",
+    title: app.title,
+    fdc3Version: app.fdc3Version ?? "",
     description: app.description ?? "",
     version: app.version ?? "",
     tooltip: app.tooltip ?? "",
@@ -97,10 +97,10 @@ function appDToForm(app: AppD): FormState {
 
 const BLANK_FORM: FormState = {
   appId: "",
-  name: "",
   type: "web",
   url: "",
   title: "",
+  fdc3Version: "",
   description: "",
   version: "",
   tooltip: "",
@@ -127,14 +127,14 @@ function splitCsv(s: string): string[] {
 function formToAppD(form: FormState): AppD {
   const app: AppD = {
     appId: form.appId.trim(),
-    name: form.name.trim(),
+    title: form.title.trim(),
     type: form.type,
     details: { url: form.url.trim() },
   };
 
   // Optional scalar fields
   const scalars = [
-    "title",
+    "fdc3Version",
     "description",
     "version",
     "tooltip",
@@ -355,7 +355,7 @@ export default function AppForm({ existingApp, onSave, onCancel }: Props) {
       e.appId = "Only letters, numbers, hyphens and underscores are allowed";
     }
 
-    if (!form.name.trim()) e.name = "Name is required";
+    if (!form.title.trim()) e.title = "Title is required";
 
     if (!form.url.trim()) {
       e.url = "Launch URL is required";
@@ -397,7 +397,9 @@ export default function AppForm({ existingApp, onSave, onCancel }: Props) {
       }
 
       onSave(
-        isEdit ? `"${body.name}" updated successfully.` : `"${body.name}" registered successfully.`
+        isEdit
+          ? `"${body.title}" updated successfully.`
+          : `"${body.title}" registered successfully.`
       );
     } catch (e: unknown) {
       setApiError(e instanceof Error ? e.message : "Unknown error");
@@ -411,7 +413,7 @@ export default function AppForm({ existingApp, onSave, onCancel }: Props) {
   return (
     <div className="app-form">
       <div className="form-header">
-        <h2>{isEdit ? `Edit: ${existingApp!.name}` : "Register New Application"}</h2>
+        <h2>{isEdit ? `Edit: ${existingApp!.title}` : "Register New Application"}</h2>
         <button className="btn btn-secondary" onClick={onCancel}>
           Cancel
         </button>
@@ -438,16 +440,16 @@ export default function AppForm({ existingApp, onSave, onCancel }: Props) {
             </div>
             <div className="field">
               <label>
-                Name<span className="req">*</span>
+                Title<span className="req">*</span>
               </label>
               <input
                 type="text"
-                value={form.name}
-                onChange={(e) => set("name", e.target.value)}
+                value={form.title}
+                onChange={(e) => set("title", e.target.value)}
                 placeholder="e.g. My App"
-                className={errors.name ? "is-error" : ""}
+                className={errors.title ? "is-error" : ""}
               />
-              {errors.name && <span className="field-error">{errors.name}</span>}
+              {errors.title && <span className="field-error">{errors.title}</span>}
             </div>
             <div className="field">
               <label>
@@ -485,12 +487,12 @@ export default function AppForm({ existingApp, onSave, onCancel }: Props) {
           <div className="section-title">Metadata — Optional</div>
           <div className="form-grid">
             <div className="field">
-              <label>Title</label>
+              <label>FDC3 version</label>
               <input
                 type="text"
-                value={form.title}
-                onChange={(e) => set("title", e.target.value)}
-                placeholder="Human-readable display title"
+                value={form.fdc3Version}
+                onChange={(e) => set("fdc3Version", e.target.value)}
+                placeholder="e.g. >=2.2 (any if empty)"
               />
             </div>
             <div className="field">

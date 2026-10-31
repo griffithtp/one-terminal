@@ -2,7 +2,8 @@
 //! `apps/app-directory/src/router.ts`'s `applyFilter`.
 //!
 //! Supported forms (case-insensitive field names):
-//!   name eq 'ticker-plant'
+//!   title eq 'Ticker Plant'
+//!   name eq 'Ticker Plant' (`name` was removed in FDC3 3.0; kept as an alias)
 //!   appId eq 'chart-viewer'
 //!   categories/any(c: c eq 'Analytics')
 //!   intents/listensFor/<IntentName>
@@ -15,10 +16,10 @@ use crate::types::AppD;
 pub fn apply_filter(apps: Vec<AppD>, filter: &str) -> Vec<AppD> {
     let lower = filter.trim().to_lowercase();
 
-    if let Some(v) = extract_eq(&lower, "name") {
+    if let Some(v) = extract_eq(&lower, "title").or_else(|| extract_eq(&lower, "name")) {
         return apps
             .into_iter()
-            .filter(|a| a.name.to_lowercase().contains(&v))
+            .filter(|a| a.title.to_lowercase().contains(&v))
             .collect();
     }
 

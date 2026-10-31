@@ -53,7 +53,8 @@ http.createServer((req, res) => {
     }
     const ext  = path.extname(filePath);
     const mime = MIME[ext] ?? 'application/octet-stream';
-    const cache = ext === '.html'
+    // fdc3-plugin.js has no content hash in its name, so it must revalidate.
+    const cache = ext === '.html' || filePath.endsWith('fdc3-plugin.js')
       ? 'no-cache, no-store, must-revalidate'
       : 'public, max-age=31536000, immutable';
     res.writeHead(200, { 'Content-Type': mime, 'Cache-Control': cache });

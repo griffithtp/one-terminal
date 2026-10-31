@@ -67,7 +67,7 @@ export async function runPrompts(): Promise<PromptsResult> {
     includeFdc3 = true;
   } else {
     const answer = await p.confirm({
-      message: "Include FDC3 2.2 integration (ot-fdc3 / fdc3-client / fdc3-plugin)?",
+      message: "Include FDC3 3.0 integration (fdc3-plugin)?",
       initialValue: true,
     });
     if (p.isCancel(answer)) cancel();
@@ -99,9 +99,7 @@ export async function runPrompts(): Promise<PromptsResult> {
   let portAnswers: {
     terminalDevPort?: number;
     agentDevPort?: number;
-    tcpBrokerPort?: number;
     fdc3BusPort?: number;
-    dacpBridgePort?: number;
     appDirectoryPort?: number;
   } = {};
 
@@ -156,9 +154,7 @@ async function promptStandalonePorts(): Promise<{
 async function promptEnterprisePorts(): Promise<{
   terminalDevPort: number;
   agentDevPort: number;
-  tcpBrokerPort: number;
   fdc3BusPort: number;
-  dacpBridgePort: number;
   appDirectoryPort: number;
 }> {
   const ports = await p.group({
@@ -174,25 +170,19 @@ async function promptEnterprisePorts(): Promise<{
         initialValue: "1421",
         validate: validatePort,
       }),
-    tcpBrokerPort: () =>
-      p.text({ message: "TCP broker port", initialValue: "7890", validate: validatePort }),
     fdc3BusPort: () =>
       p.text({
         message: "FDC3 bus WebSocket port",
         initialValue: "7891",
         validate: validatePort,
       }),
-    dacpBridgePort: () =>
-      p.text({ message: "DACP bridge port", initialValue: "4475", validate: validatePort }),
     appDirectoryPort: () =>
       p.text({ message: "App Directory port", initialValue: "3005", validate: validatePort }),
   });
   return {
     terminalDevPort: Number(ports.terminalDevPort),
     agentDevPort: Number(ports.agentDevPort),
-    tcpBrokerPort: Number(ports.tcpBrokerPort),
     fdc3BusPort: Number(ports.fdc3BusPort),
-    dacpBridgePort: Number(ports.dacpBridgePort),
     appDirectoryPort: Number(ports.appDirectoryPort),
   };
 }

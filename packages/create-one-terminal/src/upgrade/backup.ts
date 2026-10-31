@@ -1,4 +1,4 @@
-import { copyFile, mkdir, rm } from "node:fs/promises";
+import { cp, mkdir, rm } from "node:fs/promises";
 import { join, dirname } from "node:path";
 
 export function backupDir(cwd: string, targetVersion: string): string {
@@ -20,9 +20,9 @@ export async function snapshot(
     const dest = join(dir, rel);
     try {
       await mkdir(dirname(dest), { recursive: true });
-      await copyFile(src, dest);
+      await cp(src, dest, { recursive: true });
     } catch {
-      // file may not exist yet (add-file migrations) — skip
+      // path may not exist yet (add-file migrations) — skip
     }
   }
 }

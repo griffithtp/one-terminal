@@ -43,7 +43,7 @@ export default function AppList({ apps, loading, error, onEdit, onDelete }: Prop
   }
 
   const handleDelete = (app: AppD) => {
-    if (!confirm(`Remove "${app.name}" (${app.appId}) from the directory?`)) return;
+    if (!confirm(`Remove "${app.title}" (${app.appId}) from the directory?`)) return;
     onDelete(app.appId);
   };
 
@@ -78,7 +78,7 @@ export default function AppList({ apps, loading, error, onEdit, onDelete }: Prop
                 <td>
                   <code>{app.appId}</code>
                 </td>
-                <td style={{ fontWeight: 500 }}>{app.name}</td>
+                <td style={{ fontWeight: 500 }}>{app.title}</td>
                 <td>{typeBadge(app.type)}</td>
                 <td>
                   <a href={app.details.url} target="_blank" rel="noreferrer">

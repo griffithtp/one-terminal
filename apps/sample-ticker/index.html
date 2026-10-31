@@ -178,7 +178,7 @@
 
 <header>
   <span class="app-name">Ticker-Plant</span>
-  <span class="app-badge">FDC3 2.2</span>
+  <span class="app-badge">FDC3 3.0</span>
   <div id="status">
     <span id="status-dot"></span>
     <span id="status-text">Connecting…</span>
@@ -221,10 +221,9 @@
 </main>
 
 <script type="module">
-// Imported for its side effect: auto-connects and sets window.fdc3Ready.
-// Using that shared connection lets the Terminal's "Set channel" menu
-// (which drives window.fdc3Ready) control this widget's channel.
-import './fdc3-plugin.js';
+// The plugin connects once per page. Using its shared connection lets the
+// Terminal's "Set channel" menu control this widget's channel.
+import { getAgent } from './fdc3-plugin.js';
 
 // ── Mock rate data ──────────────────────────────────────────────────────────
 
@@ -367,9 +366,9 @@ function showChannel(channelId) {
 }
 
 try {
-  fdc3 = await window.fdc3Ready;
-  if (!fdc3) throw window.fdc3Error ?? new Error('CDA unavailable');
-  setStatus(`Connected  ·  instance: ${fdc3.getIdentity().instanceId.slice(0, 8)}`, 'connected');
+  fdc3 = await getAgent();
+  const { appMetadata } = await fdc3.getInfo();
+  setStatus(`Connected  ·  instance: ${appMetadata.instanceId.slice(0, 8)}`, 'connected');
   addLog('✓', 'Connected to CDA hub');
 
   // Populate channel selector from the welcome message
@@ -394,8 +393,8 @@ try {
   }
   showChannel((await fdc3.getCurrentChannel())?.id ?? null);
 } catch (e) {
-  setStatus(e.message?.includes('NoAgentConfigured') ? 'No FDC3 agent configured' : 'CDA unavailable', 'error');
-  addLog('✗', `Connection failed: ${e.message}`);
+  setStatus(window.OT_FDC3_AGENT_URL === '' ? 'No FDC3 agent configured' : 'CDA unavailable', 'error');
+  addLog('✗', `Connection failed: ${e.cause?.message ?? e.message}`);
 }
 
 async function joinChannel(channelId) {
@@ -453,7 +452,7 @@ ratesBody.addEventListener('click', async (e) => {
   if (action === 'intent') {
     try {
       const resolution = await fdc3.raiseIntent('ViewChart', context);
-      addLog('✓', `ViewChart [${sym}] → handler: ${resolution.source?.appId ?? 'unknown'}`, true);
+      addLog('✓', `ViewChart [${sym}] → handler: ${resolution.source.appId}`, true);
     } catch (e) {
       addLog('✗', `ViewChart failed: ${e.message}`);
     }

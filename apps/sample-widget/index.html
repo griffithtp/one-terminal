@@ -130,7 +130,7 @@
   <body>
     <header>
       <span class="title">Sample Widget</span>
-      <span class="badge">FDC3 2.2</span>
+      <span class="badge">FDC3 3.0</span>
       <span id="status">Connecting…</span>
       <span id="channel">○ No channel</span>
     </header>
@@ -151,10 +151,9 @@
     </div>
 
     <script type="module">
-      // Imported for its side effect: auto-connects and sets window.fdc3Ready.
-      // The widget uses that shared connection so the Terminal's "Set channel"
-      // menu (which drives window.fdc3Ready) controls this widget's channel.
-      import "/fdc3-plugin.js";
+      // The plugin connects once per page. Using its shared connection lets the
+      // Terminal's "Set channel" menu control this widget's channel.
+      import { getAgent } from "/fdc3-plugin.js";
 
       const statusEl = document.getElementById("status");
       const channelEl = document.getElementById("channel");
@@ -183,9 +182,9 @@
       }
 
       try {
-        fdc3 = await window.fdc3Ready;
-        if (!fdc3) throw window.fdc3Error ?? new Error("Agent unavailable");
-        statusEl.textContent = `Connected · ${fdc3.getIdentity().instanceId.slice(0, 8)}`;
+        fdc3 = await getAgent();
+        const { appMetadata } = await fdc3.getInfo();
+        statusEl.textContent = `Connected · ${appMetadata.instanceId.slice(0, 8)}`;
         statusEl.className = "ok";
         log("Connected to FDC3 agent");
 
@@ -208,11 +207,10 @@
           log(`Received instrument: <strong>${ctx.id?.ticker ?? ctx.name ?? "?"}</strong>`);
         });
       } catch (e) {
-        statusEl.textContent = e.message?.includes("NoAgentConfigured")
-          ? "No FDC3 agent configured"
-          : "Agent unavailable";
+        statusEl.textContent =
+          window.OT_FDC3_AGENT_URL === "" ? "No FDC3 agent configured" : "Agent unavailable";
         statusEl.className = "err";
-        log(`Connection failed: ${e.message}`);
+        log(`Connection failed: ${e.cause?.message ?? e.message}`);
       }
 
       broadcastBtn.addEventListener("click", async () => {

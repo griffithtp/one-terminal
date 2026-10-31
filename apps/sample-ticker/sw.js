@@ -1,4 +1,4 @@
-const CACHE = 'ticker-v2';
+const CACHE = 'ticker-v3';
 const PRECACHE = ['./fdc3-plugin.js'];
 
 self.addEventListener('install', (e) =>

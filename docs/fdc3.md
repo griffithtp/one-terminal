@@ -2,7 +2,7 @@
 
 This page explains how OneTerminal widgets find an FDC3 Desktop Agent, how users choose between several agents, and how the Desktop Agent itself is configured.
 
-For the client libraries (`fdc3-plugin`, `fdc3-client`, `ot-fdc3`), see the [root README](../README.md#-fdc3-client-libraries-fdc3-plugin-vs-fdc3-client-vs-ot-fdc3).
+For the client library, see the [`fdc3-plugin` README](../packages/fdc3-plugin/README.md).
 
 - [How a widget connects](#how-a-widget-connects)
 - [Choosing a Desktop Agent in the Terminal](#choosing-a-desktop-agent-in-the-terminal)

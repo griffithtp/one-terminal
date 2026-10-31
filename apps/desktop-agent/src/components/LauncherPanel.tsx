@@ -120,7 +120,7 @@ function AppCard({ app }: AppCardProps) {
         appId: app.appId,
         appUrl: url,
         appType: app.type,
-        appTitle: app.title ?? app.name,
+        appTitle: app.title ?? app.appId,
         engineOverride: import.meta.env.DEV ? (override ?? null) : null,
       });
       setFeedback(
@@ -138,7 +138,7 @@ function AppCard({ app }: AppCardProps) {
   return (
     <div className="lp__card">
       <div className="lp__card-header">
-        <span className="lp__card-name">{app.title ?? app.name}</span>
+        <span className="lp__card-name">{app.title ?? app.appId}</span>
         {app.version && <span className="lp__card-version">v{app.version}</span>}
       </div>
 

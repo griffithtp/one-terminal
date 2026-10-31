@@ -21,7 +21,7 @@ export function EnginePickerDialog({ app, engines, onPick, onCancel }: Props) {
     <div className="wm-engine-picker__backdrop" role="dialog" aria-modal="true">
       <div className="wm-engine-picker">
         <div className="wm-engine-picker__title">
-          Launch <strong>{app.title ?? app.name}</strong> with
+          Launch <strong>{app.title ?? app.appId}</strong> with
         </div>
         <ul className="wm-engine-picker__list">
           {engines.map((b) => (

@@ -15,7 +15,7 @@ export async function initAppCommands(onOpen: OpenPanelFn): Promise<void> {
   if (apps.length === 0) return;
 
   for (const app of apps) {
-    const title = app.title ?? app.name;
+    const title = app.title ?? app.appId;
     const url = app.details?.url ?? "";
     registry.register({
       id: `app.open-${app.appId}`,

@@ -78,9 +78,7 @@ one-terminal/
 │   └── sample-widget/                 Minimal demo widget — standalone variant
 ├── packages/
 │   ├── ot-core/                       Shared Rust crate
-│   ├── ot-fdc3/                       Tauri FDC3 spoke plugin — enterprise
 │   ├── fdc3-plugin/                   Browser FDC3 client JS
-│   ├── fdc3-client/                   TypeScript FDC3 types — enterprise (Tauri-bound)
 │   └── create-one-terminal/           npm create scaffolder + upgrade tool
 │       ├── src/
 │       │   ├── create/                scaffold new workspace
@@ -119,11 +117,11 @@ The scaffolder produces one of two workspace shapes selected by a prompt:
 
 Templates are partitioned across three overlays. `render.ts` walks `shared/` first, then the selected variant overlay; collisions are won by the later overlay.
 
-| Overlay       | Contents                                                                                                                                                   | Source                                                                                                                                                           |
-| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `shared/`     | Terminal shell, ot-core, fdc3-plugin, `scripts/new-widget.mjs` + `scripts/widget-template/`, root `.gitignore`                                             | Extracted from `apps/one-terminal/`, `packages/ot-core/`, `packages/fdc3-plugin/`; scripts hand-authored under `overlay-overrides/shared/`                       |
-| `enterprise/` | Desktop Agent, App Directory, tauri-webview-host, electron-host, sample-ticker, sample-chart, ot-fdc3, fdc3-client, root `Cargo.toml`, root `package.json` | Extracted from the corresponding `apps/` / `packages/` dirs. `fdc3-client` is here because every method invokes `fdc3_*` Tauri commands registered by `ot-fdc3`. |
-| `standalone/` | sample-widget, slim Cargo.toml, slim package.json, widgets.config.json, standalone terminal.config.json                                                    | sample-widget extracted from `apps/sample-widget/`; the rest from `overlay-overrides/standalone/`                                                                |
+| Overlay       | Contents                                                                                                                             | Source                                                                                                                                                           |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `shared/`     | Terminal shell, ot-core, fdc3-plugin, `scripts/new-widget.mjs` + `scripts/widget-template/`, root `.gitignore`                       | Extracted from `apps/one-terminal/`, `packages/ot-core/`, `packages/fdc3-plugin/`; scripts hand-authored under `overlay-overrides/shared/`                       |
+| `enterprise/` | Desktop Agent, App Directory, tauri-webview-host, electron-host, sample-ticker, sample-chart, root `Cargo.toml`, root `package.json` | Extracted from the corresponding `apps/` / `packages/` dirs. `fdc3-client` is here because every method invokes `fdc3_*` Tauri commands registered by `ot-fdc3`. |
+| `standalone/` | sample-widget, slim Cargo.toml, slim package.json, widgets.config.json, standalone terminal.config.json                              | sample-widget extracted from `apps/sample-widget/`; the rest from `overlay-overrides/standalone/`                                                                |
 
 ---
 
@@ -236,14 +234,14 @@ A source line annotated with `# ot:if varName` (shell/TOML) or `// ot:if varName
 **Source line:**
 
 ```toml
-ot-fdc3 = { workspace = true }  # ot:if includeFdc3
+ot-appdirectory = { workspace = true }  # ot:if includeFdc3
 ```
 
 **Generated template:**
 
 ```ejs
 <% if (includeFdc3) { %>
-ot-fdc3 = { workspace = true }
+ot-appdirectory = { workspace = true }
 <% } %>
 ```
 
@@ -338,13 +336,13 @@ Use this for: adding a new key to `agent.config.json`, updating a URL default, a
 ```json
 {
   "type": "config-merge",
-  "id": "0.2.0-add-dacpBridge-port",
+  "id": "0.2.0-add-fdc3Bus-port",
   "target": "apps/desktop-agent/src-tauri/resources/agent.config.json",
-  "description": "Add dacpBridge port to agent config",
+  "description": "Add fdc3Bus port to agent config",
   "appliesTo": "enterprise",
   "patch": {
     "ports": {
-      "dacpBridge": 4475
+      "fdc3Bus": 7891
     }
   }
 }
@@ -354,7 +352,7 @@ To make a config field managed (so the upgrade tool may write to it), add its ke
 
 ```json
 {
-  "_managed": ["appDirectoryUrl", "engineCatalogUrl", "ports.dacpBridge"],
+  "_managed": ["appDirectoryUrl", "engineCatalogUrl", "ports.fdc3Bus"],
   "appDirectoryUrl": "http://localhost:3005"
 }
 ```
@@ -363,25 +361,25 @@ To make a config field managed (so the upgrade tool may write to it), add its ke
 
 Bumps a dependency version in `Cargo.toml` (workspace dependencies) or `package.json`.
 
-Use this for: updating `ot-fdc3`, `ot-core`, or any shared package version shipped with the framework.
+Use this for: updating `ot-core`, or any shared package version shipped with the framework.
 
 ```json
 {
   "type": "dep-bump",
-  "id": "0.2.0-bump-ot-fdc3",
+  "id": "0.2.0-bump-ot-core",
   "target": "Cargo.toml",
-  "description": "Bump ot-fdc3 to 0.2.0",
-  "deps": [{ "name": "ot-fdc3", "ecosystem": "cargo", "newVersion": "0.2.0" }]
+  "description": "Bump ot-core to 0.2.0",
+  "deps": [{ "name": "ot-core", "ecosystem": "cargo", "newVersion": "0.2.0" }]
 }
 ```
 
 ```json
 {
   "type": "dep-bump",
-  "id": "0.2.0-bump-fdc3-client",
+  "id": "0.2.0-bump-fdc3-plugin",
   "target": "package.json",
-  "description": "Bump @one-terminal/fdc3-client to 0.2.0",
-  "deps": [{ "name": "@one-terminal/fdc3-client", "ecosystem": "npm", "newVersion": "0.2.0" }]
+  "description": "Bump @one-terminal/fdc3-plugin to 0.2.0",
+  "deps": [{ "name": "@one-terminal/fdc3-plugin", "ecosystem": "npm", "newVersion": "0.2.0" }]
 }
 ```
 
@@ -398,7 +396,7 @@ Applies line-level patch operations to any file. Use for changes that cannot be 
   "operations": [
     {
       "op": "insert-after-line-matching",
-      "pattern": ".plugin(ot_fdc3::init())",
+      "pattern": ".plugin(tauri_plugin_opener::init())",
       "content": "        .plugin(ot_metrics::init())"
     }
   ]
@@ -411,7 +409,8 @@ Applies line-level patch operations to any file. Use for changes that cannot be 
 | ---------------------------- | --------------------------------------------------------------------------------- |
 | `insert-after-line-matching` | Inserts `content` on the line immediately after the first line matching `pattern` |
 | `replace-line-matching`      | Replaces the first line matching `pattern` with `replacement`                     |
-| `add-file`                   | Copies `sourcePath` (relative to package root) to `targetPath` in the workspace   |
+| `add-file`                   | Renders `sourcePath` (relative to package root) to `targetPath`, overwriting it   |
+| `remove-path`                | Deletes the file or directory at `targetPath`                                     |
 
 Structural migrations are applied in declaration order. Keep operations minimal and targeted — prefer `config-merge` or `dep-bump` when they cover the use case.
 
@@ -483,7 +482,7 @@ PORT=3005 cargo run -p app-directory-server
 In another terminal:
 
 ```sh
-curl -s localhost:3005/health                 # {"status":"ok","version":"2.2"}
+curl -s localhost:3005/health                 # {"status":"ok","version":"3.0"}
 curl -s localhost:3005/v2/apps | head -c 200   # seed catalogue (ticker-plant, chart-viewer)
 curl -s -o /dev/null -w "%{http_code}\n" localhost:3005/   # 200 — admin UI
 ```
@@ -494,7 +493,7 @@ curl -s -o /dev/null -w "%{http_code}\n" localhost:3005/   # 200 — admin UI
 | ---------------------------------------------------------------------- | ----------------------------------------------------------------- |
 | `cargo test -p ot-appdirectory`                                        | all tests pass                                                    |
 | `cargo check --workspace` (no `npm run build:app-directory` run first) | still exits 0 — `build.rs` placeholder covers the missing UI dist |
-| `GET /health`                                                          | `{"status":"ok","version":"2.2"}`                                 |
+| `GET /health`                                                          | `{"status":"ok","version":"3.0"}`                                 |
 | `GET /v2/apps`                                                         | 2 seed apps                                                       |
 | `GET /` (with `ui/dist` built)                                         | `200`, serves the real admin UI                                   |
 | `desktop-agent` dev log                                                | `App Directory (embedded) listening on 127.0.0.1:3005`            |
@@ -537,10 +536,10 @@ open target/release/bundle/macos/desktop-agent.app
 **Step 3 — Verify from outside the app**, same checks as the dev-mode flow above, now against the packaged binary:
 
 ```sh
-curl -s localhost:3005/health                              # {"status":"ok","version":"2.2"}
+curl -s localhost:3005/health                              # {"status":"ok","version":"3.0"}
 curl -s localhost:3005/v2/apps | head -c 200                # seed catalogue
 curl -s -o /dev/null -w "%{http_code}\n" localhost:3005/    # 200 — real admin UI, not the build.rs placeholder
-lsof -iTCP -sTCP:LISTEN -P | grep -E "3005|7890|7891|4475"  # App Directory + TCP broker + FDC3 bus + DACP, all from the packaged desktop-agent binary
+lsof -iTCP -sTCP:LISTEN -P | grep -E "3005|7891"  # App Directory + FDC3 bus, all from the packaged desktop-agent binary
 ps aux | grep "desktop-agent.app/Contents/MacOS/one-terminal" | grep -v grep   # confirms the sidecar actually spawned
 ```
 
@@ -760,7 +759,7 @@ Re-extracts templates, asserts no drift, builds, and publishes. The double-extra
 - Framework name: **OneTerminal** (not "One Terminal" or "one-terminal" in prose)
 - Container window app: **Terminal** (the `one-terminal` Tauri app)
 - Broker app: **Desktop Agent** (the `desktop-agent` Tauri app)
-- Rust package names: `one-terminal`, `desktop-agent`, `tauri-webview-host`, `ot-core`, `ot-fdc3`
+- Rust package names: `one-terminal`, `desktop-agent`, `tauri-webview-host`, `ot-core`
 - npm package names: `@one-terminal/*`
 - All environment variables: `OT_*` prefix
 

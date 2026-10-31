@@ -29,7 +29,7 @@ async fn health_ok() {
     assert_eq!(resp.status(), StatusCode::OK);
     let body = body_json(resp).await;
     assert_eq!(body["status"], "ok");
-    assert_eq!(body["version"], "2.2");
+    assert_eq!(body["version"], "3.0");
 }
 
 #[tokio::test]
@@ -87,7 +87,7 @@ async fn create_get_update_delete_roundtrip() {
 
     let new_app = json!({
         "appId": "test-app",
-        "name": "Test App",
+        "title": "Test App",
         "type": "web",
         "details": { "url": "http://localhost:9999" }
     });
@@ -137,7 +137,7 @@ async fn create_get_update_delete_roundtrip() {
     // Update
     let updated = json!({
         "appId": "test-app",
-        "name": "Test App Renamed",
+        "title": "Test App Renamed",
         "type": "web",
         "details": { "url": "http://localhost:9999" }
     });
@@ -155,7 +155,7 @@ async fn create_get_update_delete_roundtrip() {
         .unwrap();
     assert_eq!(resp.status(), StatusCode::OK);
     let body = body_json(resp).await;
-    assert_eq!(body["name"], "Test App Renamed");
+    assert_eq!(body["title"], "Test App Renamed");
 
     // Delete
     let resp = a
@@ -188,7 +188,7 @@ async fn create_get_update_delete_roundtrip() {
 async fn invalid_engine_binding_rejected() {
     let new_app = json!({
         "appId": "bad-app",
-        "name": "Bad App",
+        "title": "Bad App",
         "type": "web",
         "details": { "url": "http://localhost:9999" },
         "engineBindings": {
@@ -224,4 +224,61 @@ async fn engines_catalog_served() {
     assert_eq!(resp.status(), StatusCode::OK);
     let body = body_json(resp).await;
     assert!(body["engines"]["windows"].as_array().unwrap().len() >= 3);
+}
+
+async fn post_app(body: Value) -> (StatusCode, Value) {
+    let resp = app()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/v2/apps")
+                .header("content-type", "application/json")
+                .body(Body::from(body.to_string()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    let status = resp.status();
+    (status, body_json(resp).await)
+}
+
+#[tokio::test]
+async fn pre_3_0_records_with_only_a_name_are_accepted_and_written_as_title() {
+    let (status, body) = post_app(json!({
+        "appId": "legacy-app",
+        "name": "Legacy App",
+        "type": "web",
+        "details": { "url": "http://localhost:9999" }
+    }))
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(body["title"], "Legacy App");
+    assert!(body.get("name").is_none());
+}
+
+#[tokio::test]
+async fn records_without_a_title_or_name_are_rejected() {
+    let (status, _) = post_app(json!({
+        "appId": "untitled",
+        "type": "web",
+        "details": { "url": "http://localhost:9999" }
+    }))
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn app_channels_and_fdc3_version_round_trip() {
+    let (status, body) = post_app(json!({
+        "appId": "channel-app",
+        "title": "Channel App",
+        "type": "web",
+        "fdc3Version": ">=3.0",
+        "details": { "url": "http://localhost:9999" },
+        "interop": { "appChannels": [{ "id": "prices", "listensFor": ["fx.rate"] }] }
+    }))
+    .await;
+    assert_eq!(status, StatusCode::CREATED);
+    assert_eq!(body["fdc3Version"], ">=3.0");
+    assert_eq!(body["interop"]["appChannels"][0]["id"], "prices");
 }
