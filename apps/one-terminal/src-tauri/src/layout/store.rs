@@ -1717,6 +1717,10 @@ impl LayoutTree {
                                         terminal_id_for_main.clone(),
                                         label.clone(),
                                         tree_for_main.clone(),
+                                    ))
+                                    .on_page_load(crate::channel_sync_page_load_handler(
+                                        label.clone(),
+                                        tree_for_main.clone(),
                                     )),
                                 LogicalPosition::new(0.0, 0.0),
                                 LogicalSize::new(1.0, 1.0),

@@ -25,6 +25,13 @@ export interface CdaDisconnectedEvent {
   appId: string;
 }
 
+export interface CdaChannelChangedEvent {
+  instanceId: string;
+  appId: string;
+  /** Newly joined channel, or `null` after leaving. */
+  channelId: string | null;
+}
+
 export interface CdaContextEvent {
   channelId: string;
   context: Record<string, unknown>;

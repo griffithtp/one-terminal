@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="ot-fdc3-app-id" content="ticker-plant" />
   <title>Ticker-Plant</title>
   <style>
     :root {
@@ -220,7 +221,10 @@
 </main>
 
 <script type="module">
-import { DesktopAgentClient } from '/fdc3-plugin.js';
+// Imported for its side effect: auto-connects and sets window.fdc3Ready.
+// Using that shared connection lets the Terminal's "Set channel" menu
+// (which drives window.fdc3Ready) control this widget's channel.
+import './fdc3-plugin.js';
 
 // ── Mock rate data ──────────────────────────────────────────────────────────
 
@@ -346,28 +350,49 @@ buildRows();
 
 let fdc3 = null;
 let currentChannel = null;
+let channels = [];
 
 setStatus('Connecting to CDA…', '');
 
+// Reflect the joined channel in the selector + indicator. Driven by the
+// `userChannelChanged` event, so joins made by the Terminal's "Set channel"
+// menu show up here as well as joins made from this widget's own selector.
+function showChannel(channelId) {
+  currentChannel = channelId;
+  channelSel.value = channelId ?? '';
+  const ch = channels.find((c) => c.id === channelId);
+  chanInd.textContent = channelId ? `● ${ch?.displayMetadata?.name ?? channelId}` : '';
+  chanInd.style.display = channelId ? 'inline' : 'none';
+  chanInd.style.color = ch?.displayMetadata?.color ?? 'var(--green)';
+}
+
 try {
-  fdc3 = await DesktopAgentClient.connect('ticker-plant');
+  fdc3 = await window.fdc3Ready;
+  if (!fdc3) throw window.fdc3Error ?? new Error('CDA unavailable');
   setStatus(`Connected  ·  instance: ${fdc3.getIdentity().instanceId.slice(0, 8)}`, 'connected');
   addLog('✓', 'Connected to CDA hub');
 
   // Populate channel selector from the welcome message
-  const channels = await fdc3.getUserChannels();
+  channels = await fdc3.getUserChannels();
   for (const ch of channels) {
     const opt = document.createElement('option');
     opt.value = ch.id;
     opt.textContent = ch.displayMetadata?.name ?? ch.id;
     channelSel.appendChild(opt);
-    if (ch.id === 'Green') channelSel.value = 'Green';
   }
 
-  // Auto-join Green
-  if (channelSel.value) {
-    await joinChannel(channelSel.value);
+  await fdc3.addEventListener('userChannelChanged', (e) => {
+    const id = e.details.currentChannelId;
+    showChannel(id);
+    addLog('✓', id ? `Joined channel [${id}]` : 'Left channel', !!id);
+  });
+
+  // Inside a Terminal (OT_FDC3_INITIAL_CHANNEL defined, even as null) the
+  // Terminal owns channel membership. Standalone, auto-join Green.
+  if (window.OT_FDC3_INITIAL_CHANNEL === undefined && channels.some((c) => c.id === 'Green')) {
+    await joinChannel('Green');
   }
+  showChannel((await fdc3.getCurrentChannel())?.id ?? null);
 } catch (e) {
   setStatus(e.message?.includes('NoAgentConfigured') ? 'No FDC3 agent configured' : 'CDA unavailable', 'error');
   addLog('✗', `Connection failed: ${e.message}`);
@@ -377,11 +402,6 @@ async function joinChannel(channelId) {
   if (!fdc3 || !channelId) return;
   try {
     await fdc3.joinUserChannel(channelId);
-    currentChannel = channelId;
-    chanInd.textContent = `● ${channelId}`;
-    chanInd.style.display = 'inline';
-    chanInd.style.color = 'var(--green)';
-    addLog('✓', `Joined channel [${channelId}]`);
   } catch (e) {
     addLog('✗', `Join failed: ${e.message}`);
   }
@@ -442,7 +462,7 @@ ratesBody.addEventListener('click', async (e) => {
 </script>
 
 <script>
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(console.error);
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').catch(console.error);
 </script>
 </body>
 </html>

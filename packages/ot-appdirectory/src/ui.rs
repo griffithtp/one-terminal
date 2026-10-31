@@ -28,6 +28,15 @@ async fn serve_asset(uri: Uri) -> Response {
         return asset_response(path, file);
     }
 
+    // A missing file (e.g. `/fdc3-plugin.js` requested by a page that got its
+    // path wrong) must 404 rather than fall through to the SPA: a 200
+    // `text/html` reply to a script/module request fails silently and is far
+    // harder to diagnose. Client-side routes never end in `.<ext>`.
+    let last_segment = path.rsplit('/').next().unwrap_or(path);
+    if last_segment.contains('.') {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+
     // SPA fallback: any unmatched non-API path serves index.html so the
     // client-side router can handle it.
     match UiAssets::get("index.html") {

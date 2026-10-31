@@ -5,9 +5,9 @@ use tokio::sync::mpsc;
 
 use crate::app_dir::{AppDirectoryCache, AppRecord, CdaIntentNeedsResolutionEvent};
 use crate::broker::{
-    now_ms, AppIntentInfo, CdaConnectedEvent, CdaContextEvent, CdaDisconnectedEvent, CdaErrorCode,
-    CdaIntentEvent, CdaRequest, CdaResponse, ChannelManager, IntentAppInfo, IntentRegistry,
-    WindowManager,
+    now_ms, AppIntentInfo, CdaChannelChangedEvent, CdaConnectedEvent, CdaContextEvent,
+    CdaDisconnectedEvent, CdaErrorCode, CdaIntentEvent, CdaRequest, CdaResponse, ChannelManager,
+    IntentAppInfo, IntentRegistry, WindowManager,
 };
 use crate::dacp::PeerRegistry;
 
@@ -178,6 +178,14 @@ async fn dispatch(
             match channel_manager.join(instance_id, &channel_id) {
                 Ok(()) => {
                     window_manager.set_channel(instance_id, Some(channel_id.clone()));
+                    let _ = app.emit(
+                        "cda:channel_changed",
+                        CdaChannelChangedEvent {
+                            instance_id: instance_id.to_string(),
+                            app_id: app_id.to_string(),
+                            channel_id: Some(channel_id.clone()),
+                        },
+                    );
                     let resp = serde_json::to_string(&CdaResponse::ChannelJoined { channel_id })
                         .unwrap_or_default();
                     window_manager.send_to(instance_id, &resp);
@@ -197,6 +205,14 @@ async fn dispatch(
         CdaRequest::LeaveChannel => {
             channel_manager.leave(instance_id);
             window_manager.set_channel(instance_id, None);
+            let _ = app.emit(
+                "cda:channel_changed",
+                CdaChannelChangedEvent {
+                    instance_id: instance_id.to_string(),
+                    app_id: app_id.to_string(),
+                    channel_id: None,
+                },
+            );
             let resp = serde_json::to_string(&CdaResponse::ChannelLeft).unwrap_or_default();
             window_manager.send_to(instance_id, &resp);
         }

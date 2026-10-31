@@ -35,7 +35,8 @@ use tokio::sync::mpsc;
 
 use crate::app_dir::AppDirectoryCache;
 use crate::broker::{
-    now_ms, CdaConnectedEvent, CdaDisconnectedEvent, ChannelManager, IntentRegistry, WindowManager,
+    now_ms, CdaChannelChangedEvent, CdaConnectedEvent, CdaDisconnectedEvent, ChannelManager,
+    IntentRegistry, WindowManager,
 };
 use crate::dacp::PeerRegistry;
 use crate::tcp::handler::{deliver_intent, fan_out_broadcast};
@@ -221,6 +222,14 @@ async fn handle_connection(socket: WebSocket, state: BusState) {
                                         &instance_id,
                                         Some(channel_id.clone()),
                                     );
+                                    let _ = state.app.emit(
+                                        "cda:channel_changed",
+                                        CdaChannelChangedEvent {
+                                            instance_id: instance_id.clone(),
+                                            app_id: app_id.clone(),
+                                            channel_id: Some(channel_id.clone()),
+                                        },
+                                    );
                                     let reply = serde_json::to_string(&json!({
                                         "type":      "fdc3:channelJoined",
                                         "channelId": channel_id,
@@ -246,6 +255,14 @@ async fn handle_connection(socket: WebSocket, state: BusState) {
                         "fdc3:leaveChannel" => {
                             state.channel_manager.leave(&instance_id);
                             state.window_manager.set_channel(&instance_id, None);
+                            let _ = state.app.emit(
+                                "cda:channel_changed",
+                                CdaChannelChangedEvent {
+                                    instance_id: instance_id.clone(),
+                                    app_id: app_id.clone(),
+                                    channel_id: None,
+                                },
+                            );
                         }
 
                         // ── IntentListener management ─────────────────────

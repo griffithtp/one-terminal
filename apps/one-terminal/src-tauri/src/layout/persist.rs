@@ -39,7 +39,11 @@ pub struct PersistedLeafMeta {
     #[serde(default = "default_zoom")]
     pub zoom_factor: f64,
     /// FDC3 user channel this panel is joined to. `None` = no channel.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deserialize_channel_id"
+    )]
     pub fdc3_channel: Option<String>,
     /// When `true`, switching away from this panel's Dashboard parks its
     /// webview off-screen instead of closing it, so it keeps running and
@@ -55,6 +59,38 @@ pub struct PersistedLeafMeta {
 
 fn default_zoom() -> f64 {
     1.0
+}
+
+// ── FDC3 user channel ids ─────────────────────────────────────────────────────
+
+/// The 8 FDC3 user channel ids the Desktop Agent seeds by default
+/// (`AgentConfig::default_channels` in desktop-agent). Mirrors
+/// `FDC3_CHANNELS` in `src/components/fdc3Channels.ts`. Also the allowlist
+/// for `wm_set_panel_fdc3_channel`, which interpolates the id into a JS
+/// snippet evaluated in the target panel's webview.
+pub const USER_CHANNEL_IDS: [&str; 8] = [
+    "Red", "Orange", "Yellow", "Green", "Teal", "Blue", "Purple", "Pink",
+];
+
+/// Map a legacy `fdc3.channel.N` id (persisted before the Terminal's ids
+/// were aligned with the Desktop Agent's) to the Nth user channel. Any other
+/// id is returned unchanged.
+pub fn normalize_channel_id(id: &str) -> String {
+    id.strip_prefix("fdc3.channel.")
+        .and_then(|n| n.parse::<usize>().ok())
+        .and_then(|n| n.checked_sub(1))
+        .and_then(|i| USER_CHANNEL_IDS.get(i))
+        .map_or_else(|| id.to_string(), |s| s.to_string())
+}
+
+/// Serde `deserialize_with` for persisted channel fields — applies
+/// [`normalize_channel_id`] so saved layouts migrate transparently on load.
+pub fn deserialize_channel_id<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let raw = Option::<String>::deserialize(deserializer)?;
+    Ok(raw.map(|id| normalize_channel_id(&id)))
 }
 
 // ── Legacy top-level type (pre-dashboard era) ─────────────────────────────────
@@ -525,6 +561,29 @@ mod tests {
             dashboards_json.join(","),
         );
         std::fs::write(dir.join("dashboards.json"), json).unwrap();
+    }
+
+    #[test]
+    fn normalize_channel_id_maps_legacy_ids() {
+        assert_eq!(normalize_channel_id("fdc3.channel.1"), "Red");
+        assert_eq!(normalize_channel_id("fdc3.channel.4"), "Green");
+        assert_eq!(normalize_channel_id("fdc3.channel.8"), "Pink");
+        // Out of range / malformed legacy ids and current ids pass through.
+        assert_eq!(normalize_channel_id("fdc3.channel.0"), "fdc3.channel.0");
+        assert_eq!(normalize_channel_id("fdc3.channel.9"), "fdc3.channel.9");
+        assert_eq!(normalize_channel_id("Blue"), "Blue");
+    }
+
+    #[test]
+    fn persisted_leaf_meta_migrates_legacy_channel() {
+        let m: PersistedLeafMeta = serde_json::from_str(
+            r#"{"appId":"a","url":"u","title":"t","fdc3Channel":"fdc3.channel.6"}"#,
+        )
+        .unwrap();
+        assert_eq!(m.fdc3_channel.as_deref(), Some("Blue"));
+        let m: PersistedLeafMeta =
+            serde_json::from_str(r#"{"appId":"a","url":"u","title":"t"}"#).unwrap();
+        assert_eq!(m.fdc3_channel, None);
     }
 
     #[test]

@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import type {
   ChannelInfo,
+  CdaChannelChangedEvent,
   CdaConnectedEvent,
   CdaContextEvent,
   CdaDisconnectedEvent,
@@ -46,6 +47,12 @@ export function useCdaEvents() {
       listen<CdaDisconnectedEvent>("cda:disconnected", (e) => {
         refresh();
         log(`disconnected  ${e.payload.appId} (${e.payload.instanceId.slice(0, 8)}…)`);
+      }),
+      listen<CdaChannelChangedEvent>("cda:channel_changed", (e) => {
+        refresh();
+        log(
+          `channel  ${e.payload.appId} (${e.payload.instanceId.slice(0, 8)}…) → ${e.payload.channelId ?? "none"}`
+        );
       }),
       listen<CdaContextEvent>("cda:context", (e) => {
         refresh();

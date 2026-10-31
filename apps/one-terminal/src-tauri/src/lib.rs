@@ -274,6 +274,31 @@ pub(crate) fn address_bar_navigation_handler(
     }
 }
 
+/// `on_page_load` hook installed on every panel webview alongside
+/// [`address_bar_navigation_handler`]. Once a page finishes loading, joins
+/// the panel's `fdc3-plugin.js` connection to the FDC3 channel recorded on
+/// its `LeafMeta` (if any). This is what makes a freshly-opened widget —
+/// including one taken from the pre-warm pool, whose init script was fixed
+/// before the panel existed — actually join its Dashboard's default channel,
+/// and keeps the panel on its channel across in-page reloads. Pages without
+/// `fdc3-plugin.js` make the script a no-op.
+pub(crate) fn channel_sync_page_load_handler<R: tauri::Runtime>(
+    label: String,
+    tree: LayoutTree,
+) -> impl Fn(tauri::Webview<R>, tauri::webview::PageLoadPayload<'_>) + Send + Sync + 'static {
+    move |wv, payload| {
+        if payload.event() != tauri::webview::PageLoadEvent::Finished {
+            return;
+        }
+        let Some(channel) = tree.fdc3_channel(&label) else {
+            return;
+        };
+        if let Ok(script) = layout::commands::channel_join_script(&Some(channel)) {
+            let _ = wv.eval(&script);
+        }
+    }
+}
+
 /// Open a new panel.
 ///
 /// - `target`         — panel id to insert relative to. Defaults to the
@@ -374,6 +399,10 @@ async fn wm_open(
                         .on_navigation(address_bar_navigation_handler(
                             app_for_main.clone(),
                             terminal_id_for_main.clone(),
+                            panel_id_for_main.clone(),
+                            tree_for_main.clone(),
+                        ))
+                        .on_page_load(channel_sync_page_load_handler(
                             panel_id_for_main.clone(),
                             tree_for_main.clone(),
                         )),
@@ -1790,7 +1819,8 @@ pub fn run() {
                             WIN.to_string(),
                             label.clone(),
                             tree.clone(),
-                        )),
+                        ))
+                        .on_page_load(channel_sync_page_load_handler(label.clone(), tree.clone())),
                         LogicalPosition::new(-20000.0, -20000.0),
                         LogicalSize::new(init_w, init_h),
                     ) {
@@ -1819,6 +1849,10 @@ pub fn run() {
                                 .on_navigation(address_bar_navigation_handler(
                                     app.handle().clone(),
                                     WIN.to_string(),
+                                    label.clone(),
+                                    tree.clone(),
+                                ))
+                                .on_page_load(channel_sync_page_load_handler(
                                     label.clone(),
                                     tree.clone(),
                                 )),
