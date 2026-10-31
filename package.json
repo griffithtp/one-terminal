@@ -22,6 +22,8 @@
     "dev:sample-chart": "npm -w @one-terminal/sample-chart run dev",
     "dev:sample-widget": "npm -w @one-terminal/sample-widget run dev",
     "dev:app-directory": "npm -w @one-terminal/app-directory run dev",
+    "build:fdc3-plugin": "npm -w @one-terminal/fdc3-plugin run build",
+    "test:fdc3-plugin": "npm -w @one-terminal/fdc3-plugin test",
     "build:app-directory": "npm -w @one-terminal/app-directory run build",
     "build:tauri-webview-host": "cargo build -p tauri-webview-host",
     "setup:electron-host": "npm install -w @one-terminal/electron-host",

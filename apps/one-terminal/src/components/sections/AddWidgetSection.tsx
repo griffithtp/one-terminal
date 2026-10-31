@@ -68,7 +68,6 @@ function CustomWebWidgetForm({ onSelect }: { onSelect: (app: AppRecord) => void 
     })();
     const record: AppRecord = {
       appId: GENERIC_WEB_WIDGET_APP_ID,
-      name: "Custom Web Widget",
       type: "web",
       title: title.trim() || hostname,
       details: { url: normalized },
@@ -121,8 +120,7 @@ export function AddWidgetSection({ apps, enginesFor, onSelect }: Props) {
     const q = query.trim().toLowerCase();
     if (!q) return apps;
     return apps.filter((app) => {
-      const haystack =
-        `${app.title ?? ""} ${app.name ?? ""} ${app.description ?? ""}`.toLowerCase();
+      const haystack = `${app.title ?? ""} ${app.appId} ${app.description ?? ""}`.toLowerCase();
       return haystack.includes(q);
     });
   }, [apps, query]);
@@ -189,7 +187,7 @@ export function AddWidgetSection({ apps, enginesFor, onSelect }: Props) {
         ) : (
           filtered.map((app) => {
             const engineCount = enginesFor(app).length;
-            const title = app.title ?? app.name;
+            const title = app.title ?? app.appId;
             const tooltip =
               engineCount > 1
                 ? `${app.description ?? `Launch ${title}`} — choose engine (${engineCount} available)`

@@ -4,9 +4,7 @@
   "engineCatalogUrl": "http://localhost:3005",
   "appdEmbedded": true,
   "ports": {
-    "tcpBroker": 7890,
-    "fdc3Bus": 7891,
-    "dacpBridge": 4475
+    "fdc3Bus": 7891
   },
   "userChannels": [
     { "id": "Red", "displayName": "Red", "color": "#E74C3C" },

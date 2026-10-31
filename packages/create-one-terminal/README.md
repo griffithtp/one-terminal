@@ -41,9 +41,9 @@ After confirming, the CLI renders the workspace and prints next steps.
 OneTerminal scaffolds in one of two shapes:
 
 - **Standalone** _(default)_ — Terminal + a single sample widget. No Desktop Agent, no App Directory. The Terminal acts as an FDC3 _client_ and joins an external agent over a WebSocket URL you provide. Best for teams that already run an FDC3 agent or want to evaluate the Terminal shell on its own.
-- **Enterprise** — full stack: Terminal, Desktop Agent (broker, FDC3 bus, DACP), App Directory (Express API + React UI), engine plugin runtime, and the `sample-ticker` / `sample-chart` demos. Best for platform teams standing up an in-house FDC3 estate.
+- **Enterprise** — full stack: Terminal, Desktop Agent (FDC3 broker and bus), App Directory (Express API + React UI), engine plugin runtime, and the `sample-ticker` / `sample-chart` demos. Best for platform teams standing up an in-house FDC3 estate.
 
-Both variants share the Terminal shell, `ot-core`, and `fdc3-plugin` (the browser FDC3 client). The TypeScript `fdc3-client` package is Enterprise-only — it invokes `fdc3_*` Tauri commands that only exist when the bundled `ot-fdc3` plugin ships. The Terminal's widget catalog is the **union** of the local `widgets.config.json` and the App Directory: Standalone ships a `widgets.config.json` and leaves the App Directory endpoint blank (so it shows local widgets until you point it at an endpoint from the App Menu → App Directory section), while Enterprise defaults to the bundled App Directory and can additionally ship a `widgets.config.json`. Each catalog entry is badged by source.
+Both variants share the Terminal shell, `ot-core`, and `fdc3-plugin` (the browser FDC3 client). The Terminal's widget catalog is the **union** of the local `widgets.config.json` and the App Directory: Standalone ships a `widgets.config.json` and leaves the App Directory endpoint blank (so it shows local widgets until you point it at an endpoint from the App Menu → App Directory section), while Enterprise defaults to the bundled App Directory and can additionally ship a `widgets.config.json`. Each catalog entry is badged by source.
 
 ### Adding a widget
 
@@ -75,9 +75,7 @@ Either entrypoint asks for a title, picks the next free port (starting at 3010),
 | Terminal Vite dev      | 1422    | both       | —                  |
 | Desktop Agent Vite dev | 1421    | enterprise | —                  |
 | App Directory          | 3005    | enterprise | —                  |
-| TCP Broker             | 7890    | enterprise | `OT_TCP_PORT`      |
 | FDC3 Bus WebSocket     | 7891    | enterprise | `OT_FDC3_BUS_PORT` |
-| DACP Bridge            | 4475    | enterprise | `OT_DACP_PORT`     |
 | Sample widget          | 3012    | standalone | —                  |
 
 ### Scaffolded layout
@@ -121,12 +119,10 @@ Either entrypoint asks for a title, picks the next free port (starting at 3010),
 │   └── sample-chart/             # demo app (port 3011)
 └── packages/
     ├── ot-core/                  # shared Rust crate (no Tauri deps)
-    ├── ot-fdc3/                  # shared Tauri plugin: FDC3 2.2 TCP spoke client  *
-    ├── fdc3-client/              # TypeScript FDC3 types + Fdc3Agent               *
     └── fdc3-plugin/              # browser FDC3 agent (fdc3-plugin.js)             *
 ```
 
-`*` Only included when FDC3 integration is enabled (Enterprise prompt only). `fdc3-plugin` always ships in Standalone; `fdc3-client` is Enterprise-only because it depends on Tauri commands registered by `ot-fdc3`.
+`*` Only included when FDC3 integration is enabled (Enterprise prompt only). `fdc3-plugin` always ships in Standalone.
 
 ### Starting the workspace
 

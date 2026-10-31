@@ -1,6 +1,6 @@
 # OneTerminal
 
-> An open-source desktop container for building **interoperable trading and capital-markets applications** — powered by [Tauri 2](https://tauri.app) and [FDC3 2.2](https://fdc3.finos.org).
+> An open-source desktop container for building **interoperable trading and capital-markets applications** — powered by [Tauri 2](https://tauri.app) and [FDC3 3.0](https://fdc3.finos.org).
 
 OneTerminal lets you compose a workspace of independent browser apps — tickers, charts, blotters, news, OMS panels, dashboards — that share context through an FDC3 desktop agent and run inside lightweight native windows. Bring your own apps, your own engine (WebView2, WKWebView, Electron, or a custom plugin), and your own theme. We handle window management, channels, intents, dashboards, and engine lifecycle.
 
@@ -18,7 +18,7 @@ OneTerminal lets you compose a workspace of independent browser apps — tickers
 
 ## Why OneTerminal?
 
-Buy-side and sell-side desks have spent the last decade stitching together browser apps inside heavyweight containers. OneTerminal is a lightweight, fully open-source alternative — built on modern Tauri 2, FINOS FDC3 2.2, and a Rust core — so you can:
+Buy-side and sell-side desks have spent the last decade stitching together browser apps inside heavyweight containers. OneTerminal is a lightweight, fully open-source alternative — built on modern Tauri 2, FINOS FDC3 3.0, and a Rust core — so you can:
 
 - **Ship a branded trading workspace in days, not quarters** — scaffold a workspace with `create-one-terminal`, wire your apps to the App Directory, done.
 - **Run your existing browser apps unchanged** — drop in any HTTP(S) URL; FDC3 channels and intents work via a small `fdc3-plugin.js` script.
@@ -37,12 +37,12 @@ Buy-side and sell-side desks have spent the last decade stitching together brows
 - **Customisable per-app UI** — register custom widget headers and tab context-menu items per `appId` ([see widget extension points](#widget-ui-extension-points)).
 - **Hotkey-driven** — Command Palette ([Epic 06](docs/plans/06-command-palette-hotkeys.md)) is on the roadmap; keybindings configurable today.
 
-### Interoperability (FDC3 2.2)
+### Interoperability (FDC3 3.0)
 
-- **User channels, app channels, private channels** — full FDC3 2.2 channel semantics.
-- **Intents and intent resolution** — `raiseIntent`, `addIntentListener`, intent picker UI included.
+- **User channels, app channels, private channels** — the full FDC3 3.0 channel API, including `clearContext` and context metadata.
+- **Intents and intent resolution** — `raiseIntent`, `addIntentListener` and intent results, with a resolver dialog when several apps can handle an intent.
 - **Context broadcasting** — typed contexts (`fdc3.instrument`, `fdc3.contact`, custom types) routed through the desktop agent.
-- **FINOS DACP** — Desktop Agent Communication Protocol bridge for multi-instance interop.
+- **Official FINOS client** — widgets run `@finos/fdc3-agent-proxy` over the standard Desktop Agent Communication Protocol (DACP), so `getAgent()` from `@finos/fdc3` works as is.
 
 ### Engines
 
@@ -62,7 +62,7 @@ Buy-side and sell-side desks have spent the last decade stitching together brows
 - **Rust workspace + npm workspace, side by side** — `cargo check --workspace`, `npm run build:all`.
 - **Hot-reload dev loops** — App Directory and sample apps reload on save; Tauri apps rebuild incrementally.
 - **Sample apps included** — `sample-ticker` (port 3010) and `sample-chart` (port 3011) show channel broadcast + intent handling.
-- **Typed FDC3 client** — `@one-terminal/fdc3-client` ships full FDC3 2.2 TypeScript definitions.
+- **FDC3 types** — use `@finos/fdc3` for TypeScript definitions of the FDC3 3.0 API.
 
 ---
 
@@ -137,9 +137,10 @@ npm run build:all              # All Tauri apps in sequence
 Drop this into any HTML page served from a URL you register in the App Directory:
 
 ```html
+<meta name="ot-fdc3-app-id" content="my-app-id" />
 <script type="module">
-  import { DesktopAgentClient } from "/fdc3-plugin.js";
-  const fdc3 = await DesktopAgentClient.connect("my-app-id");
+  import { getAgent } from "/fdc3-plugin.js";
+  const fdc3 = await getAgent();
   await fdc3.joinUserChannel("Green");
   await fdc3.addContextListener("fdc3.instrument", (ctx) => {
     document.title = `Watching ${ctx.id.ticker}`;
@@ -158,40 +159,35 @@ Open it inside OneTerminal alongside the sample ticker — switch both to the Gr
 │  OneTerminal  (apps/one-terminal)                   │
 │  Window manager — hosts app webviews in tabs        │
 │  Reads App Directory to discover available apps     │
-└────────────────┬────────────────────────────────────┘
-                 │ TCP 7890
-┌────────────────▼────────────────────────────────────┐
+│  ┌───────────────┐                                  │
+│  │  fdc3-plugin  │  in each widget: the official    │
+│  │  (browser JS) │  FDC3 proxy over a WebSocket     │
+│  └───────┬───────┘                                  │
+└──────────┼──────────────────────────────────────────┘
+           │ DACP over WS 7891
+┌──────────▼──────────────────────────────────────────┐
 │  Desktop Agent  (apps/desktop-agent)                │
-│  FDC3 2.2 broker — channels, intents, DACP          │
+│  FDC3 3.0 broker — channels, intents, app launches  │
 │  Manages engine runtime downloads + launches        │
 │  ┌─────────────────────────────────────────────┐    │
 │  │  Engine Cache  <app_data>/engines/          │    │
 │  │    wkwebview/<ver>/   webview2/<ver>/       │    │
 │  │    electron/<ver>/    <plugin-family>/      │    │
 │  └─────────────────────────────────────────────┘    │
-└────────────────┬──────────────────┬─────────────────┘
-                 │ WS 7891          │ UDP/WS 4475
-        ┌────────▼──────┐  ┌────────▼──────┐
-        │  fdc3-plugin  │  │  DACP bridge  │
-        │  (browser JS) │  │  (multi-inst) │
-        └───────────────┘  └───────────────┘
+└─────────────────────────────────────────────────────┘
 ```
 
 ### Packages
 
-| Path                      | Purpose                                                                                                     |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `apps/one-terminal`       | Window manager (Tauri 2 app)                                                                                |
-| `apps/desktop-agent`      | FDC3 desktop agent + engine launcher                                                                        |
-| `apps/tauri-webview-host` | Thin Tauri shell spawned for pinned WebView2/WKWebView apps                                                 |
-| `apps/electron-host`      | Thin Electron shell spawned for Electron-engine apps                                                        |
-| `apps/app-directory`      | Express server serving FDC3 AppD REST API + management UI                                                   |
-| `packages/ot-core`        | Tauri-agnostic shared Rust crate (engine abstraction, plugin manifests)                                     |
-| `packages/ot-fdc3`        | Tauri plugin: FDC3 2.2 TCP spoke client (Rust half of `fdc3-client`)                                        |
-| `packages/fdc3-plugin`    | Browser-side FDC3 2.2 client (`DesktopAgentClient`) — ships in both variants                                |
-| `packages/fdc3-client`    | TypeScript FDC3 types + `Fdc3Agent` — Enterprise only (Tauri-bound, calls `fdc3_*` commands from `ot-fdc3`) |
-
-See [FDC3 Client Libraries](#-fdc3-client-libraries-fdc3-plugin-vs-fdc3-client-vs-ot-fdc3) for when to use which.
+| Path                      | Purpose                                                                               |
+| ------------------------- | ------------------------------------------------------------------------------------- |
+| `apps/one-terminal`       | Window manager (Tauri 2 app)                                                          |
+| `apps/desktop-agent`      | FDC3 desktop agent + engine launcher                                                  |
+| `apps/tauri-webview-host` | Thin Tauri shell spawned for pinned WebView2/WKWebView apps                           |
+| `apps/electron-host`      | Thin Electron shell spawned for Electron-engine apps                                  |
+| `apps/app-directory`      | Express server serving FDC3 AppD REST API + management UI                             |
+| `packages/ot-core`        | Tauri-agnostic shared Rust crate (engine abstraction, plugin manifests)               |
+| `packages/fdc3-plugin`    | Browser FDC3 3.0 client: the official proxy over a WebSocket — ships in both variants |
 
 ### Sample apps
 
@@ -216,9 +212,7 @@ The Desktop Agent reads `agent.config.json` (bundled as a resource) and applies 
   "appDirectoryUrl": "http://localhost:3005/v2/apps",
   "engineCatalogUrl": "http://localhost:3005/v2/engines",
   "ports": {
-    "tcpBroker": 7890,
-    "fdc3Bus": 7891,
-    "dacpBridge": 4475
+    "fdc3Bus": 7891
   },
   "userChannels": [
     { "id": "Red", "displayName": "Red", "color": "#E74C3C" },
@@ -244,9 +238,7 @@ The Desktop Agent reads `agent.config.json` (bundled as a resource) and applies 
 | `OT_TITLE`         | Window title       |
 | `OT_APP_DIR_URL`   | `appDirectoryUrl`  |
 | `OT_CATALOG_URL`   | `engineCatalogUrl` |
-| `OT_TCP_PORT`      | `ports.tcpBroker`  |
 | `OT_FDC3_BUS_PORT` | `ports.fdc3Bus`    |
-| `OT_DACP_PORT`     | `ports.dacpBridge` |
 
 **Terminal (both variants):**
 
@@ -406,13 +398,14 @@ Same in-memory caveat applies — persist changes to `data.ts` to survive a rest
 
 ## 🔌 FDC3 Integration (Browser Apps)
 
-Browser apps use `fdc3-plugin.js` as the FDC3 desktop agent proxy over WebSocket.
+Browser apps use `fdc3-plugin.js`, which runs the official FDC3 proxy over a WebSocket. Set the app id with a meta tag.
 
 ```html
+<meta name="ot-fdc3-app-id" content="my-app-id" />
 <script type="module">
-  import { DesktopAgentClient } from "/fdc3-plugin.js";
+  import { getAgent } from "/fdc3-plugin.js";
 
-  const fdc3 = await DesktopAgentClient.connect("my-app-id");
+  const fdc3 = await getAgent();
 
   // Join a user channel
   await fdc3.joinUserChannel("Green");
@@ -448,7 +441,7 @@ The plugin resolves its agent URL in this order (first non-empty wins):
 
 For configuring several agents (UAT / Prod / third-party), letting users switch between them, and the Desktop Agent's layered config, see **[docs/fdc3.md](docs/fdc3.md)**.
 
-If the Terminal explicitly sets `window.OT_FDC3_AGENT_URL = ""` (no agent configured), `DesktopAgentClient.connect()` rejects with `NoAgentConfigured` instead of silently timing out — so Standalone widgets can surface a clear "no agent" state.
+If the Terminal explicitly sets `window.OT_FDC3_AGENT_URL = ""` (no agent configured), `getAgent()` rejects with `AgentNotFound` (the reason is in its `cause`) instead of silently timing out — so Standalone widgets can surface a clear "no agent" state.
 
 Override at the page level via:
 
@@ -462,85 +455,27 @@ window.OT_FDC3_BUS_URL = "ws://myhost:7891/fdc3";
 
 ---
 
-## 🧩 FDC3 Client Libraries: `fdc3-plugin` vs `fdc3-client` vs `ot-fdc3`
+## 🧩 The FDC3 Client: `fdc3-plugin`
 
-OneTerminal ships three FDC3 packages. They all give your app the same FDC3 2.2 `DesktopAgent` API (`window.fdc3`). What differs is **how messages reach the Desktop Agent**, and that depends on the kind of app you are building. `fdc3-plugin` works on its own. `fdc3-client` and `ot-fdc3` are **two halves of one pair** and are always used together.
+Every app uses one client, [`packages/fdc3-plugin`](packages/fdc3-plugin/README.md). It bundles the official `@finos/fdc3-agent-proxy` and connects it to the Desktop Agent over a WebSocket on `OT_FDC3_BUS_PORT` (7891). Messages follow the standard FDC3 3.0 Desktop Agent Communication Protocol.
 
-```
-Browser spoke app                      Tauri spoke app
-(plain web page)                       (has its own src-tauri)
-┌──────────────────┐                   ┌──────────────────────────┐
-│  fdc3-plugin.js  │                   │  @one-terminal/          │  ← TS frontend
-│  (vanilla JS)    │                   │     fdc3-client          │
-└────────┬─────────┘                   └────────────┬─────────────┘
-         │ WebSocket                                 │ Tauri IPC (invoke / listen)
-         │ :7891 /fdc3                               ▼
-         │                             ┌──────────────────────────┐
-         │                             │  ot-fdc3 (Rust plugin)   │  ← Rust backend
-         │                             └────────────┬─────────────┘
-         │                                          │ TCP, newline-delimited JSON :7890
-         ▼                                          ▼
-      ┌──────────────────────── Desktop Agent ────────────────────────┐
-      │      FDC3 Bus (WS 7891)            TCP Broker (7890)          │
-      └───────────────────────────────────────────────────────────────┘
-```
+- Importing it sets `window.fdc3` and fires `fdc3Ready`, so `getAgent()` from `@finos/fdc3` also finds it.
+- Apps get the full FDC3 3.0 `DesktopAgent` API.
+- `fdc3.close()` works only for windows the Desktop Agent opened, so Terminal panels reject with `ErrorOnClose`.
+- Agent Bridging isn't implemented.
+- App ids are self-asserted: the Desktop Agent doesn't authenticate them.
 
-|              | `fdc3-plugin`                                                           | `fdc3-client`                                                                  | `ot-fdc3`                                                    |
-| ------------ | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------ |
-| Package      | `packages/fdc3-plugin`                                                  | `packages/fdc3-client` (`@one-terminal/fdc3-client`)                           | `packages/ot-fdc3` (Rust crate)                              |
-| Runs in      | Any browser page                                                        | Frontend of a Tauri app                                                        | Rust backend of a Tauri app                                  |
-| Language     | Vanilla JS, single file, no build step                                  | TypeScript, compiled                                                           | Rust, Tauri 2 plugin                                         |
-| Transport    | WebSocket → FDC3 Bus (`OT_FDC3_BUS_PORT`, 7891)                         | Tauri IPC → `ot-fdc3`                                                          | TCP → Desktop Agent broker (`OT_TCP_PORT`, 7890)             |
-| Dependencies | None                                                                    | `@tauri-apps/api` + `ot-fdc3` in the Rust side                                 | `tauri`, `tokio`                                             |
-| Entry point  | `<script src="/fdc3-plugin.js">` or `DesktopAgentClient.connect(appId)` | `initFdc3(appId)` / `Fdc3Agent.create(…)`                                      | `.plugin(ot_fdc3::init())`; `ot_fdc3::get_state()` from Rust |
-| Extras       | Auto-sets `window.fdc3` + `window.fdc3Ready`                            | FDC3 TS types; `BridgeAgentProxy` for cross-agent routing over the FDC3 Bridge | Auto-reconnect; Rust-side broadcasting (e.g. mock streamers) |
+**Moving from earlier versions:**
 
-### `fdc3-plugin` is for browser apps
-
-A dependency-free JS shim for ordinary web pages launched as spokes, such as `sample-ticker`, `sample-chart` or any third-party HTTP(S) app. It opens a WebSocket to the Desktop Agent's FDC3 Bus. It can't use TCP or Tauri IPC, because neither is available to a web page. Serve the file as a static asset and add a `<script>` tag. See [FDC3 Integration (Browser Apps)](#-fdc3-integration-browser-apps) above.
-
-### `ot-fdc3` is the Rust side of a Tauri app
-
-A Tauri 2 plugin crate. It does four things:
-
-- Keeps a TCP connection to the Desktop Agent broker and reconnects when it drops.
-- Registers all the `fdc3_*` IPC commands.
-- Emits `fdc3:context`, `fdc3:intent`, `fdc3:channel_joined` and other events to the webview.
-- Exposes `OtFdc3State`, so Rust code can broadcast without a UI (for example, a background price streamer).
-
-It gives the frontend no API of its own. That is the job of `fdc3-client`.
-
-### `fdc3-client` is the TypeScript side of a Tauri app
-
-It provides:
-
-- FDC3 2.2 TypeScript types.
-- `Fdc3Agent`, which implements the FDC3 API by calling the `ot-fdc3` commands through `invoke`.
-- `BridgeAgentProxy`, which also connects to the FDC3 2.2 Bridge so contexts and intents can travel between Desktop Agent instances.
-
-It **only works if the app's Rust side loads `ot-fdc3`**.
-
-### Which one do I use?
-
-| Your app is…                                   | Use                                                     |
-| ---------------------------------------------- | ------------------------------------------------------- |
-| A web page (any URL loaded in a panel/browser) | `fdc3-plugin` only                                      |
-| A Tauri app with its own `src-tauri`           | `ot-fdc3` in Rust **and** `fdc3-client` in the frontend |
-| Rust code that needs FDC3 without a UI         | `ot-fdc3` alone, via `ot_fdc3::get_state()`             |
-| Code that only needs FDC3 TypeScript types     | `fdc3-client` for its types                             |
-
-### Feature coverage
-
-| API                                           |   `fdc3-plugin`   |       `fdc3-client` + `ot-fdc3`        |
-| --------------------------------------------- | :---------------: | :------------------------------------: |
-| User channels, `broadcast`, context listeners |        ✅         |                   ✅                   |
-| `raiseIntent`, intent listeners               |        ✅         |                   ✅                   |
-| `getCurrentContext`                           |       stub        |         ✅ (last-value cache)          |
-| `findIntent` / `findIntentsByContext`         |       stub        | ✅ (running instances + App Directory) |
-| `raiseIntentForContext`                       |       stub        |                   ✅                   |
-| `open`                                        |        ✅         |                   —                    |
-| App / private channels                        |         —         |            descriptors only            |
-| Cross-agent bridge routing                    | via Desktop Agent |        ✅ (`BridgeAgentProxy`)         |
+| Before                                   | Now                                           |
+| ---------------------------------------- | --------------------------------------------- |
+| `await window.fdc3Ready` (promise)       | `await getAgent()`                            |
+| `DesktopAgentClient.connect("my-app")`   | `<meta name="ot-fdc3-app-id">` + `getAgent()` |
+| `fdc3.getIdentity()`                     | `(await fdc3.getInfo()).appMetadata`          |
+| `window.fdc3Error`                       | `getAgent()` rejects; see its `cause`         |
+| `ot-fdc3` + `fdc3-client` in a Tauri app | `fdc3-plugin` in the app's frontend           |
+| AppD `name`                              | AppD `title`                                  |
+| AppD `customConfig`                      | Removed from FDC3 3.0                         |
 
 ---
 
@@ -614,9 +549,9 @@ npx create-one-terminal upgrade                 # upgrade an existing workspace 
 
 Templates live at `packages/create-one-terminal/templates/`, partitioned across three overlays:
 
-- `templates/shared/` — Terminal shell, ot-core, fdc3-plugin
-- `templates/enterprise/` — Desktop Agent, App Directory, ot-fdc3, fdc3-client, enterprise samples
-- `templates/standalone/` — sample-widget, slim Cargo/package, `widgets.config.json`
+- `templates/shared/` — Terminal shell, ot-core, fdc3-plugin, sample-widget
+- `templates/enterprise/` — Desktop Agent, App Directory, enterprise samples
+- `templates/standalone/` — slim Cargo/package, `widgets.config.json`
 
 Templates are regenerated from the live apps via `npm run create-migration`. See [SCAFFOLDING.md](SCAFFOLDING.md), [docs/plans/standalone-vs-enterprise-plans.md](docs/plans/standalone-vs-enterprise-plans.md), and [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow.
 
@@ -628,7 +563,7 @@ Templates are regenerated from the live apps via `npm run create-migration`. See
 one-terminal/
 ├── apps/
 │   ├── one-terminal/          Window manager (Tauri 2)
-│   ├── desktop-agent/         FDC3 2.2 desktop agent + engine launcher (Tauri 2)
+│   ├── desktop-agent/         FDC3 3.0 desktop agent + engine launcher (Tauri 2)
 │   ├── app-directory/         FDC3 AppD REST API + management UI (Express + React)
 │   ├── tauri-webview-host/    Minimal Tauri host for pinned WebView2/WKWebView apps
 │   ├── electron-host/         Minimal Electron host for Electron-engine apps
@@ -636,9 +571,7 @@ one-terminal/
 │   └── sample-chart/          Sample: candlestick chart viewer browser app (port 3011)
 ├── packages/
 │   ├── ot-core/               Shared Rust crate (engine abstraction, plugin manifests)
-│   ├── ot-fdc3/               Tauri plugin: FDC3 2.2 TCP spoke client
-│   ├── fdc3-plugin/           Browser FDC3 client (WebSocket transport)
-│   ├── fdc3-client/           TypeScript FDC3 types + Fdc3Agent
+│   ├── fdc3-plugin/           Browser FDC3 client (official proxy over WebSocket)
 │   └── create-one-terminal/   Scaffolder + upgrade tool
 ├── docs/
 │   ├── dashboards/            Dashboards & multi-terminal planning docs
@@ -656,5 +589,5 @@ OneTerminal is released under the [MIT License](LICENSE).
 ---
 
 <p align="center">
-  Built with ❤️ on <a href="https://tauri.app">Tauri 2</a> and <a href="https://fdc3.finos.org">FINOS FDC3 2.2</a>.
+  Built with ❤️ on <a href="https://tauri.app">Tauri 2</a> and <a href="https://fdc3.finos.org">FINOS FDC3 3.0</a>.
 </p>

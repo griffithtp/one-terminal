@@ -10,9 +10,7 @@ export interface ScaffoldContext {
   externalFdc3AgentUrl: string;
   terminalDevPort: number;
   agentDevPort: number;
-  tcpBrokerPort: number;
   fdc3BusPort: number;
-  dacpBridgePort: number;
   appDirectoryPort: number;
   includeFdc3: boolean;
   scaffoldVersion: string;
@@ -27,9 +25,7 @@ export function buildContext(answers: {
   externalFdc3AgentUrl?: string;
   terminalDevPort?: number;
   agentDevPort?: number;
-  tcpBrokerPort?: number;
   fdc3BusPort?: number;
-  dacpBridgePort?: number;
   appDirectoryPort?: number;
 }): ScaffoldContext {
   return {
@@ -42,12 +38,10 @@ export function buildContext(answers: {
     externalFdc3AgentUrl: answers.externalFdc3AgentUrl ?? "",
     terminalDevPort: answers.terminalDevPort ?? 1422,
     agentDevPort: answers.agentDevPort ?? 1421,
-    tcpBrokerPort: answers.tcpBrokerPort ?? 7890,
     fdc3BusPort: answers.fdc3BusPort ?? 7891,
-    dacpBridgePort: answers.dacpBridgePort ?? 4475,
     appDirectoryPort: answers.appDirectoryPort ?? 3005,
     includeFdc3: answers.includeFdc3,
-    scaffoldVersion: "0.1.14",
+    scaffoldVersion: "0.2.0",
     scaffoldedAt: new Date().toISOString().slice(0, 10),
   };
 }

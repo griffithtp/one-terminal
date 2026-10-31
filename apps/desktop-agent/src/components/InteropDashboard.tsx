@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { IntentHandlerInfo, ChannelInfo, PeerInfo } from "../types";
+import type { IntentHandlerInfo, ChannelInfo } from "../types";
 
-// ── FDC3 2.2 context templates ─────────────────────────────────────────────────
+// ── FDC3 context templates ─────────────────────────────────────────────────
 
 const TEMPLATES: Record<string, object> = {
   "fdc3.instrument": {
@@ -46,10 +46,9 @@ type Tab = "broadcast" | "intent";
 
 interface Props {
   channels: ChannelInfo[];
-  peers: PeerInfo[];
 }
 
-export function InteropDashboard({ channels, peers }: Props) {
+export function InteropDashboard({ channels }: Props) {
   const [tab, setTab] = useState<Tab>("broadcast");
   const [contextJson, setContextJson] = useState(
     JSON.stringify(TEMPLATES["fdc3.instrument"], null, 2)
@@ -124,16 +123,6 @@ export function InteropDashboard({ channels, peers }: Props) {
       flash(false, String(e));
     }
   }, [parseContext, intent, selectedHandler, flash]);
-
-  // ── Derived: group handlers by local vs. each peer ─────────────────────────
-
-  const localHandlers = handlers.filter((h) => !h.desktopAgentId);
-  const peerHandlerMap = new Map<string, IntentHandlerInfo[]>();
-  for (const h of handlers.filter((h) => h.desktopAgentId)) {
-    const key = h.desktopAgentId!;
-    if (!peerHandlerMap.has(key)) peerHandlerMap.set(key, []);
-    peerHandlerMap.get(key)!.push(h);
-  }
 
   return (
     <section className="panel id">
@@ -232,20 +221,17 @@ export function InteropDashboard({ channels, peers }: Props) {
               </select>
             </div>
 
-            {/* Intent Resolver — grouped by DesktopAgentIdentifier */}
             <div className="id__resolver">
               <p className="id__resolver-title">
                 Intent Resolver
                 {handlers.length === 0 && <span className="muted"> — no handlers registered</span>}
               </p>
 
-              {/* Local handlers group */}
-              {localHandlers.length > 0 && (
+              {handlers.length > 0 && (
                 <div className="id__resolver-group">
-                  <span className="id__resolver-group-label">This CDA</span>
-                  {localHandlers.map((h) => (
+                  {handlers.map((h) => (
                     <HandlerRow
-                      key={h.instanceId}
+                      key={`${h.instanceId}:${h.intent}`}
                       handler={h}
                       selected={selectedHandler === h.instanceId}
                       onSelect={() =>
@@ -254,34 +240,6 @@ export function InteropDashboard({ channels, peers }: Props) {
                     />
                   ))}
                 </div>
-              )}
-
-              {/* Per-peer handler groups */}
-              {Array.from(peerHandlerMap.entries()).map(([agentId, peerHandlers]) => (
-                <div key={agentId} className="id__resolver-group">
-                  <span className="id__resolver-group-label id__resolver-group-label--peer">
-                    {agentId}
-                    <span className="id__peer-badge">bridge</span>
-                  </span>
-                  {peerHandlers.map((h) => (
-                    <HandlerRow
-                      key={h.instanceId}
-                      handler={h}
-                      selected={selectedHandler === h.instanceId}
-                      onSelect={() =>
-                        setSelectedHandler(selectedHandler === h.instanceId ? null : h.instanceId)
-                      }
-                    />
-                  ))}
-                </div>
-              ))}
-
-              {/* No handlers but peers exist → show peers as potential forwarders */}
-              {handlers.length === 0 && peers.length > 0 && (
-                <p className="id__empty-hint">
-                  {peers.length} peer bridge{peers.length !== 1 ? "s" : ""} connected — intent will
-                  be forwarded if left unresolved.
-                </p>
               )}
             </div>
 

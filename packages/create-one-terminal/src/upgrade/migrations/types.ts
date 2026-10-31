@@ -1,7 +1,8 @@
 export type PatchOperation =
   | { op: "insert-after-line-matching"; pattern: string; content: string }
   | { op: "replace-line-matching"; pattern: string; replacement: string }
-  | { op: "add-file"; sourcePath: string; targetPath: string };
+  | { op: "add-file"; sourcePath: string; targetPath: string }
+  | { op: "remove-path"; targetPath: string };
 
 /**
  * Which workspace variants a migration applies to. Inferred at authoring time

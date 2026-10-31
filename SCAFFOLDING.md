@@ -68,9 +68,7 @@ one-terminal/
 | `externalFdc3AgentUrl` | `ws://prod-fdc3.example:7891/fdc3`    | prompt (Standalone only; empty allowed)              |
 | `terminalDevPort`      | `1422`                                | default / prompt (both variants)                     |
 | `agentDevPort`         | `1421`                                | default / prompt (Enterprise only)                   |
-| `tcpBrokerPort`        | `7890`                                | default / prompt (Enterprise only)                   |
 | `fdc3BusPort`          | `7891`                                | default / prompt (Enterprise only)                   |
-| `dacpBridgePort`       | `4475`                                | default / prompt (Enterprise only)                   |
 | `appDirectoryPort`     | `3005`                                | default / prompt (Enterprise only)                   |
 | `includeFdc3`          | `true`                                | prompt (Enterprise only — forced true on Standalone) |
 
@@ -88,7 +86,6 @@ text file under `apps/one-terminal/`, `apps/desktop-agent/`, and relevant `packa
 | 3        | `com.one-terminal`                            | `<%= tauriIdentifier %>`                                         | catch-all reverse-domain       |
 | 4        | `@one-terminal/one-terminal`                  | `@<%= orgScope %>/one-terminal`                                  | scoped npm package name        |
 | 5        | `@one-terminal/desktop-agent`                 | `@<%= orgScope %>/desktop-agent`                                 | scoped npm package name        |
-| 6        | `@one-terminal/fdc3-client`                   | `@<%= orgScope %>/fdc3-client`                                   | fdc3 package                   |
 | 7        | `@one-terminal/fdc3-plugin`                   | `@<%= orgScope %>/fdc3-plugin`                                   | fdc3 plugin                    |
 | 8        | `@one-terminal/`                              | `@<%= orgScope %>/`                                              | catch-all scope                |
 | 9        | `"name": "one-terminal"`                      | `"name": "<%= workspaceName %>"`                                 | root package.json              |
@@ -107,9 +104,7 @@ text file under `apps/one-terminal/`, `apps/desktop-agent/`, and relevant `packa
 | 22       | `port: 1422`                                  | `port: <%= terminalDevPort %>`                                   | vite.config.ts                 |
 | 23       | `port: 1421`                                  | `port: <%= agentDevPort %>`                                      | vite.config.ts                 |
 | 24       | `port: 1422` (hmr)                            | `port: <%= terminalDevPort %>`                                   | desktop-agent hmr config       |
-| 25       | `"tcpBroker": 7890`                           | `"tcpBroker": <%= tcpBrokerPort %>`                              | agent.config.json              |
 | 26       | `"fdc3Bus": 7891`                             | `"fdc3Bus": <%= fdc3BusPort %>`                                  | agent.config.json              |
-| 27       | `"dacpBridge": 4475`                          | `"dacpBridge": <%= dacpBridgePort %>`                            | agent.config.json              |
 | 28       | `"appDirectoryUrl": "http://localhost:3005"`  | `"appDirectoryUrl": "http://localhost:<%= appDirectoryPort %>"`  | config files                   |
 | 29       | `"engineCatalogUrl": "http://localhost:3005"` | `"engineCatalogUrl": "http://localhost:<%= appDirectoryPort %>"` | config files                   |
 | 30       | `dev": "vite --port 1422"`                    | `dev": "vite --port <%= terminalDevPort %>"`                     | one-terminal package.json      |
@@ -123,13 +118,13 @@ are wrapped in EJS conditionals by the extractor:
 
 ```toml
 # source (Cargo.toml)
-ot-fdc3  = { path = "packages/ot-fdc3" }  # ot:if includeFdc3
+ot-appdirectory = { path = "packages/ot-appdirectory" }  # ot:if includeFdc3
 ```
 
 ```ejs
 # extracted template
 <% if (includeFdc3) { %>
-ot-fdc3  = { path = "packages/ot-fdc3" }
+ot-appdirectory = { path = "packages/ot-appdirectory" }
 <% } %>
 ```
 
@@ -176,7 +171,7 @@ Files under `packages/create-one-terminal/overlay-overrides/<overlay>/` are copi
 - [x] Create `scripts/tsconfig.json`
 - [x] Write `scripts/extract-templates.ts`
   - Accepts `--output <dir>` flag (default: `packages/create-one-terminal/templates/`)
-  - Walks `apps/one-terminal/`, `apps/desktop-agent/`, `packages/ot-core/`, `packages/ot-fdc3/`
+  - Walks `apps/one-terminal/`, `apps/desktop-agent/`, `packages/ot-core/`
   - Applies substitution table in priority order
   - Detects `# ot:if` / `// ot:if` annotations → emits EJS conditionals
   - Binary files: `fs.copyFile()` verbatim
@@ -268,7 +263,7 @@ User-modified managed fields trigger the conflict handler.
 
 ```json
 {
-  "_managed": ["appDirectoryUrl", "engineCatalogUrl", "ports.tcpBroker", "ports.fdc3Bus", "ports.dacpBridge"],
+  "_managed": ["appDirectoryUrl", "engineCatalogUrl", "ports.fdc3Bus"],
   "title": "MyApp Desktop Agent",
   ...
 }

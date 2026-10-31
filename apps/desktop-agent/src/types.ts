@@ -47,29 +47,11 @@ export interface CdaIntentEvent {
   requestId: string;
 }
 
-export interface PeerInfo {
-  desktopAgentId: string;
-  url: string;
-  intentListeners: string[];
-}
-
 export interface IntentHandlerInfo {
   intent: string;
   appId: string;
   instanceId: string;
   displayName?: string;
-  /** undefined = local spoke; defined = handler lives on this peer bridge */
-  desktopAgentId?: string;
-}
-
-export interface CdaPeerConnectedEvent {
-  desktopAgentId: string;
-  url: string;
-}
-
-export interface CdaPeerDisconnectedEvent {
-  desktopAgentId: string;
-  url: string;
 }
 
 // ── App Directory types ────────────────────────────────────────────────────────
@@ -96,7 +78,6 @@ export interface AppInterop {
 /** Slim App Directory record — mirrors the Rust `AppRecord` struct. */
 export interface AppRecord {
   appId: string;
-  name: string;
   type: string;
   title?: string;
   description?: string;
@@ -104,15 +85,6 @@ export interface AppRecord {
   details?: AppDetails;
   categories: string[];
   interop?: AppInterop;
-}
-
-/** Emitted by the CDA when tier-4 intent resolution finds App Directory candidates. */
-export interface CdaIntentNeedsResolutionEvent {
-  intent: string;
-  context: Record<string, unknown>;
-  sourceInstanceId: string;
-  requestId: string;
-  candidates: AppRecord[];
 }
 
 // ── Engine binding types (mirrors ot-core::engine) ─────────────────────────────

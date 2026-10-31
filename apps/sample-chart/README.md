@@ -1,12 +1,12 @@
 # sample-chart
 
-Demo FDC3 spoke app — candlestick chart viewer.
+Demo FDC3 app — candlestick chart viewer.
 
 Served at **http://localhost:3011** via `npm run dev:sample-chart`.
 
 ## What it does
 
-- Connects to the Desktop Agent over FDC3 2.2 (WebSocket)
+- Connects to the Desktop Agent over FDC3 3.0 (WebSocket)
 - Registers intent listeners for **ViewChart** and **ViewQuote**
 - Subscribes to **fdc3.instrument** context broadcasts on the Green channel
 - Renders a mock candlestick chart that refreshes when a new instrument arrives

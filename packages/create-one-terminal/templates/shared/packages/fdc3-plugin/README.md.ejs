@@ -1,81 +1,75 @@
 # @<%= orgScope %>/fdc3-plugin
 
-A dependency-free, vanilla-JS FDC3 2.2 Desktop Agent shim for **spoke apps** (browser pages) launched by the <%= displayName %> Desktop Agent.
-
-## What it does
-
-`fdc3-plugin.js` opens a WebSocket to the Desktop Agent's FDC3 Bus (`ws://localhost:7891/fdc3`) and exposes the full FDC3 2.2 `DesktopAgent` interface. It has no build step and no npm dependencies — it is a single file you serve as a static asset.
-
-When loaded via a `<script>` tag it automatically sets `window.fdc3` and fires `window.fdc3Ready` once the handshake with the Desktop Agent completes.
-
-## Bus URL resolution
-
-The WebSocket URL is resolved in this order:
-
-1. `<meta name="ot-fdc3-bus-url" content="ws://...">` in the page `<head>`
-2. `window.OT_FDC3_BUS_URL`
-3. Fallback: `ws://localhost:7891/fdc3`
+FDC3 3.0 for apps running under OneTerminal. It runs the official
+[`@finos/fdc3-agent-proxy`](https://www.npmjs.com/package/@finos/fdc3-agent-proxy)
+over a WebSocket to the Desktop Agent, speaking the standard Desktop Agent
+Communication Protocol (DACP).
 
 ## Usage
 
-### As a `<script>` tag (auto-init)
+Load `fdc3-plugin.js` as an ES module. Importing it connects to the Desktop Agent,
+sets `window.fdc3` and fires the standard `fdc3Ready` event.
 
 ```html
-<!-- Optional: override the default bus URL -->
-<meta name="ot-fdc3-bus-url" content="ws://localhost:7891/fdc3">
-
-<script type="module" src="/fdc3-plugin.js"></script>
+<meta name="ot-fdc3-app-id" content="my-app-id" />
 <script type="module">
-  // window.fdc3Ready resolves once the handshake completes
-  const fdc3 = await window.fdc3Ready;
+  import { getAgent } from "/fdc3-plugin.js";
 
-  await fdc3.joinUserChannel('red');
-  await fdc3.broadcast({ type: 'fdc3.instrument', id: { ticker: 'AAPL' } });
-
-  fdc3.addContextListener('fdc3.instrument', (ctx) => {
-    console.log('received instrument', ctx.id.ticker);
+  const fdc3 = await getAgent();
+  await fdc3.addContextListener("fdc3.instrument", (context, metadata) => {
+    console.log(context, metadata.source);
   });
 </script>
 ```
 
-### As an ES module import
+`getAgent()` rejects with `AgentNotFound` if the page can't connect; the reason is in
+the error's `cause`. Apps that use the `@finos/fdc3` package can call its `getAgent()`
+instead, which finds `window.fdc3`.
 
-```js
-import { DesktopAgentClient } from '/fdc3-plugin.js';
+Apps get the full FDC3 3.0 `DesktopAgent` API. Use `getInfo().appMetadata` to read the
+app's own identity.
 
-const fdc3 = await DesktopAgentClient.connect('my-app-id');
+Inside a Terminal, the Terminal owns the panel's user channel. `window.OT_FDC3_INITIAL_CHANNEL`
+is defined (possibly `null`) there, so check for `undefined` before joining a default channel
+when running standalone.
 
-// Join a user channel
-await fdc3.joinUserChannel('green');
+## App id
 
-// Broadcast context
-await fdc3.broadcast({ type: 'fdc3.instrument', id: { ticker: 'EURUSD' } });
+The first non-empty value wins:
 
-// Listen for context
-const listener = await fdc3.addContextListener('fdc3.instrument', (ctx, meta) => {
-  console.log('instrument from', meta?.source?.appId, '→', ctx.id.ticker);
-});
+1. `<meta name="ot-fdc3-app-id">`
+2. The `fdc3AppId` query parameter
+3. The document title
 
-// Raise an intent
-const resolution = await fdc3.raiseIntent('ViewChart', {
-  type: 'fdc3.instrument',
-  id: { ticker: 'EURUSD' },
-});
-console.log('handled by', resolution.source.appId);
+App ids are self-asserted: the Desktop Agent doesn't authenticate them.
 
-// Clean up
-listener.unsubscribe();
-fdc3.disconnect();
+## Bus URL
+
+The first non-empty value wins:
+
+1. `<meta name="ot-fdc3-bus-url">`
+2. `window.OT_FDC3_AGENT_URL`, injected by the Terminal
+3. `window.OT_FDC3_BUS_URL`
+4. `ws://localhost:7891/fdc3`
+
+An injected empty `OT_FDC3_AGENT_URL` means FDC3 is disabled for this Terminal, and
+`getAgent()` rejects.
+
+## Limitations
+
+- `fdc3.close()` works only for windows the Desktop Agent opened. Terminal panels and
+  apps on a separate engine host reject with `ErrorOnClose`.
+- Agent Bridging isn't implemented: `getInfo().optionalFeatures.DesktopAgentBridging` is `false`.
+- The connection doesn't reconnect if the Desktop Agent restarts. Reload the app.
+
+## Developing
+
+`fdc3-plugin.js` is generated from `src/` and committed, so that Rust's `include_str!`,
+the sample servers and scaffolded workspaces can use it without a JS build.
+
+```sh
+npm run build:fdc3-plugin   # rebuild fdc3-plugin.js; CI fails if you forget
+npm run test:fdc3-plugin    # contract tests: the real proxy against the real Rust bus
 ```
 
-## Serving from a dev server
-
-Both sample apps proxy-serve the file directly from the monorepo, mapping the request path `/fdc3-plugin.js` to `packages/fdc3-plugin/fdc3-plugin.js`. See [apps/sample-ticker/server.js](../../apps/sample-ticker/server.js) for an example.
-
-## Where it is used
-
-| App | How |
-|---|---|
-| `apps/sample-ticker` | Served at `/fdc3-plugin.js` by `server.js`; imported in `index.html` |
-| `apps/sample-chart` | Served at `/fdc3-plugin.js` by `server.js`; imported in `index.html` |
-| Any third-party spoke app | Copy or serve the file; add a `<script>` tag |
+The contract tests validate every frame in both directions against the FDC3 3.0 JSON schemas.

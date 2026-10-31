@@ -1,126 +1,113 @@
-//! FDC3 Bus WebSocket server  —  `ws://127.0.0.1:7891/fdc3`
+//! FDC3 Bus WebSocket server  —  `ws://127.0.0.1:7891/fdc3?appId=<appId>`
 //!
-//! Browser apps (ticker-plant, chart-viewer, …) connect here via
-//! `fdc3-plugin.js` using the native WebSocket API.  This sidesteps the
-//! same-origin restriction that prevents BroadcastChannel from working
-//! between a Tauri webview (`tauri://localhost`) and ordinary browser tabs.
+//! Browser apps connect here via `fdc3-plugin.js`, which runs the official
+//! `@finos/fdc3-agent-proxy` over this socket. A WebSocket also sidesteps the
+//! same-origin restriction that keeps BroadcastChannel from working between a
+//! Tauri webview (`tauri://localhost`) and ordinary browser tabs.
 //!
 //! Protocol
 //! ────────
-//! Both directions use JSON text frames.
+//! JSON text frames carrying FDC3 3.0 Desktop Agent Communication Protocol
+//! messages. The first frame must be `WCP4ValidateAppIdentity`, answered by
+//! `WCP5ValidateAppIdentityResponse`; `WCP6Goodbye` ends the session. The steps
+//! of the Web Connection Protocol before that exist to find an agent through
+//! postMessage, which doesn't apply to a direct socket.
 //!
-//! Inbound  (browser → server):  `fdc3:*` types, camelCase fields
-//! Outbound (server → browser):  `fdc3:*` types, camelCase fields
-//!
-//! Bus clients are registered in `WindowManager` with the same `mpsc`
-//! infrastructure as TCP spokes, so the broker's `fan_out_broadcast` and
-//! `deliver_intent` functions route to them automatically.  The outbound
-//! loop converts the `CdaResponse` JSON (snake_case) to `fdc3:*` JSON
-//! (camelCase) before writing to the WebSocket sink.
+//! This module only moves frames and performs [`Effect`]s. All FDC3 behaviour
+//! lives in [`crate::broker`].
 
 use axum::{
     extract::{
         ws::{Message, WebSocket},
-        State, WebSocketUpgrade,
+        Query, State, WebSocketUpgrade,
     },
     response::IntoResponse,
     routing::get,
     Router,
 };
-use futures_util::{SinkExt, StreamExt};
-use serde_json::{json, Value};
-use tauri::{AppHandle, Emitter, Manager};
+use futures_util::{future::BoxFuture, SinkExt, StreamExt};
+use serde::Deserialize;
+use serde_json::Value;
+use std::sync::Arc;
+use std::time::Duration;
 use tokio::net::TcpListener;
 use tokio::sync::mpsc;
 
-use crate::app_dir::AppDirectoryCache;
-use crate::broker::{
-    now_ms, CdaChannelChangedEvent, CdaConnectedEvent, CdaDisconnectedEvent, ChannelManager,
-    IntentRegistry, WindowManager,
-};
-use crate::dacp::PeerRegistry;
-use crate::tcp::handler::{deliver_intent, fan_out_broadcast};
+use crate::app_dir::AppRecord;
+use crate::broker::{Broker, Effect};
 
-// ── Axum shared state ─────────────────────────────────────────────────────────
+const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(30);
+
+/// What the bus needs from the application around it.
+pub trait BusHost: Send + Sync + 'static {
+    /// A current snapshot of the App Directory.
+    fn directory(&self) -> BoxFuture<'_, Vec<AppRecord>>;
+    /// Launch a new instance of `app`, returning the label of the window if it
+    /// is one the agent can close later.
+    fn launch(&self, app: AppRecord) -> BoxFuture<'_, Result<Option<String>, String>>;
+    /// Close a window the agent opened.
+    fn close_window(&self, label: &str) -> Result<(), String>;
+}
 
 #[derive(Clone)]
 struct BusState {
-    window_manager: WindowManager,
-    channel_manager: ChannelManager,
-    intent_registry: IntentRegistry,
-    peer_registry: PeerRegistry,
-    app_dir_cache: AppDirectoryCache,
-    app: AppHandle,
+    broker: Broker,
+    host: Arc<dyn BusHost>,
 }
 
-// ── Entry point ───────────────────────────────────────────────────────────────
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ConnectParams {
+    app_id: Option<String>,
+}
 
-pub async fn start(
-    port: u16,
-    window_manager: WindowManager,
-    channel_manager: ChannelManager,
-    intent_registry: IntentRegistry,
-    peer_registry: PeerRegistry,
-    app_dir_cache: AppDirectoryCache,
-    app: AppHandle,
-) {
-    let state = BusState {
-        window_manager,
-        channel_manager,
-        intent_registry,
-        peer_registry,
-        app_dir_cache,
-        app,
-    };
-
-    let router = Router::new()
+pub fn router(broker: Broker, host: Arc<dyn BusHost>) -> Router {
+    Router::new()
         .route("/fdc3", get(ws_handler))
-        .with_state(state);
+        .with_state(BusState { broker, host })
+}
 
+pub async fn start(port: u16, broker: Broker, host: Arc<dyn BusHost>) {
     let addr = format!("127.0.0.1:{port}");
     match TcpListener::bind(&addr).await {
         Ok(listener) => {
             println!("[fdc3-bus] WebSocket server on ws://{addr}/fdc3");
-            let _ = axum::serve(listener, router).await;
+            let _ = axum::serve(listener, router(broker, host)).await;
         }
         Err(e) => eprintln!("[fdc3-bus] cannot bind on {addr}: {e}"),
     }
 }
 
-// ── WebSocket upgrade handler ─────────────────────────────────────────────────
-
-async fn ws_handler(ws: WebSocketUpgrade, State(state): State<BusState>) -> impl IntoResponse {
-    ws.on_upgrade(|socket| handle_connection(socket, state))
+async fn ws_handler(
+    ws: WebSocketUpgrade,
+    Query(params): Query<ConnectParams>,
+    State(state): State<BusState>,
+) -> impl IntoResponse {
+    let app_id = params.app_id.unwrap_or_else(|| "unknown-app".to_string());
+    ws.on_upgrade(move |socket| handle_connection(socket, app_id, state))
 }
 
-// ── Per-connection coroutine ──────────────────────────────────────────────────
-
-async fn handle_connection(socket: WebSocket, state: BusState) {
+async fn handle_connection(socket: WebSocket, app_id: String, state: BusState) {
     let (mut sink, mut stream) = socket.split();
+    let (tx, mut rx) = mpsc::unbounded_channel::<String>();
 
-    // ── Phase 1: wait for fdc3:hello ─────────────────────────────────────────
-    let (instance_id, app_id, hello_request_id, mut rx) = loop {
+    // ── Phase 1: identity handshake ───────────────────────────────────────────
+    let instance_id = loop {
         match stream.next().await {
             Some(Ok(Message::Text(txt))) => {
-                let Ok(v) = serde_json::from_str::<Value>(&txt) else {
+                let Ok(msg) = serde_json::from_str::<Value>(&txt) else {
                     continue;
                 };
-                if v.get("type").and_then(|t| t.as_str()) != Some("fdc3:hello") {
+                if msg["type"] != "WCP4ValidateAppIdentity" {
                     continue;
                 }
-                let app_id = v
-                    .get("appId")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("unknown")
-                    .to_string();
-                let request_id = v
-                    .get("requestId")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_string();
-                let (tx, rx) = mpsc::unbounded_channel::<String>();
-                let iid = state.window_manager.register(app_id.clone(), None, tx);
-                break (iid, app_id, request_id, rx);
+                let attempt = msg["meta"]["connectionAttemptUuid"]
+                    .as_str()
+                    .unwrap_or_default();
+                let directory = state.host.directory().await;
+                // `tx` moves into the broker so that a forced disconnect drops
+                // the only sender and ends the message loop below.
+                break state.broker.connect(&app_id, attempt, &directory, tx);
             }
             Some(Ok(Message::Ping(d))) => {
                 let _ = sink.send(Message::Pong(d)).await;
@@ -128,221 +115,22 @@ async fn handle_connection(socket: WebSocket, state: BusState) {
             _ => return,
         }
     };
-
-    // Send fdc3:welcome  (channels serialise camelCase via ChannelInfoSummary)
-    let channels = serde_json::to_value(state.channel_manager.list_summaries())
-        .unwrap_or(Value::Array(vec![]));
-    let welcome = json!({
-        "type":       "fdc3:welcome",
-        "instanceId": instance_id,
-        "channels":   channels,
-        "requestId":  hello_request_id,
-    });
-    if sink
-        .send(Message::Text(
-            serde_json::to_string(&welcome).unwrap_or_default(),
-        ))
-        .await
-        .is_err()
-    {
-        state.window_manager.unregister(&instance_id);
-        return;
-    }
-
-    let _ = state.app.emit(
-        "cda:connected",
-        CdaConnectedEvent {
-            instance_id: instance_id.clone(),
-            app_id: app_id.clone(),
-            display_name: None,
-            connected_at: now_ms(),
-        },
-    );
     println!("[fdc3-bus] connected: {app_id} ({instance_id})");
 
     // ── Phase 2: message loop ─────────────────────────────────────────────────
+    let mut heartbeat = tokio::time::interval(HEARTBEAT_INTERVAL);
+    heartbeat.tick().await; // the first tick completes immediately
     loop {
         tokio::select! {
-            msg = stream.next() => match msg {
+            inbound = stream.next() => match inbound {
                 Some(Ok(Message::Text(txt))) => {
-                    let Ok(v) = serde_json::from_str::<Value>(&txt) else { continue };
-                    let Some(msg_type) = v.get("type").and_then(|t| t.as_str()).map(str::to_owned)
-                        else { continue };
-
-                    match msg_type.as_str() {
-
-                        // ── Broadcast ─────────────────────────────────────
-                        "fdc3:broadcast" => {
-                            let channel_id = str_field(&v, "channelId");
-                            let context    = v.get("context").cloned().unwrap_or(Value::Null);
-                            if !channel_id.is_empty() {
-                                fan_out_broadcast(
-                                    &instance_id,
-                                    &app_id,
-                                    &channel_id,
-                                    context,
-                                    &state.window_manager,
-                                    &state.channel_manager,
-                                    &state.peer_registry,
-                                    &state.app,
-                                );
-                            }
-                        }
-
-                        // ── RaiseIntent ───────────────────────────────────
-                        "fdc3:raiseIntent" => {
-                            let intent     = str_field(&v, "intent");
-                            let context    = v.get("context").cloned().unwrap_or(Value::Null);
-                            let target     = v.get("targetInstanceId")
-                                .and_then(|t| t.as_str())
-                                .filter(|s| !s.is_empty())
-                                .map(str::to_owned);
-                            let request_id = str_field(&v, "requestId");
-                            deliver_intent(
-                                &instance_id,
-                                &intent,
-                                context,
-                                target.as_deref(),
-                                &request_id,
-                                &state.window_manager,
-                                &state.intent_registry,
-                                &state.peer_registry,
-                                &state.app_dir_cache,
-                                &state.app,
-                            ).await;
-                        }
-
-                        // ── JoinChannel ───────────────────────────────────
-                        "fdc3:joinChannel" => {
-                            let channel_id = str_field(&v, "channelId");
-                            let request_id = str_field(&v, "requestId");
-                            match state.channel_manager.join(&instance_id, &channel_id) {
-                                Ok(()) => {
-                                    state.window_manager.set_channel(
-                                        &instance_id,
-                                        Some(channel_id.clone()),
-                                    );
-                                    let _ = state.app.emit(
-                                        "cda:channel_changed",
-                                        CdaChannelChangedEvent {
-                                            instance_id: instance_id.clone(),
-                                            app_id: app_id.clone(),
-                                            channel_id: Some(channel_id.clone()),
-                                        },
-                                    );
-                                    let reply = serde_json::to_string(&json!({
-                                        "type":      "fdc3:channelJoined",
-                                        "channelId": channel_id,
-                                        "requestId": request_id,
-                                    }))
-                                    .unwrap_or_default();
-                                    state.window_manager.send_to(&instance_id, &reply);
-                                }
-                                Err(msg) => {
-                                    let err = serde_json::to_string(&json!({
-                                        "type":      "fdc3:error",
-                                        "code":      "CHANNEL_NOT_FOUND",
-                                        "message":   msg,
-                                        "requestId": request_id,
-                                    }))
-                                    .unwrap_or_default();
-                                    state.window_manager.send_to(&instance_id, &err);
-                                }
-                            }
-                        }
-
-                        // ── LeaveChannel ──────────────────────────────────
-                        "fdc3:leaveChannel" => {
-                            state.channel_manager.leave(&instance_id);
-                            state.window_manager.set_channel(&instance_id, None);
-                            let _ = state.app.emit(
-                                "cda:channel_changed",
-                                CdaChannelChangedEvent {
-                                    instance_id: instance_id.clone(),
-                                    app_id: app_id.clone(),
-                                    channel_id: None,
-                                },
-                            );
-                        }
-
-                        // ── IntentListener management ─────────────────────
-                        "fdc3:addIntentListener" => {
-                            let intent = str_field(&v, "intent");
-                            if !intent.is_empty() {
-                                state.intent_registry.add(&instance_id, &intent);
-                                println!("[fdc3-bus] {app_id} ({instance_id}) +intent: {intent}");
-                            }
-                        }
-                        "fdc3:removeIntentListener" => {
-                            let intent = str_field(&v, "intent");
-                            if !intent.is_empty() {
-                                state.intent_registry.remove(&instance_id, &intent);
-                            }
-                        }
-
-                        // ── Open app ──────────────────────────────────────
-                        "fdc3:open" => {
-                            let target_app_id = str_field(&v, "appId");
-                            let request_id    = str_field(&v, "requestId");
-                            let apps = state.app_dir_cache.list_all().await;
-                            match apps.iter().find(|a| a.app_id == target_app_id) {
-                                Some(rec) => {
-                                    let url = rec
-                                        .details
-                                        .as_ref()
-                                        .and_then(|d| d.url.as_deref())
-                                        .unwrap_or("")
-                                        .to_string();
-                                    let reply = serde_json::to_string(&json!({
-                                        "type":      "fdc3:openResult",
-                                        "appId":     target_app_id,
-                                        "requestId": request_id,
-                                    }))
-                                    .unwrap_or_default();
-                                    state.window_manager.send_to(&instance_id, &reply);
-                                    if !url.is_empty() {
-                                        if rec.app_type == "onlineNative" {
-                                            let label = format!(
-                                                "app-{}",
-                                                rec.app_id.replace(|c: char| !c.is_alphanumeric() && c != '-', "-")
-                                            );
-                                            if let Some(win) = state.app.get_webview_window(&label) {
-                                                let _: Result<(), _> = win.set_focus();
-                                            } else if let Ok(parsed) = url.parse::<tauri::Url>() {
-                                                let title = rec.title.clone()
-                                                    .unwrap_or_else(|| rec.name.clone());
-                                                let _ = tauri::WebviewWindowBuilder::new(
-                                                    &state.app,
-                                                    label,
-                                                    tauri::WebviewUrl::External(parsed),
-                                                )
-                                                .title(title)
-                                                .inner_size(1280.0, 800.0)
-                                                .build();
-                                            }
-                                        } else {
-                                            let _ = tauri_plugin_opener::open_url(&url, None::<&str>);
-                                        }
-                                    }
-                                }
-                                None => {
-                                    let err = serde_json::to_string(&json!({
-                                        "type":      "fdc3:error",
-                                        "code":      "APP_NOT_FOUND",
-                                        "message":   format!("App '{target_app_id}' not in directory"),
-                                        "requestId": request_id,
-                                    }))
-                                    .unwrap_or_default();
-                                    state.window_manager.send_to(&instance_id, &err);
-                                }
-                            }
-                        }
-
-                        // ── Goodbye ───────────────────────────────────────
-                        "fdc3:goodbye" => break,
-
-                        _ => {}
+                    let Ok(msg) = serde_json::from_str::<Value>(&txt) else { continue };
+                    if msg["type"] == "WCP6Goodbye" {
+                        break;
                     }
+                    let directory = state.host.directory().await;
+                    let effects = state.broker.handle(&instance_id, &msg, &directory);
+                    perform(effects, &state);
                 }
                 Some(Ok(Message::Ping(d))) => {
                     let _ = sink.send(Message::Pong(d)).await;
@@ -351,99 +139,54 @@ async fn handle_connection(socket: WebSocket, state: BusState) {
                 _ => {}
             },
             outbound = rx.recv() => match outbound {
-                Some(cda_json) => {
-                    if let Some(fdc3_json) = cda_to_fdc3(&cda_json) {
-                        if sink.send(Message::Text(fdc3_json)).await.is_err() {
-                            break;
-                        }
+                Some(json) => {
+                    if sink.send(Message::Text(json)).await.is_err() {
+                        break;
                     }
                 }
                 None => break,
             },
+            _ = heartbeat.tick() => {
+                if sink.send(Message::Text(Broker::heartbeat_event())).await.is_err() {
+                    break;
+                }
+            }
         }
     }
 
-    // ── Phase 3: cleanup ─────────────────────────────────────────────────────
-    state.intent_registry.remove_all(&instance_id);
-    state.channel_manager.remove_member(&instance_id);
-    state.window_manager.unregister(&instance_id);
-    let _ = state.app.emit(
-        "cda:disconnected",
-        CdaDisconnectedEvent {
-            instance_id: instance_id.clone(),
-            app_id: app_id.clone(),
-        },
-    );
+    // ── Phase 3: cleanup ──────────────────────────────────────────────────────
+    state.broker.disconnect(&instance_id);
     println!("[fdc3-bus] disconnected: {app_id} ({instance_id})");
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-/// Extract a string field from a JSON object, returning "" if absent.
-fn str_field(v: &Value, key: &str) -> String {
-    v.get(key)
-        .and_then(|x| x.as_str())
-        .unwrap_or("")
-        .to_string()
-}
-
-/// Convert a `CdaResponse` JSON string (snake_case fields, snake_case type tag)
-/// to the corresponding `fdc3:*` JSON string (camelCase fields) expected by
-/// `fdc3-plugin.js`.
-///
-/// Messages already carrying an `fdc3:` prefix (e.g. fdc3:channelJoined
-/// injected by the joinChannel handler) are passed through unchanged.
-///
-/// Returns `None` for CdaResponse types that don't need forwarding to the
-/// browser (pong, welcome, channel_left).
-fn cda_to_fdc3(s: &str) -> Option<String> {
-    let v: Value = serde_json::from_str(s).ok()?;
-    let msg_type = v.get("type")?.as_str()?;
-
-    // Pass through messages already in fdc3: format.
-    if msg_type.starts_with("fdc3:") {
-        return Some(s.to_string());
-    }
-
-    let out: Value = match msg_type {
-        "context_broadcast" => json!({
-            "type":             "fdc3:contextBroadcast",
-            "channelId":        v["channel_id"],
-            "context":          v["context"],
-            "sourceInstanceId": v["source_instance_id"],
-            "sourceAppId":      v["source_app_id"],
-        }),
-        "intent_delivery" => json!({
-            "type":             "fdc3:intentDelivery",
-            "intent":           v["intent"],
-            "context":          v["context"],
-            "sourceInstanceId": v["source_instance_id"],
-            "sourceAppId":      v["source_app_id"],
-            "targetInstanceId": Value::Null,
-            "deliveryId":       v["request_id"],
-        }),
-        "intent_resolved" => json!({
-            "type":               "fdc3:intentResolved",
-            "intent":             v["intent"],
-            "handlerInstanceId":  v["handler_instance_id"],
-            "handlerAppId":       v["handler_app_id"],
-            "requestId":          v["request_id"],
-        }),
-        "error" => {
-            let mut out = json!({
-                "type":    "fdc3:error",
-                "code":    v["code"],
-                "message": v["message"],
-            });
-            if let Some(rid) = v.get("request_id") {
-                out["requestId"] = rid.clone();
+/// Carry out broker side effects without blocking the connection's message loop.
+fn perform(effects: Vec<Effect>, state: &BusState) {
+    for effect in effects {
+        let broker = state.broker.clone();
+        let host = state.host.clone();
+        match effect {
+            Effect::Launch { pending_id, app } => {
+                tokio::spawn(async move {
+                    let result = host.launch(*app).await;
+                    broker.launch_finished(&pending_id, result);
+                });
             }
-            out
+            Effect::ExpireAfter { pending_id, after } => {
+                tokio::spawn(async move {
+                    tokio::time::sleep(after).await;
+                    broker.expire(&pending_id);
+                });
+            }
+            Effect::CloseWindow {
+                instance_id,
+                request_uuid,
+                label,
+            } => {
+                if let Err(e) = host.close_window(&label) {
+                    eprintln!("[fdc3-bus] close failed for {label}: {e}");
+                    broker.close_failed(&instance_id, &request_uuid);
+                }
+            }
         }
-        // welcome, channel_joined, channel_left, pong are handled directly
-        // or not needed — skip them.
-        _ => return None,
-    };
-
-    serde_json::to_string(&out).ok()
+    }
 }

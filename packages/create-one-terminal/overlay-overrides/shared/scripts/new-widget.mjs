@@ -36,9 +36,7 @@ const RESERVED = new Set([
   "tauri-webview-host",
   "electron-host",
   "ot-core",
-  "ot-fdc3",
   "fdc3-plugin",
-  "fdc3-client",
 ]);
 
 const args = parseArgs(process.argv.slice(2));

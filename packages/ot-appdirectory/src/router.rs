@@ -1,4 +1,4 @@
-//! `axum::Router` implementing the FDC3 2.2 App Directory REST surface.
+//! `axum::Router` implementing the FDC3 3.0 App Directory REST surface.
 //! Ported from `apps/app-directory/src/router.ts` + `index.ts`'s `/health`.
 
 use std::collections::HashSet;
@@ -43,7 +43,7 @@ pub fn router(store: AppStore) -> Router {
 }
 
 async fn health() -> impl IntoResponse {
-    Json(json!({ "status": "ok", "version": "2.2" }))
+    Json(json!({ "status": "ok", "version": "3.0" }))
 }
 
 async fn get_engines() -> impl IntoResponse {
@@ -86,12 +86,16 @@ async fn get_app(State(state): State<AppState>, Path(app_id): Path<String>) -> i
     }
 }
 
-async fn create_app(State(state): State<AppState>, Json(body): Json<AppD>) -> impl IntoResponse {
-    if body.details.url.is_empty() || body.app_id.is_empty() || body.name.is_empty() {
+async fn create_app(
+    State(state): State<AppState>,
+    Json(mut body): Json<AppD>,
+) -> impl IntoResponse {
+    body.apply_legacy_name();
+    if body.details.url.is_empty() || body.app_id.is_empty() || body.title.is_empty() {
         return (
             StatusCode::BAD_REQUEST,
             Json(ErrorResponse {
-                message: "Missing required fields: appId, name, type, details.url".into(),
+                message: "Missing required fields: appId, title, type, details.url".into(),
             }),
         )
             .into_response();
@@ -122,13 +126,14 @@ async fn create_app(State(state): State<AppState>, Json(body): Json<AppD>) -> im
 async fn update_app(
     State(state): State<AppState>,
     Path(app_id): Path<String>,
-    Json(body): Json<AppD>,
+    Json(mut body): Json<AppD>,
 ) -> impl IntoResponse {
-    if body.details.url.is_empty() || body.app_id.is_empty() || body.name.is_empty() {
+    body.apply_legacy_name();
+    if body.details.url.is_empty() || body.app_id.is_empty() || body.title.is_empty() {
         return (
             StatusCode::BAD_REQUEST,
             Json(ErrorResponse {
-                message: "Missing required fields: appId, name, type, details.url".into(),
+                message: "Missing required fields: appId, title, type, details.url".into(),
             }),
         )
             .into_response();

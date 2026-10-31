@@ -1,6 +1,6 @@
-# FDC3 2.2 App Directory
+# FDC3 3.0 App Directory
 
-A standalone **FDC3 2.2-compliant App Directory** service with a full-featured management UI. It serves as the application registry for the OneTerminal framework, supplying app records to the Desktop Agent launcher and IntentResolver.
+A standalone **FDC3 3.0-compliant App Directory** service with a full-featured management UI. It serves as the application registry for the OneTerminal framework, supplying app records to the Desktop Agent launcher and IntentResolver.
 
 ---
 
@@ -8,10 +8,10 @@ A standalone **FDC3 2.2-compliant App Directory** service with a full-featured m
 
 The App Directory runs on **`http://localhost:3005`** and provides two layers:
 
-| Layer             | Technology             | Purpose                                                             |
-| ----------------- | ---------------------- | ------------------------------------------------------------------- |
-| **REST API**      | Express 4 + TypeScript | FDC3 2.2 `GET /v2/apps` endpoints + `POST`/`PUT`/`DELETE` mutations |
-| **Management UI** | React 18 + Vite 5      | Browser-based form UI for registering and editing FDC3 app records  |
+| Layer             | Technology                               | Purpose                                                             |
+| ----------------- | ---------------------------------------- | ------------------------------------------------------------------- |
+| **REST API**      | Rust + axum (`packages/ot-appdirectory`) | FDC3 3.0 `GET /v2/apps` endpoints + `POST`/`PUT`/`DELETE` mutations |
+| **Management UI** | React 18 + Vite 5                        | Browser-based form UI for registering and editing FDC3 app records  |
 
 The CDA fetches from this service on startup (`AppDirectoryCache`) to populate its Launcher and intent resolution pipeline.
 
@@ -141,7 +141,7 @@ Register a new application. The `appId` must be unique.
 ```json
 {
   "appId": "order-blotter",
-  "name": "Order Blotter",
+  "title": "Order Blotter",
   "type": "web",
   "details": { "url": "http://localhost:3020" },
   "version": "1.4.2",
@@ -233,21 +233,21 @@ The catalog is defined in [`src/engines.ts`](src/engines.ts). Update that file t
 ### `GET /health`
 
 ```json
-{ "status": "ok", "version": "2.2" }
+{ "status": "ok", "version": "3.0" }
 ```
 
 ---
 
-## FDC3 2.2 AppD Field Reference
+## FDC3 3.0 AppD Field Reference
 
-The form captures every field defined in the FDC3 2.2 App Directory specification. Fields marked **required** will trigger a validation error if omitted.
+The form captures every field defined in the FDC3 3.0 App Directory specification. Fields marked **required** will trigger a validation error if omitted.
 
 ### Identity (required)
 
 | Field      | JSON key      | Description                                                                                      |
 | ---------- | ------------- | ------------------------------------------------------------------------------------------------ |
 | App ID     | `appId`       | Unique stable identifier. Alphanumeric, hyphens, underscores only. Immutable after registration. |
-| Name       | `name`        | Short display name shown in launchers.                                                           |
+| Title      | `title`       | Display name shown in launchers. `name` is accepted on input from older clients and converted.   |
 | Type       | `type`        | See **App Types** below.                                                                         |
 | Launch URL | `details.url` | URL the platform navigates to when opening the app. Required for `web` and `onlineNative` types. |
 
@@ -346,7 +346,7 @@ Declares which browser engine(s) the app supports, per operating system. When pr
 http://localhost:3005
 │
 ├── GET  /           → React SPA (ui/dist/index.html)
-├── GET  /health     → { status: "ok", version: "2.2" }
+├── GET  /health     → { status: "ok", version: "3.0" }
 │
 └── /v2
     ├── GET    /engines         → engine catalog (families + versions + download metadata)

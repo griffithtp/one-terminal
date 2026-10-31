@@ -2,14 +2,13 @@
 
 The Desktop Agent is the central broker for a OneTerminal session. It runs as a Tauri 2 application (system-tray only, no visible window by default) and owns four subsystems:
 
-| Subsystem          | Purpose                                                                         |
-| ------------------ | ------------------------------------------------------------------------------- |
-| **TCP Broker**     | Accepts spoke connections from Tauri-based apps via `ot-fdc3` plugin            |
-| **FDC3 Bus**       | WebSocket server for browser-based apps using `fdc3-plugin.js`                  |
-| **DACP Bridge**    | Cross-agent WebSocket bridge — connects peer Desktop Agents on the same machine |
-| **Engine Runtime** | Downloads, caches, and launches pinned browser-engine runtimes                  |
+| Subsystem          | Purpose                                                                  |
+| ------------------ | ------------------------------------------------------------------------ |
+| **FDC3 Broker**    | All FDC3 3.0 state and rules: channels, listeners, intents, app launches |
+| **FDC3 Bus**       | WebSocket server speaking DACP to apps that use `fdc3-plugin.js`         |
+| **Engine Runtime** | Downloads, caches, and launches pinned browser-engine runtimes           |
 
-The dashboard UI (`apps/desktop-agent/src/`) opens in a webview on demand and visualises connected spokes, channels, intents, and bridge peers.
+The dashboard UI (`apps/desktop-agent/src/`) opens in a webview on demand and visualises connected apps, channels and intents.
 
 ---
 
@@ -61,9 +60,7 @@ If no file is found, built-in defaults are used (identical to the sample below).
   "engineCatalogUrl": "http://localhost:3005",
 
   "ports": {
-    "tcpBroker": 7890, // Tauri-app spokes connect here (ot-fdc3 plugin)
-    "fdc3Bus": 7891, // Browser-app spokes connect here (fdc3-plugin.js)
-    "dacpBridge": 4475, // Cross-agent peer WebSocket server
+    "fdc3Bus": 7891, // Apps connect here (fdc3-plugin.js)
   },
 
   // User channels seeded at startup. Add, remove, or reorder freely.
@@ -89,103 +86,55 @@ All `OT_*` variables are applied on top of the file values after loading.
 | `OT_TITLE`         | `title`            | `"OneTerminal Desktop Agent"` |
 | `OT_APP_DIR_URL`   | `appDirectoryUrl`  | `http://localhost:3005`       |
 | `OT_CATALOG_URL`   | `engineCatalogUrl` | `http://localhost:3005`       |
-| `OT_TCP_PORT`      | `ports.tcpBroker`  | `7890`                        |
 | `OT_FDC3_BUS_PORT` | `ports.fdc3Bus`    | `7891`                        |
-| `OT_DACP_PORT`     | `ports.dacpBridge` | `4475`                        |
 
 ### Port conflict detection
 
-At startup, before the Tauri runtime initialises, the agent probes all three ports with a short-lived `TcpListener::bind`. If any port is already bound it prints all conflicts and exits immediately:
+At startup, before the Tauri runtime initialises, the agent probes its port with a short-lived `TcpListener::bind`. If any port is already bound it prints all conflicts and exits immediately:
 
 ```
 [desktop-agent] startup aborted: port conflict(s) detected
-  port 7890 is already in use — set OT_TCP_PORT=<port> to override
   port 7891 is already in use — set OT_FDC3_BUS_PORT=<port> to override
 ```
 
 ---
 
-## TCP Spoke Protocol
+## FDC3 Bus
 
-Tauri-based apps connect using the `ot-fdc3` plugin, which opens a TCP connection to `127.0.0.1:7890`. All messages are newline-terminated JSON, discriminated by the `"type"` field.
+Apps load `fdc3-plugin.js`, which runs the official `@finos/fdc3-agent-proxy` over a WebSocket to `ws://127.0.0.1:7891/fdc3?appId=<appId>`.
 
-### Handshake
+Frames are JSON and carry standard FDC3 3.0 Desktop Agent Communication Protocol (DACP) messages. The connection starts with `WCP4ValidateAppIdentity`, answered by `WCP5ValidateAppIdentityResponse`, and ends with `WCP6Goodbye`. The earlier Web Connection Protocol steps exist to discover an agent through `postMessage`, which a direct socket doesn't need. A standard WebSocket Connection Protocol isn't due until FDC3 3.1, so this transport is OneTerminal's own.
 
-The first message from a spoke must be `Hello`. The agent replies with `Welcome` and registers the connection.
+`appId` is self-asserted: the agent doesn't authenticate it.
 
-```jsonc
-// Spoke → Agent
-{ "type": "hello", "app_id": "ticker-plant", "display_name": "Ticker Plant" }
+The code has two layers:
 
-// Agent → Spoke
-{
-  "type": "welcome",
-  "instance_id": "a1b2c3d4-...",
-  "channels": [
-    { "channelId": "Red", "displayName": "Red", "color": "#E74C3C" },
-    ...
-  ]
-}
-```
-
-### Inbound messages (spoke → agent)
-
-| `type`                   | Required fields                   | Description                                                |
-| ------------------------ | --------------------------------- | ---------------------------------------------------------- |
-| `hello`                  | `app_id`                          | Opens the session. Must be first. `display_name` optional. |
-| `join_channel`           | `channel_id`                      | Join a user channel, leaving any current one.              |
-| `leave_channel`          | —                                 | Leave the current channel.                                 |
-| `broadcast`              | `channel_id`, `context`           | Broadcast a context to all other members of the channel.   |
-| `raise_intent`           | `intent`, `context`, `request_id` | Raise a named intent. `target_instance_id` optional.       |
-| `add_intent_listener`    | `intent`                          | Register this spoke as a handler for the intent.           |
-| `remove_intent_listener` | `intent`                          | Deregister.                                                |
-| `ping`                   | —                                 | Keep-alive. Agent replies with `pong`.                     |
-
-### Outbound messages (agent → spoke)
-
-| `type`              | Trigger                                                 | Description                                                                                         |
-| ------------------- | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `welcome`           | After `hello`                                           | Session established. Carries channel list.                                                          |
-| `channel_joined`    | After `join_channel`                                    | ACK.                                                                                                |
-| `channel_left`      | After `leave_channel`                                   | ACK.                                                                                                |
-| `context_broadcast` | When another member broadcasts                          | Carries `channel_id`, `context`, `source_instance_id`, `source_app_id`.                             |
-| `intent_delivery`   | When a raised intent targets this spoke                 | Carries `intent`, `context`, `source_instance_id`, `request_id`.                                    |
-| `intent_resolved`   | When a handler is found for an intent this spoke raised | Carries `handler_instance_id`, `handler_app_id`, `request_id`.                                      |
-| `error`             | On protocol error                                       | `code` is one of `CHANNEL_NOT_FOUND`, `NO_INTENT_HANDLERS`, `MALFORMED_MESSAGE`, `HANDLER_TIMEOUT`. |
-| `pong`              | After `ping`                                            | Keep-alive reply.                                                                                   |
-
----
-
-## FDC3 Bus (browser apps)
-
-Browser apps include `fdc3-plugin.js` and connect via WebSocket to `ws://127.0.0.1:7891/fdc3`. The bus uses the same broker internals as the TCP layer — a connected browser app is indistinguishable from a TCP spoke in the channel and intent registries.
+- [`src-tauri/src/broker/`](src-tauri/src/broker/) holds all FDC3 behaviour. It's synchronous and has no socket or Tauri dependencies, and returns side effects (launch an app, close a window, start a timeout) for its caller to perform.
+- [`src-tauri/src/fdc3_bus/`](src-tauri/src/fdc3_bus/) moves frames and performs those effects.
 
 The WebSocket URL is resolved in the browser in this order:
 
 1. `<meta name="ot-fdc3-bus-url">` content attribute
-2. `window.OT_FDC3_BUS_URL`
-3. Fallback: `ws://localhost:7891/fdc3`
+2. `window.OT_FDC3_AGENT_URL`, injected by the Terminal
+3. `window.OT_FDC3_BUS_URL`
+4. Fallback: `ws://localhost:7891/fdc3`
 
-See [`packages/fdc3-plugin/README.md`](../../packages/fdc3-plugin/README.md) for the full browser-side API.
+See [`packages/fdc3-plugin/README.md`](../../packages/fdc3-plugin/README.md) for the browser-side API.
 
----
+### Behaviour worth knowing
 
-## DACP Bridge
+- **Resolving intents.** With several possible handlers, the raiser gets an `appIntent` back and the plugin shows a resolver dialog. An `appId` target with no `instanceId` launches a new instance, unless `newInstance` is `false`.
+- **`fdc3.open`.** Each call opens a new window and waits up to 20 seconds. The app must connect with the same `appId`, or the call rejects with `ApiTimeout`. It rejects with `AppTimeout` if the app connects but never adds a matching listener for the context.
+- **`fdc3.close`.** The agent can only close windows it opened in-process. Terminal panels and apps on a separate engine host reject with `ErrorOnClose`.
+- **Heartbeats.** The agent sends `heartbeatEvent` every 30 seconds but never disconnects an app for missing one, because webviews on hidden dashboards can be suspended. Socket closure is what ends a connection.
+- **Agent Bridging** isn't implemented.
 
-The Desktop Agent Connectivity Protocol (DACP) enables multiple Desktop Agent instances on the same machine to exchange contexts and resolve intents across their boundaries.
+### Tests
 
-### Peer discovery
-
-The agent uses two complementary mechanisms, running every 30 seconds:
-
-1. **Port scan** — probes `127.0.0.1:4475` through `4575` for TCP listeners. Any open port is assumed to be a DACP bridge and a WebSocket connection is attempted.
-2. **Discovery files** — reads `$TMPDIR/fdc3/bridges/*.json`. Each file contains `{ "url": "ws://127.0.0.1:<port>/v2/bridge", ... }`. On startup the agent writes its own file; on shutdown it removes it.
-
-A URL is only connected to once: `try_claim_url` is atomic and returns `false` for URLs already tracked.
-
-### Bridge endpoint
-
-Inbound peer connections arrive on `ws://127.0.0.1:<dacpBridge>/v2/bridge`.
+```sh
+cargo test -p desktop-agent broker   # broker rules, without Tauri
+npm run test:fdc3-plugin             # the real proxy against the real bus, with every frame schema-checked
+```
 
 ---
 
@@ -295,13 +244,11 @@ These commands are callable from the dashboard UI via `invoke()`.
 
 | Command                                                     | Returns               | Description                                                  |
 | ----------------------------------------------------------- | --------------------- | ------------------------------------------------------------ |
-| `cda_list_connections`                                      | `WindowHandle[]`      | All connected spoke instances                                |
-| `cda_list_channels`                                         | `ChannelInfo[]`       | All channels with member lists                               |
-| `cda_get_spoke_channel(instance_id)`                        | `string \| null`      | Channel a spoke is currently on                              |
-| `cda_disconnect_spoke(instance_id)`                         | `boolean`             | Force-disconnect a spoke                                     |
+| `cda_list_connections`                                      | `WindowHandle[]`      | All connected app instances                                  |
+| `cda_list_channels`                                         | `ChannelInfo[]`       | User channels with member lists                              |
+| `cda_disconnect_spoke(instance_id)`                         | `boolean`             | Force-disconnect an app                                      |
 | `cda_broadcast_from_dashboard(channel_id, context)`         | `number`              | Broadcast from the dashboard itself; returns recipient count |
-| `cda_list_peers`                                            | `PeerInfo[]`          | Connected bridge peers                                       |
-| `cda_list_intent_handlers`                                  | `IntentHandlerInfo[]` | All intent handlers (local + bridged)                        |
+| `cda_list_intent_handlers`                                  | `IntentHandlerInfo[]` | All registered intent listeners                              |
 | `cda_raise_intent_from_dashboard(intent, context, target?)` | `string`              | Raise intent; returns `request_id`                           |
 | `cda_list_app_directory`                                    | `AppRecord[]`         | Current App Directory snapshot                               |
 | `cda_refresh_app_directory`                                 | `number`              | Re-fetch App Directory; returns app count                    |
@@ -319,8 +266,8 @@ The agent emits these events to the dashboard window (`desktop-agent-dashboard`)
 
 | Event              | Payload fields                                                              | Trigger                                 |
 | ------------------ | --------------------------------------------------------------------------- | --------------------------------------- |
-| `cda:connected`    | `instanceId`, `appId`, `displayName`, `connectedAt`                         | A spoke completes the `Hello` handshake |
-| `cda:disconnected` | `instanceId`, `appId`                                                       | A spoke TCP connection closes           |
+| `cda:connected`    | `instanceId`, `appId`, `displayName`, `connectedAt`                         | An app completes the identity handshake |
+| `cda:disconnected` | `instanceId`, `appId`                                                       | An app connection closes                |
 | `cda:context`      | `channelId`, `context`, `sourceInstanceId`, `sourceAppId`, `recipientCount` | A context broadcast is routed           |
 | `cda:intent`       | `intent`, `sourceInstanceId`, `handlerInstanceId`, `requestId`              | An intent is delivered to a handler     |
 
@@ -343,7 +290,6 @@ The dashboard window hides (rather than closes) when its close button is clicked
 
 The current behaviour on unexpected shutdown is minimal by design:
 
-- **Desktop Agent crash** — connected TCP spokes receive an EOF on their connection. The `ot-fdc3` plugin does not auto-reconnect; spoke apps will lose their session and need to be restarted. There is no reconnection logic in `packages/ot-fdc3`.
-- **Spoke disconnect** — the agent deregisters the spoke from all channel and intent registries immediately and emits `cda:disconnected`. Other spokes are unaffected.
+- **Desktop Agent crash** — apps' WebSockets close and `fdc3-plugin` doesn't reconnect. Reload the apps once the agent is back.
+- **App disconnect** — the agent removes the app's listeners and channel membership and emits `cda:disconnected`. A raiser still waiting for that app's intent result gets a `NoResultReturned` response, and the other party on any shared private channel gets a disconnect event.
 - **App Directory / engine catalog unavailable at startup** — both fetches are non-fatal. The agent starts with an empty app list and retries on the next manual `cda_refresh_app_directory` call or tray refresh.
-- **DACP peer disconnect** — the peer is removed from the `PeerRegistry`. The discovery loop will attempt to reconnect on the next 30-second scan if the peer's discovery file is still present.

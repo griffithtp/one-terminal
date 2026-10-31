@@ -44,7 +44,7 @@ async fn main() {
         .await
         .unwrap_or_else(|e| panic!("app-directory-server: failed to bind 0.0.0.0:{port}: {e}"));
 
-    println!("[app-directory-server] listening on 0.0.0.0:{port} (FDC3 2.2 App Directory)");
+    println!("[app-directory-server] listening on 0.0.0.0:{port} (FDC3 3.0 App Directory)");
     axum::serve(listener, app)
         .await
         .expect("app-directory-server: fatal server error");

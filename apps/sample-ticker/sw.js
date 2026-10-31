@@ -1,26 +1,38 @@
-const CACHE = 'ticker-v2';
-const PRECACHE = ['./fdc3-plugin.js'];
+const CACHE = 'ticker-v4';
+const PLUGIN_URL = new URL('./fdc3-plugin.js', self.location).href;
 
-self.addEventListener('install', (e) =>
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(PRECACHE)))
-);
+// `cache: 'reload'` skips the HTTP cache, which may still hold a copy that an
+// older server marked immutable.
+const fetchPlugin = () => fetch(PLUGIN_URL, { cache: 'reload' });
+
+self.addEventListener('install', (e) => {
+  self.skipWaiting();
+  e.waitUntil(
+    caches.open(CACHE).then((c) => fetchPlugin().then((res) => c.put(PLUGIN_URL, res)))
+  );
+});
 
 self.addEventListener('activate', (e) =>
   e.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
-    )
+    caches.keys()
+      .then((keys) =>
+        Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
+      )
+      .then(() => self.clients.claim())
   )
 );
 
+// The plugin's name has no content hash, so the network wins and the cache is
+// only the offline fallback. Everything else goes straight to the network.
 self.addEventListener('fetch', (e) => {
-  const { url } = e.request;
-  // Never intercept WebSocket upgrades, cross-origin requests, or HTML (always network for HTML)
-  if (
-    url.startsWith('ws') ||
-    !url.startsWith(self.location.origin) ||
-    e.request.destination === 'document'
-  ) return;
+  if (e.request.url !== PLUGIN_URL) return;
 
-  e.respondWith(caches.match(e.request).then((hit) => hit ?? fetch(e.request)));
+  e.respondWith(
+    fetchPlugin()
+      .then(async (res) => {
+        if (res.ok) await (await caches.open(CACHE)).put(PLUGIN_URL, res.clone());
+        return res;
+      })
+      .catch(() => caches.match(PLUGIN_URL))
+  );
 });

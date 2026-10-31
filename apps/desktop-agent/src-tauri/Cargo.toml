@@ -1,7 +1,7 @@
 [package]
 name = "desktop-agent"
 version = "0.1.0"
-description = "OneTerminal Desktop Agent — FDC3 2.2 centralised hub for all spoke apps"
+description = "OneTerminal Desktop Agent — FDC3 3.0 centralised hub for all apps"
 authors = ["one-terminal"]
 edition = "2021"
 
@@ -22,7 +22,6 @@ rand                = { workspace = true }
 dashmap             = { workspace = true }
 axum                = { workspace = true }
 tower-http          = { workspace = true }
-tokio-tungstenite   = { workspace = true }
 futures-util        = { workspace = true }
 reqwest             = { workspace = true }
 sha2                = { workspace = true }

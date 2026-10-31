@@ -1,13 +1,30 @@
 {
   "name": "@one-terminal/fdc3-plugin",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "Vanilla-JS FDC3 2.2 shim for apps launched by the Central Desktop Agent",
+  "description": "FDC3 3.0 browser agent for OneTerminal apps: the official proxy over a WebSocket to the Desktop Agent",
   "type": "module",
   "exports": {
     ".": "./fdc3-plugin.js"
   },
   "files": [
     "fdc3-plugin.js"
-  ]
+  ],
+  "scripts": {
+    "build": "node build.mjs",
+    "check:bundle": "node build.mjs --check",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@finos/fdc3-agent-proxy": "3.0.0",
+    "@finos/fdc3-schema": "3.0.0",
+    "@finos/fdc3-standard": "3.0.0",
+    "ajv": "^8.17.1",
+    "ajv-formats": "^3.0.1",
+    "esbuild": "^0.25.0",
+    "typescript": "~5.8.3",
+    "uuid": "^11.1.0",
+    "vitest": "^3.2.4"
+  }
 }

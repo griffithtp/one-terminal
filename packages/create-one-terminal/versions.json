@@ -2,6 +2,419 @@
   "schemaVersion": 1,
   "versions": [
     {
+      "version": "0.2.0",
+      "releaseDate": "2026-10-31",
+      "breaking": true,
+      "changelogUrl": "https://github.com/one-terminal/one-terminal/releases/tag/v0.2.0",
+      "migrations": [
+        {
+          "type": "structural",
+          "id": "fdc3-3.0-shared",
+          "target": "packages/fdc3-plugin/fdc3-plugin.js",
+          "appliesTo": "both",
+          "description": "FDC3 3.0: replaces fdc3-plugin with the official proxy over DACP and updates the Terminal. BREAKING for widgets: use getAgent() in place of the window.fdc3Ready promise and DesktopAgentClient.connect(), getInfo().appMetadata in place of getIdentity(), and app.title in place of app.name. Overwrites customized copies of these files; compare against .one-terminal/upgrade-backup-0.2.0/.",
+          "operations": [
+            {
+              "op": "add-file",
+              "sourcePath": "apps/one-terminal/src-tauri/src/layout/commands.rs",
+              "targetPath": "apps/one-terminal/src-tauri/src/layout/commands.rs"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "apps/one-terminal/src-tauri/src/widgets.rs",
+              "targetPath": "apps/one-terminal/src-tauri/src/widgets.rs"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "apps/one-terminal/src/commands/appCommands.ts",
+              "targetPath": "apps/one-terminal/src/commands/appCommands.ts"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "apps/one-terminal/src/components/EnginePickerDialog.tsx",
+              "targetPath": "apps/one-terminal/src/components/EnginePickerDialog.tsx"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "apps/one-terminal/src/components/OverlayApp.tsx",
+              "targetPath": "apps/one-terminal/src/components/OverlayApp.tsx"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "apps/one-terminal/src/components/OverlayDashboardTabMenu.tsx",
+              "targetPath": "apps/one-terminal/src/components/OverlayDashboardTabMenu.tsx"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "apps/one-terminal/src/components/WidgetCatalog.tsx",
+              "targetPath": "apps/one-terminal/src/components/WidgetCatalog.tsx"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "apps/one-terminal/src/components/sections/AddWidgetSection.tsx",
+              "targetPath": "apps/one-terminal/src/components/sections/AddWidgetSection.tsx"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "apps/one-terminal/src/hooks/useAppLaunch.tsx",
+              "targetPath": "apps/one-terminal/src/hooks/useAppLaunch.tsx"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "apps/one-terminal/src/types.ts",
+              "targetPath": "apps/one-terminal/src/types.ts"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "packages/fdc3-plugin/README.md",
+              "targetPath": "packages/fdc3-plugin/README.md"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "packages/fdc3-plugin/fdc3-plugin.js",
+              "targetPath": "packages/fdc3-plugin/fdc3-plugin.js"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "packages/fdc3-plugin/package.json",
+              "targetPath": "packages/fdc3-plugin/package.json"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "scripts/new-widget.mjs",
+              "targetPath": "scripts/new-widget.mjs"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "scripts/widget-template/index.html.tpl",
+              "targetPath": "scripts/widget-template/index.html.tpl"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "apps/one-terminal/README.md",
+              "targetPath": "apps/one-terminal/README.md"
+            }
+          ]
+        },
+        {
+          "type": "structural",
+          "id": "fdc3-3.0-enterprise",
+          "target": "apps/desktop-agent/src-tauri/src/lib.rs",
+          "appliesTo": "enterprise",
+          "description": "FDC3 3.0: replaces the Desktop Agent's broker and bus with a DACP implementation, updates the App Directory (title replaces name, customConfig removed), and removes ot-fdc3, fdc3-client, the TCP broker and the agent bridge. These files must land together, since a partial apply will not compile. Tauri apps that use ot-fdc3 must move to fdc3-plugin. OT_TCP_PORT and OT_DACP_PORT no longer have any effect. Overwrites customized copies of these files; compare against .one-terminal/upgrade-backup-0.2.0/.",
+          "operations": [
+            {
+              "op": "add-file",
+              "sourcePath": "apps/app-directory/ui/src/components/AppForm.tsx",
+              "targetPath": "apps/app-directory/ui/src/components/AppForm.tsx"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "apps/app-directory/ui/src/components/AppList.tsx",
+              "targetPath": "apps/app-directory/ui/src/components/AppList.tsx"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "apps/app-directory/ui/src/types.ts",
+              "targetPath": "apps/app-directory/ui/src/types.ts"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "apps/desktop-agent/README.md",
+              "targetPath": "apps/desktop-agent/README.md"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "apps/desktop-agent/src-tauri/Cargo.toml",
+              "targetPath": "apps/desktop-agent/src-tauri/Cargo.toml"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "apps/desktop-agent/src-tauri/resources/agent.config.json",
+              "targetPath": "apps/desktop-agent/src-tauri/resources/agent.config.json"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "apps/desktop-agent/src-tauri/src/app_dir/mod.rs",
+              "targetPath": "apps/desktop-agent/src-tauri/src/app_dir/mod.rs"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "apps/desktop-agent/src-tauri/src/broker/apps.rs",
+              "targetPath": "apps/desktop-agent/src-tauri/src/broker/apps.rs"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "apps/desktop-agent/src-tauri/src/broker/channels.rs",
+              "targetPath": "apps/desktop-agent/src-tauri/src/broker/channels.rs"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "apps/desktop-agent/src-tauri/src/broker/intents.rs",
+              "targetPath": "apps/desktop-agent/src-tauri/src/broker/intents.rs"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "apps/desktop-agent/src-tauri/src/broker/mod.rs",
+              "targetPath": "apps/desktop-agent/src-tauri/src/broker/mod.rs"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "apps/desktop-agent/src-tauri/src/broker/tests.rs",
+              "targetPath": "apps/desktop-agent/src-tauri/src/broker/tests.rs"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "apps/desktop-agent/src-tauri/src/broker/types.rs",
+              "targetPath": "apps/desktop-agent/src-tauri/src/broker/types.rs"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "apps/desktop-agent/src-tauri/src/config.rs",
+              "targetPath": "apps/desktop-agent/src-tauri/src/config.rs"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "apps/desktop-agent/src-tauri/src/engines/router.rs",
+              "targetPath": "apps/desktop-agent/src-tauri/src/engines/router.rs"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "apps/desktop-agent/src-tauri/src/fdc3_bus/mod.rs",
+              "targetPath": "apps/desktop-agent/src-tauri/src/fdc3_bus/mod.rs"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "apps/desktop-agent/src-tauri/src/lib.rs",
+              "targetPath": "apps/desktop-agent/src-tauri/src/lib.rs"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "apps/desktop-agent/src/App.tsx",
+              "targetPath": "apps/desktop-agent/src/App.tsx"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "apps/desktop-agent/src/components/InteropDashboard.tsx",
+              "targetPath": "apps/desktop-agent/src/components/InteropDashboard.tsx"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "apps/desktop-agent/src/components/LauncherPanel.tsx",
+              "targetPath": "apps/desktop-agent/src/components/LauncherPanel.tsx"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "apps/desktop-agent/src/hooks/useCdaEvents.ts",
+              "targetPath": "apps/desktop-agent/src/hooks/useCdaEvents.ts"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "apps/desktop-agent/src/types.ts",
+              "targetPath": "apps/desktop-agent/src/types.ts"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "apps/sample-chart/index.html",
+              "targetPath": "apps/sample-chart/index.html"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "apps/sample-chart/server.js",
+              "targetPath": "apps/sample-chart/server.js"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "apps/sample-chart/sw.js",
+              "targetPath": "apps/sample-chart/sw.js"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "apps/sample-ticker/index.html",
+              "targetPath": "apps/sample-ticker/index.html"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "apps/sample-ticker/server.js",
+              "targetPath": "apps/sample-ticker/server.js"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "apps/sample-ticker/sw.js",
+              "targetPath": "apps/sample-ticker/sw.js"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "packages/ot-appdirectory/src/data.rs",
+              "targetPath": "packages/ot-appdirectory/src/data.rs"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "packages/ot-appdirectory/src/filter.rs",
+              "targetPath": "packages/ot-appdirectory/src/filter.rs"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "packages/ot-appdirectory/src/router.rs",
+              "targetPath": "packages/ot-appdirectory/src/router.rs"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "packages/ot-appdirectory/src/types.rs",
+              "targetPath": "packages/ot-appdirectory/src/types.rs"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "packages/ot-appdirectory/tests/router.rs",
+              "targetPath": "packages/ot-appdirectory/tests/router.rs"
+            },
+            {
+              "op": "remove-path",
+              "targetPath": "apps/desktop-agent/src-tauri/src/broker/channel_manager.rs"
+            },
+            {
+              "op": "remove-path",
+              "targetPath": "apps/desktop-agent/src-tauri/src/broker/intent_registry.rs"
+            },
+            {
+              "op": "remove-path",
+              "targetPath": "apps/desktop-agent/src-tauri/src/broker/window_manager.rs"
+            },
+            {
+              "op": "remove-path",
+              "targetPath": "apps/desktop-agent/src-tauri/src/dacp"
+            },
+            {
+              "op": "remove-path",
+              "targetPath": "apps/desktop-agent/src-tauri/src/tcp"
+            },
+            {
+              "op": "remove-path",
+              "targetPath": "apps/desktop-agent/src/bus"
+            },
+            {
+              "op": "remove-path",
+              "targetPath": "apps/desktop-agent/src/components/BridgeVisualizer.tsx"
+            },
+            {
+              "op": "remove-path",
+              "targetPath": "apps/desktop-agent/src/components/IntentResolverModal.tsx"
+            },
+            {
+              "op": "remove-path",
+              "targetPath": "apps/desktop-agent/src/hooks/useFdcBus.ts"
+            },
+            {
+              "op": "remove-path",
+              "targetPath": "packages/fdc3-client"
+            },
+            {
+              "op": "remove-path",
+              "targetPath": "packages/ot-fdc3"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "apps/app-directory/README.md",
+              "targetPath": "apps/app-directory/README.md"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "apps/app-directory/package.json",
+              "targetPath": "apps/app-directory/package.json"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "apps/app-directory-server/src/main.rs",
+              "targetPath": "apps/app-directory-server/src/main.rs"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "apps/desktop-agent/src/components/ConnectionsPanel.tsx",
+              "targetPath": "apps/desktop-agent/src/components/ConnectionsPanel.tsx"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "apps/desktop-agent/src/styles.css",
+              "targetPath": "apps/desktop-agent/src/styles.css"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "apps/sample-chart/README.md",
+              "targetPath": "apps/sample-chart/README.md"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "apps/sample-ticker/README.md",
+              "targetPath": "apps/sample-ticker/README.md"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "packages/ot-appdirectory/Cargo.toml",
+              "targetPath": "packages/ot-appdirectory/Cargo.toml"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "packages/ot-appdirectory/src/lib.rs",
+              "targetPath": "packages/ot-appdirectory/src/lib.rs"
+            }
+          ]
+        },
+        {
+          "type": "structural",
+          "id": "fdc3-3.0-root-cargo",
+          "target": "Cargo.toml",
+          "appliesTo": "enterprise",
+          "description": "Remove ot-fdc3 and tokio-tungstenite from the Rust workspace.",
+          "operations": [
+            {
+              "op": "replace-line-matching",
+              "pattern": "\"packages/ot-fdc3\",",
+              "replacement": ""
+            },
+            {
+              "op": "replace-line-matching",
+              "pattern": "ot-fdc3  =",
+              "replacement": ""
+            },
+            {
+              "op": "replace-line-matching",
+              "pattern": "tokio-tungstenite =",
+              "replacement": ""
+            }
+          ]
+        },
+        {
+          "type": "structural",
+          "id": "fdc3-3.0-sample-widget",
+          "target": "apps/sample-widget/index.html",
+          "appliesTo": "both",
+          "description": "FDC3 3.0: update the sample widget to getAgent(). The Terminal embeds it, so Enterprise workspaces need it too.",
+          "operations": [
+            {
+              "op": "add-file",
+              "sourcePath": "apps/sample-widget/index.html",
+              "targetPath": "apps/sample-widget/index.html"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "apps/sample-widget/server.js",
+              "targetPath": "apps/sample-widget/server.js"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "apps/sample-widget/package.json",
+              "targetPath": "apps/sample-widget/package.json"
+            },
+            {
+              "op": "add-file",
+              "sourcePath": "apps/sample-widget/README.md",
+              "targetPath": "apps/sample-widget/README.md"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "version": "0.1.14",
       "releaseDate": "2026-10-19",
       "breaking": false,
@@ -25,7 +438,7 @@
           "type": "structural",
           "id": "shared-dashboard-registry",
           "target": "apps/one-terminal/src-tauri/src/layout/dashboard.rs",
-          "description": "Plan 15 — dashboards move from N per-Terminal lists to one process-wide shared registry (DashboardRegistry + DashboardSession split, stable dashboard ids, cross-window live sync, an in-memory active-dashboard exclusivity lock, and Duplicate/Move-here actions for a dashboard locked elsewhere). Replaces 7 backend files wholesale — they must all land together, since a partial apply will not compile. The on-disk data migration itself (merging each existing terminals/<id>/dashboards.json into one shared dashboards.json, disambiguating any name collisions) is NOT a scaffolder step: it runs automatically, once, the first time the upgraded app launches (TerminalManager::load_dashboards_registry / persist::load_or_migrate_registry) — nothing manual required here.",
+          "description": "Plan 15 \u2014 dashboards move from N per-Terminal lists to one process-wide shared registry (DashboardRegistry + DashboardSession split, stable dashboard ids, cross-window live sync, an in-memory active-dashboard exclusivity lock, and Duplicate/Move-here actions for a dashboard locked elsewhere). Replaces 7 backend files wholesale \u2014 they must all land together, since a partial apply will not compile. The on-disk data migration itself (merging each existing terminals/<id>/dashboards.json into one shared dashboards.json, disambiguating any name collisions) is NOT a scaffolder step: it runs automatically, once, the first time the upgraded app launches (TerminalManager::load_dashboards_registry / persist::load_or_migrate_registry) \u2014 nothing manual required here.",
           "appliesTo": "both",
           "operations": [
             {

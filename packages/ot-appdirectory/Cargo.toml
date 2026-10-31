@@ -1,7 +1,7 @@
 [package]
 name = "ot-appdirectory"
 version = "0.1.0"
-description = "Shared FDC3 2.2 App Directory server logic — types, seed catalogue, and axum router. No Tauri deps; mounted in-process by desktop-agent and served standalone by app-directory-server."
+description = "Shared FDC3 3.0 App Directory server logic — types, seed catalogue, and axum router. No Tauri deps; mounted in-process by desktop-agent and served standalone by app-directory-server."
 edition = "2021"
 
 [dependencies]

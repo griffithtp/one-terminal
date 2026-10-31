@@ -20,7 +20,7 @@ use serde_json::Value;
 use std::path::{Path, PathBuf};
 use tauri::{Manager, State};
 
-/// Entry in widgets.config.json. Subset of FDC3 2.2 AppRecord so it can be
+/// Entry in widgets.config.json. Subset of FDC3 3.0 AppRecord so it can be
 /// promoted to a full App Directory record later without schema churn.
 #[derive(Debug, Deserialize)]
 struct LocalWidget {
@@ -219,12 +219,11 @@ fn resolve_widget_url(url: String) -> String {
 
 fn local_widget_to_value(w: LocalWidget) -> Value {
     let app_id = w.app_id.clone();
-    let title = w.title.clone().unwrap_or_else(|| app_id.clone());
-    let name = w.name.unwrap_or_else(|| app_id.clone());
+    // `name` was removed in FDC3 3.0; existing widget files may still use it.
+    let title = w.title.or(w.name).unwrap_or_else(|| app_id.clone());
     let url = resolve_widget_url(w.url);
     serde_json::json!({
         "appId": app_id,
-        "name": name,
         "title": title,
         "description": w.description,
         "details": { "url": url },

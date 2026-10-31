@@ -1,6 +1,6 @@
 # Sample Widget
 
-Minimal FDC3 2.2 widget bundled with Standalone-variant scaffolds. Demonstrates:
+Minimal FDC3 3.0 widget bundled with every scaffolded workspace. Demonstrates:
 
 - Connecting to an FDC3 agent (the bundled Desktop Agent in Enterprise, an external agent in Standalone).
 - Subscribing to `fdc3.instrument` context broadcasts.

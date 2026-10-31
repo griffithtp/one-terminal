@@ -2,6 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <meta name="ot-fdc3-app-id" content="<%= widgetName %>" />
     <title><%= widgetTitle %></title>
     <style>
       body {
@@ -23,11 +24,14 @@
     <div id="status">Connecting…</div>
 
     <script type="module">
-      import { DesktopAgentClient } from "/fdc3-plugin.js";
+      // The plugin connects once per page. Using its shared connection lets the
+      // Terminal's "Set channel" menu control this widget's channel.
+      import { getAgent } from "/fdc3-plugin.js";
       const statusEl = document.getElementById("status");
       try {
-        const fdc3 = await DesktopAgentClient.connect("<%= widgetName %>");
-        statusEl.textContent = `Connected · ${fdc3.getIdentity().instanceId.slice(0, 8)}`;
+        const fdc3 = await getAgent();
+        const { appMetadata } = await fdc3.getInfo();
+        statusEl.textContent = `Connected · ${appMetadata.instanceId.slice(0, 8)}`;
         statusEl.className = "ok";
       } catch (e) {
         statusEl.textContent = "FDC3 agent unavailable";
