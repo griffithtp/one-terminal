@@ -283,17 +283,15 @@ impl AgentConfig {
             cfg.engine_catalog_url = v;
             set("engineCatalogUrl", "OT_CATALOG_URL");
         }
-        for (var, key, slot) in [("OT_FDC3_BUS_PORT", "ports.fdc3Bus", &mut cfg.ports.fdc3_bus)] {
-            if let Ok(v) = std::env::var(var) {
-                match v.parse() {
-                    Ok(p) => {
-                        *slot = p;
-                        set(key, var);
-                    }
-                    Err(_) => eprintln!(
-                        "[desktop-agent] config: ignoring {var}={v:?} (not a port number)"
-                    ),
+        if let Ok(v) = std::env::var("OT_FDC3_BUS_PORT") {
+            match v.parse() {
+                Ok(p) => {
+                    cfg.ports.fdc3_bus = p;
+                    set("ports.fdc3Bus", "OT_FDC3_BUS_PORT");
                 }
+                Err(_) => eprintln!(
+                    "[desktop-agent] config: ignoring OT_FDC3_BUS_PORT={v:?} (not a port number)"
+                ),
             }
         }
         if let Ok(v) = std::env::var("OT_APPD_EMBEDDED") {
