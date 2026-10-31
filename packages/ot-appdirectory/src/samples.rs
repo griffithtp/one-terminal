@@ -75,28 +75,27 @@ fn serve(path: &str, get_asset: impl Fn(&str) -> Option<rust_embed::EmbeddedFile
 
     if path == "fdc3-plugin.js" {
         return match Fdc3PluginAsset::get("fdc3-plugin.js") {
-            Some(file) => asset_response(path, file),
+            Some(file) => asset_response(file),
             None => StatusCode::NOT_FOUND.into_response(),
         };
     }
 
     match get_asset(path) {
-        Some(file) => asset_response(path, file),
+        Some(file) => asset_response(file),
         None => StatusCode::NOT_FOUND.into_response(),
     }
 }
 
-fn asset_response(path: &str, file: rust_embed::EmbeddedFile) -> Response {
+fn asset_response(file: rust_embed::EmbeddedFile) -> Response {
     let mime = file.metadata.mimetype().to_string();
-    let cache_control = if path.ends_with(".html") {
-        "no-cache, no-store, must-revalidate"
-    } else {
-        "public, max-age=31536000, immutable"
-    };
+    // None of these names has a content hash, so all of them must revalidate.
     (
         [
             (header::CONTENT_TYPE, mime),
-            (header::CACHE_CONTROL, cache_control.to_string()),
+            (
+                header::CACHE_CONTROL,
+                "no-cache, no-store, must-revalidate".to_string(),
+            ),
         ],
         file.data,
     )
@@ -136,6 +135,24 @@ mod tests {
             let (status, mime, _) = get(&format!("/apps/{app}/sw.js")).await;
             assert_eq!(status, StatusCode::OK, "{app}");
             assert!(mime.contains("javascript"), "{app}: {mime}");
+        }
+    }
+
+    /// A long-lived cache of an unhashed file pins widgets to an old plugin.
+    #[tokio::test]
+    async fn no_asset_is_cached_long_term() {
+        for file in ["", "fdc3-plugin.js", "sw.js"] {
+            let app = crate::ui::serve_ui(super::router());
+            let res = app
+                .oneshot(
+                    Request::get(format!("/apps/ticker-plant/{file}"))
+                        .body(Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            let cache = res.headers()["cache-control"].to_str().unwrap();
+            assert!(cache.contains("no-store"), "{file}: {cache}");
         }
     }
 
