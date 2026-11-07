@@ -74,6 +74,10 @@ pub struct StackTab {
     /// when this tab is active (Generic Web Widget panels only). Defaults
     /// to `false` — hidden until the user opts in via the tab context menu.
     pub show_address_bar: bool,
+    /// Glue group of a popped-out panel (Plan 17-H). `None` when tiled or
+    /// not glued.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
 }
 
 #[derive(Clone, Serialize)]
@@ -222,6 +226,7 @@ fn stack_tabs(
                     fdc3_channel,
                     keep_alive,
                     show_address_bar,
+                    group: None,
                 })
             }
             _ => None,

@@ -170,6 +170,7 @@ pub fn close_tab(
     app: AppHandle,
 ) -> Result<(), String> {
     let terminal = get_terminal!(manager, window);
+    let group = crate::terminal::popout::group_of(&terminal.layout_tree, &label);
     if !terminal.layout_tree.remove_leaf(&label) {
         return Err(format!("no leaf with label '{label}' in layout tree"));
     }
@@ -185,6 +186,8 @@ pub fn close_tab(
     }
     terminal.layout_tree.reflow(&app);
     terminal.layout_tree.emit_host(&app);
+    // Popouts it was glued to may have lost their group.
+    crate::terminal::popout::notify_panels(&app, &manager, &terminal, &group);
     Ok(())
 }
 

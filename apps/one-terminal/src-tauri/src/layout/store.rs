@@ -480,7 +480,14 @@ impl LayoutTree {
     /// Header state for one panel — the payload a popout window's chrome
     /// renders (`wm:popout-state`). `None` if `label` isn't a panel here.
     pub fn panel_tab(&self, label: &str) -> Option<StackTab> {
-        panel_tab(&self.inner.read().unwrap().meta, label)
+        let g = self.inner.read().unwrap();
+        let mut tab = panel_tab(&g.meta, label)?;
+        tab.group = g
+            .floating
+            .iter()
+            .find(|f| f.label == label)
+            .and_then(|f| f.group.clone());
+        Some(tab)
     }
 
     /// `true` if `label` is a panel of this Terminal, tiled or floating.
@@ -912,6 +919,7 @@ impl LayoutTree {
             // its floating entry and metadata.
             if let Some(i) = g.floating.iter().position(|f| f.label == label) {
                 g.floating.remove(i);
+                dissolve_singleton_groups(&mut g.floating);
                 g.meta.remove(label);
                 drop(g);
                 self.schedule_save(500);
@@ -964,6 +972,7 @@ impl LayoutTree {
                 label: label.to_string(),
                 bounds: Default::default(),
                 dock_hint,
+                group: None,
             };
             g.floating.push(entry.clone());
             entry
@@ -984,6 +993,7 @@ impl LayoutTree {
                 return false;
             };
             let hint = g.floating.remove(i).dock_hint;
+            dissolve_singleton_groups(&mut g.floating);
             let leaf = LayoutNode::Leaf {
                 label: label.to_string(),
                 weight: 1.0,
@@ -1072,6 +1082,78 @@ impl LayoutTree {
             match g.floating.iter_mut().find(|f| f.label == label) {
                 Some(f) if f.bounds != bounds => {
                     f.bounds = bounds;
+                    true
+                }
+                _ => false,
+            }
+        };
+        if changed {
+            self.schedule_save(500);
+        }
+        changed
+    }
+
+    /// Glue group of floating panel `label` (Plan 17-H), if any.
+    pub fn floating_group(&self, label: &str) -> Option<String> {
+        let g = self.inner.read().unwrap();
+        g.floating
+            .iter()
+            .find(|f| f.label == label)
+            .and_then(|f| f.group.clone())
+    }
+
+    /// Labels of the floating panels glued in `group`.
+    pub fn group_members(&self, group: &str) -> Vec<String> {
+        let g = self.inner.read().unwrap();
+        g.floating
+            .iter()
+            .filter(|f| f.group.as_deref() == Some(group))
+            .map(|f| f.label.clone())
+            .collect()
+    }
+
+    /// Glue every floating panel in `labels` into one group: the existing
+    /// group of the first glued one, or a new id. Groups any of them were in
+    /// are merged whole, so gluing onto one member glues onto all of it.
+    /// Returns the group id, or `None` if fewer than two floating panels
+    /// are involved.
+    pub fn glue(&self, labels: &[String]) -> Option<String> {
+        let group = {
+            let mut g = self.inner.write().unwrap();
+            let involved: Vec<&FloatingPanel> = g
+                .floating
+                .iter()
+                .filter(|f| labels.contains(&f.label))
+                .collect();
+            if involved.len() < 2 {
+                return None;
+            }
+            let merged: HashSet<String> = involved.iter().filter_map(|f| f.group.clone()).collect();
+            let group = involved
+                .iter()
+                .find_map(|f| f.group.clone())
+                .unwrap_or_else(|| Uuid::new_v4().simple().to_string()[..8].to_string());
+            for f in g.floating.iter_mut() {
+                if labels.contains(&f.label) || f.group.as_ref().is_some_and(|x| merged.contains(x))
+                {
+                    f.group = Some(group.clone());
+                }
+            }
+            group
+        };
+        self.schedule_save(500);
+        Some(group)
+    }
+
+    /// Unglue floating panel `label` from its group; a group left with one
+    /// member is dissolved. Returns `false` if it wasn't glued.
+    pub fn unglue(&self, label: &str) -> bool {
+        let changed = {
+            let mut g = self.inner.write().unwrap();
+            match g.floating.iter_mut().find(|f| f.label == label) {
+                Some(f) if f.group.is_some() => {
+                    f.group = None;
+                    dissolve_singleton_groups(&mut g.floating);
                     true
                 }
                 _ => false,
@@ -2033,6 +2115,7 @@ fn panel_tab(meta: &HashMap<String, LeafMeta>, label: &str) -> Option<StackTab> 
         fdc3_channel: m.fdc3_channel.clone(),
         keep_alive: m.keep_alive,
         show_address_bar: m.show_address_bar,
+        group: None,
     })
 }
 
@@ -2045,14 +2128,30 @@ fn valid_floating(
     meta: &HashMap<String, LeafMeta>,
 ) -> Vec<FloatingPanel> {
     let mut seen = HashSet::new();
-    floating
+    let mut floating: Vec<FloatingPanel> = floating
         .into_iter()
         .filter(|f| {
             meta.contains_key(&f.label)
                 && !root.is_some_and(|r| contains_label(r, &f.label))
                 && seen.insert(f.label.clone())
         })
-        .collect()
+        .collect();
+    dissolve_singleton_groups(&mut floating);
+    floating
+}
+
+/// Clear the glue group of any floating panel that is its group's only
+/// member — left behind by a dock, close or unglue (Plan 17-H).
+fn dissolve_singleton_groups(floating: &mut [FloatingPanel]) {
+    let mut counts: HashMap<String, usize> = HashMap::new();
+    for g in floating.iter().filter_map(|f| f.group.as_ref()) {
+        *counts.entry(g.clone()).or_default() += 1;
+    }
+    for f in floating.iter_mut() {
+        if f.group.as_ref().is_some_and(|g| counts[g] < 2) {
+            f.group = None;
+        }
+    }
 }
 
 /// Compute where a leaf at `path` should return to after being detached.
@@ -2841,12 +2940,94 @@ mod floating_tests {
                 label: label.into(),
                 bounds: Default::default(),
                 dock_hint: Default::default(),
+                group: None,
             });
         }
         let t2 = tree();
         t2.apply_layout_to_inner(Some(layout));
         assert!(t2.floating().is_empty());
         assert!(!t2.take_parked("t-panel-ghost"));
+    }
+
+    #[test]
+    fn glue_merges_groups_and_unglue_dissolves_singletons() {
+        let t = tree();
+        let a = add(&t, "a", None, None);
+        let b = add(&t, "b", Some(&a), None);
+        let c = add(&t, "c", Some(&a), None);
+        let d = add(&t, "d", Some(&a), None);
+        assert!(
+            t.glue(&[b.clone(), c.clone()]).is_none(),
+            "not floating yet"
+        );
+        for l in [&b, &c, &d] {
+            t.detach(l).unwrap();
+        }
+        assert!(
+            t.glue(std::slice::from_ref(&b)).is_none(),
+            "needs two members"
+        );
+
+        let g1 = t.glue(&[b.clone(), c.clone()]).unwrap();
+        assert_eq!(t.floating_group(&b).as_deref(), Some(g1.as_str()));
+        assert_eq!(t.panel_tab(&c).unwrap().group.as_deref(), Some(g1.as_str()));
+        // Gluing d onto c pulls in c's whole group.
+        let g2 = t.glue(&[d.clone(), c.clone()]).unwrap();
+        assert_eq!(g2, g1);
+        let mut members = t.group_members(&g1);
+        members.sort();
+        assert_eq!(members, vec![b.clone(), c.clone(), d.clone()]);
+
+        assert!(t.unglue(&c));
+        assert!(!t.unglue(&c), "already unglued");
+        assert_eq!(t.group_members(&g1).len(), 2);
+        // Docking b leaves d alone — its group dissolves.
+        assert!(t.dock(&b));
+        assert_eq!(t.floating_group(&d), None);
+    }
+
+    #[test]
+    fn closing_a_glued_panel_dissolves_a_pair() {
+        let t = tree();
+        let a = add(&t, "a", None, None);
+        let b = add(&t, "b", Some(&a), None);
+        let c = add(&t, "c", Some(&a), None);
+        t.detach(&b).unwrap();
+        t.detach(&c).unwrap();
+        t.glue(&[b.clone(), c.clone()]).unwrap();
+        assert!(t.remove_panel(&b));
+        assert_eq!(t.floating_group(&c), None);
+    }
+
+    #[test]
+    fn glue_groups_round_trip_and_singletons_are_dropped_on_load() {
+        let t = tree();
+        let a = add(&t, "a", None, None);
+        let b = add(&t, "b", Some(&a), None);
+        let c = add(&t, "c", Some(&a), None);
+        t.detach(&b).unwrap();
+        t.detach(&c).unwrap();
+        let g = t.glue(&[b.clone(), c.clone()]).unwrap();
+        let mut layout = snapshot_for_persist(&t.inner.read().unwrap());
+        let json = serde_json::to_string(&layout).unwrap();
+        let back: PersistedLayout = serde_json::from_str(&json).unwrap();
+        let t2 = tree();
+        t2.apply_layout_to_inner(Some(back));
+        assert_eq!(t2.floating_group(&c).as_deref(), Some(g.as_str()));
+
+        // A hand-edited file with a one-member group loads unglued.
+        layout.floating.retain(|f| f.label == b);
+        let t3 = tree();
+        t3.apply_layout_to_inner(Some(layout));
+        assert_eq!(t3.floating_group(&b), None);
+    }
+
+    #[test]
+    fn floating_entry_without_group_field_loads_unglued() {
+        let json = r#"{"label":"t-panel-a","bounds":{"x":0,"y":0,"width":0,"height":0}}"#;
+        let f: FloatingPanel = serde_json::from_str(json).unwrap();
+        assert_eq!(f.group, None);
+        assert!(!serde_json::to_string(&f).unwrap().contains("group"));
     }
 
     #[test]

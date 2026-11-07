@@ -68,6 +68,9 @@ export interface StackTab {
    *  when this tab is active (Generic Web Widget panels only). Defaults to
    *  `false` — hidden until the user opts in via the tab context menu. */
   showAddressBar: boolean;
+  /** Glue group of a popped-out panel (Plan 17-H); absent when tiled or
+   *  not glued to another popout. */
+  group?: string;
 }
 
 export interface StackHeader {

@@ -29,6 +29,8 @@ export interface WidgetMenuTarget {
   nTabs: number;
   /** `true` when the widget is popped out into its own window (Plan 17). */
   floating: boolean;
+  /** Glue group when popped out and glued to other popouts (Plan 17-H). */
+  group?: string;
 }
 
 export type WidgetSubmenu = "zoom" | "channel" | null;
@@ -46,7 +48,7 @@ interface Props {
 /**
  * The per-widget menu items — Duplicate, Rename, Zoom, Set channel, Keep
  * running, Show address bar, registry items (`contextMenuItems.ts`), Pop out /
- * Dock back, Close. Shared by the Terminal overlay's tab menu and a popout
+ * Dock back, Unglue window, Close. Shared by the Terminal overlay's tab menu and a popout
  * window's header menu so both offer exactly the same actions. Group-only
  * items (Close group) are hidden for popped-out widgets.
  */
@@ -63,6 +65,7 @@ export function WidgetMenuItems({ target, dismiss, submenu, onSubmenu, onDuplica
     stackPath: target.stackPath,
     nTabs: target.nTabs,
     floating: target.floating,
+    group: target.group,
   };
 
   const run = (cmd: string, args: Record<string, unknown>) => {
@@ -265,6 +268,16 @@ export function WidgetMenuItems({ target, dismiss, submenu, onSubmenu, onDuplica
       >
         {target.floating ? "Dock back" : "Pop out"}
       </button>
+      {target.floating && target.group && (
+        <button
+          type="button"
+          role="menuitem"
+          className="wm-tab-ctx-menu__item"
+          onClick={() => run("wm_popout_unglue", { label })}
+        >
+          Unglue window
+        </button>
+      )}
 
       <div className="wm-tab-ctx-menu__separator" role="separator" />
 

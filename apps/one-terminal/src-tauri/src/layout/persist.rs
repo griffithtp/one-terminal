@@ -133,6 +133,11 @@ pub struct FloatingPanel {
     /// Where the panel goes back to when docked.
     #[serde(default)]
     pub dock_hint: DockHint,
+    /// Glue group (Plan 17-H): popouts sharing an id were snapped edge to
+    /// edge and move together. `None` = not glued. A group always has at
+    /// least two members — one left alone is dissolved.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
 }
 
 /// Where a floating panel returns to on dock, tried in order: back into the

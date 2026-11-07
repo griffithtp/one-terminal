@@ -17,6 +17,13 @@
 //! `reparent`/`add_child` always insert on top, so the chrome is always added
 //! after the panel.
 //!
+//! Popouts of one Terminal can be glued together (Plan 17-H): the header is
+//! dragged by [`wm_popout_drag_start`] / [`wm_popout_drag_move`] /
+//! [`wm_popout_drag_end`] rather than the OS, so the windows can be snapped
+//! against each other live ([`super::popout_snap`]) and a glued group moves as
+//! one. Group membership lives on the floating entries, so it's saved with
+//! the dashboard and survives stash / restore unchanged.
+//!
 //! Popout window labels are `<terminal_id>-popout-<id>`: still matched by the
 //! `terminal-*` capability glob, and resolved back to their owning Terminal by
 //! [`TerminalManager::resolve`] so every existing panel command works when
@@ -24,10 +31,11 @@
 
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, OnceLock};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use tauri::{
-    AppHandle, LogicalPosition, LogicalSize, Manager, State, WebviewBuilder, WebviewUrl, Window,
+    AppHandle, Emitter, LogicalPosition, LogicalSize, Manager, PhysicalPosition, State,
+    WebviewBuilder, WebviewUrl, Window,
 };
 use tokio::sync::oneshot;
 
@@ -37,6 +45,7 @@ use crate::layout::store::LayoutTree;
 use crate::layout::{ADDRESS_BAR_HEIGHT, GENERIC_WEB_WIDGET_APP_ID, PANEL_HEADER_HEIGHT};
 
 use super::manager::TerminalManager;
+use super::popout_snap::{self, Rect, SNAP_PX};
 use super::spawn::is_rect_on_any_monitor;
 use super::state::TerminalState;
 
@@ -96,6 +105,36 @@ fn menus_open() -> &'static Mutex<HashSet<String>> {
     static M: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
     M.get_or_init(Default::default)
 }
+
+/// A header drag in progress (Plan 17-H), keyed by the dragged popout.
+struct Drag {
+    /// Cursor position at drag start, physical desktop pixels.
+    cursor: PhysicalPosition<f64>,
+    /// Windows that move: `(popout, start rect)` — the dragged one and the
+    /// members of its glue group.
+    moving: Vec<(String, Rect)>,
+    /// The owner's other popouts, which stay put and attract the drag.
+    others: Vec<(String, Rect)>,
+    /// Snap distance in physical pixels at the dragged window's scale.
+    threshold: f64,
+    /// Popouts the moving windows currently touch — what they glue to on
+    /// release, highlighted meanwhile.
+    contacts: Vec<String>,
+}
+
+fn drags() -> &'static Mutex<HashMap<String, Drag>> {
+    static D: OnceLock<Mutex<HashMap<String, Drag>>> = OnceLock::new();
+    D.get_or_init(Default::default)
+}
+
+/// Popouts focused programmatically by [`raise_group`], whose `Focused`
+/// event must not raise their group again. Entries expire so a focus event
+/// that never arrives can't swallow a later real click.
+fn focus_echoes() -> &'static Mutex<HashMap<String, Instant>> {
+    static F: OnceLock<Mutex<HashMap<String, Instant>>> = OnceLock::new();
+    F.get_or_init(Default::default)
+}
+const FOCUS_ECHO_TTL: Duration = Duration::from_millis(1000);
 
 pub fn popout_label(owner: &str) -> String {
     format!(
@@ -356,6 +395,8 @@ pub fn destroy_popout(app: &AppHandle, manager: &TerminalManager, popout: &str) 
     manager.remove_popout(popout);
     menus_open().lock().unwrap().remove(popout);
     ready_waiters().lock().unwrap().remove(popout);
+    drags().lock().unwrap().remove(popout);
+    focus_echoes().lock().unwrap().remove(popout);
     if let Some(w) = app.get_window(popout) {
         let _ = w.destroy();
     }
@@ -407,6 +448,17 @@ fn install_listeners(app: &AppHandle, popout: &str, panel: &str, tree: &LayoutTr
         tauri::WindowEvent::Focused(true) => {
             // Widget hotkeys / palette commands target the active panel.
             tree_c.set_active_panel(&panel_s);
+            // Bring glued members up with it so the group stays together in
+            // z-order — unless this focus is our own raise echoing back.
+            let echo = focus_echoes()
+                .lock()
+                .unwrap()
+                .remove(&popout_s)
+                .is_some_and(|at| at.elapsed() < FOCUS_ECHO_TTL);
+            if !echo {
+                let manager = app_h.state::<TerminalManager>();
+                raise_group(&app_h, &manager, &tree_c, &popout_s, &panel_s);
+            }
         }
         tauri::WindowEvent::CloseRequested { api, .. } => {
             // Closing the window docks the widget back; closing the widget
@@ -611,12 +663,14 @@ pub fn dock_panel(app: &AppHandle, manager: &TerminalManager, label: &str) -> Re
     if !terminal.layout_tree.is_floating(label) {
         return Err(format!("panel '{label}' is not popped out"));
     }
+    let group = group_of(&terminal.layout_tree, label);
     if let Some(popout) = manager.popout_for_panel(label) {
         reparent_back(app, manager, &terminal.id, &popout, label)?;
     }
     terminal.layout_tree.dock(label);
     terminal.layout_tree.reflow(app);
     manager.notify_panel_changed(app, &terminal, label);
+    notify_panels(app, manager, &terminal, &group);
     // The panel re-entered above the overlay — recreate the overlay on top
     // in the background so the next menu opens instantly.
     {
@@ -632,6 +686,280 @@ pub fn dock_panel(app: &AppHandle, manager: &TerminalManager, label: &str) -> Re
         "[popout] dock {label} in {} ms",
         started.elapsed().as_millis()
     );
+    Ok(())
+}
+
+// ── Glue groups (Plan 17-H) ───────────────────────────────────────────────────
+
+/// Labels of every panel glued with `label`, itself included; empty if it
+/// isn't glued.
+pub fn group_of(tree: &LayoutTree, label: &str) -> Vec<String> {
+    tree.floating_group(label)
+        .map(|g| tree.group_members(&g))
+        .unwrap_or_default()
+}
+
+/// Re-send header state to each of `labels` — after a glue change, so every
+/// affected popout chrome shows its glued state and menu.
+pub fn notify_panels(
+    app: &AppHandle,
+    manager: &TerminalManager,
+    terminal: &TerminalState,
+    labels: &[String],
+) {
+    for label in labels {
+        manager.notify_panel_changed(app, terminal, label);
+    }
+}
+
+/// Panel hosted by popout window `popout` of Terminal `owner`.
+fn panel_in(manager: &TerminalManager, owner: &str, popout: &str) -> Option<String> {
+    manager
+        .popouts_of(owner)
+        .into_iter()
+        .find(|(p, _)| p == popout)
+        .map(|(_, panel)| panel)
+}
+
+/// Outer rect of window `label` in physical desktop pixels.
+fn outer_rect(app: &AppHandle, label: &str) -> Option<Rect> {
+    let w = app.get_window(label)?;
+    let pos = w.outer_position().ok()?;
+    let size = w.outer_size().ok()?;
+    Some(Rect::new(
+        pos.x as f64,
+        pos.y as f64,
+        size.width as f64,
+        size.height as f64,
+    ))
+}
+
+/// Bring the other members of `panel`'s glue group to the front behind
+/// popout `front`, restoring any that are minimised, then refocus `front`.
+fn raise_group(
+    app: &AppHandle,
+    manager: &TerminalManager,
+    tree: &LayoutTree,
+    front: &str,
+    panel: &str,
+) {
+    let others: Vec<String> = group_of(tree, panel)
+        .iter()
+        .filter(|l| *l != panel)
+        .filter_map(|l| manager.popout_for_panel(l))
+        .collect();
+    if others.is_empty() {
+        return;
+    }
+    {
+        let now = Instant::now();
+        let mut echoes = focus_echoes().lock().unwrap();
+        for p in others.iter().map(String::as_str).chain([front]) {
+            echoes.insert(p.to_string(), now);
+        }
+    }
+    for p in &others {
+        if let Some(w) = app.get_window(p) {
+            let _ = w.unminimize();
+            let _ = w.set_focus();
+        }
+    }
+    if let Some(w) = app.get_window(front) {
+        let _ = w.set_focus();
+    }
+}
+
+/// Tell the chromes whose glue highlight changed from `before` to `after`.
+fn emit_snap_highlight(app: &AppHandle, before: &[String], after: &[String]) {
+    for p in before.iter().chain(after) {
+        let on = after.contains(p);
+        if on == before.contains(p) {
+            continue;
+        }
+        if let Some(wv) = app.get_webview(&chrome_label(p)) {
+            let _ = wv.emit("wm:popout-snap", on);
+        }
+    }
+}
+
+/// Start dragging the invoking popout by its header. Its glue group moves
+/// with it, unless `tear_off` (Alt / Option held), which first unglues it so
+/// it moves — and can snap — on its own.
+#[tauri::command]
+pub fn wm_popout_drag_start(
+    tear_off: bool,
+    window: Window,
+    manager: State<'_, TerminalManager>,
+    app: AppHandle,
+) -> Result<(), String> {
+    let popout = window.label().to_string();
+    let terminal = manager
+        .resolve(&popout)
+        .ok_or_else(|| format!("popout '{popout}' not found"))?;
+    let tree = &terminal.layout_tree;
+    let panel = panel_in(&manager, &terminal.id, &popout)
+        .ok_or_else(|| format!("popout '{popout}' not found"))?;
+    if tear_off {
+        let group = group_of(tree, &panel);
+        if tree.unglue(&panel) {
+            notify_panels(&app, &manager, &terminal, &group);
+        }
+    }
+    let members = group_of(tree, &panel);
+    let moving_popouts: HashSet<String> = members
+        .iter()
+        .filter_map(|l| manager.popout_for_panel(l))
+        .chain([popout.clone()])
+        .collect();
+    let rect_of = |(p, _): (String, String)| outer_rect(&app, &p).map(|r| (p, r));
+    let (moving, others): (Vec<_>, Vec<_>) = manager
+        .popouts_of(&terminal.id)
+        .into_iter()
+        .filter_map(rect_of)
+        .partition(|(p, _)| moving_popouts.contains(p));
+    let cursor = window.cursor_position().map_err(|e| e.to_string())?;
+    let threshold = SNAP_PX * window.scale_factor().unwrap_or(1.0);
+    drags().lock().unwrap().insert(
+        popout.clone(),
+        Drag {
+            cursor,
+            moving,
+            others,
+            threshold,
+            contacts: Vec::new(),
+        },
+    );
+    raise_group(&app, &manager, tree, &popout, &panel);
+    Ok(())
+}
+
+/// Move the dragged popout (and its group) to follow the cursor, snapping
+/// flush onto any nearby popout edge.
+#[tauri::command]
+pub fn wm_popout_drag_move(window: Window, app: AppHandle) -> Result<(), String> {
+    let popout = window.label();
+    let cursor = window.cursor_position().map_err(|e| e.to_string())?;
+    let mut drags = drags().lock().unwrap();
+    let Some(drag) = drags.get_mut(popout) else {
+        return Ok(()); // drag ended or never started
+    };
+    let (dx, dy) = (cursor.x - drag.cursor.x, cursor.y - drag.cursor.y);
+    let moved: Vec<Rect> = drag
+        .moving
+        .iter()
+        .map(|(_, r)| Rect::new(r.x + dx, r.y + dy, r.w, r.h))
+        .collect();
+    let snap = popout_snap::snap(&moved, &drag.others, drag.threshold);
+    for ((p, _), r) in drag.moving.iter().zip(&moved) {
+        if let Some(w) = app.get_window(p) {
+            let _ = w.set_position(PhysicalPosition::new(
+                (r.x + snap.dx).round() as i32,
+                (r.y + snap.dy).round() as i32,
+            ));
+        }
+    }
+    // While touching anything, the moving windows and what they touch light up.
+    let lit = |contacts: &[String]| -> Vec<String> {
+        if contacts.is_empty() {
+            return Vec::new();
+        }
+        let moving = drag.moving.iter().map(|(p, _)| p.clone());
+        moving.chain(contacts.iter().cloned()).collect()
+    };
+    let (before_lit, now_lit) = (lit(&drag.contacts), lit(&snap.contacts));
+    drag.contacts = snap.contacts;
+    emit_snap_highlight(&app, &before_lit, &now_lit);
+    Ok(())
+}
+
+/// Finish a header drag: glue the moving windows to every popout they're
+/// left touching.
+#[tauri::command]
+pub fn wm_popout_drag_end(
+    window: Window,
+    manager: State<'_, TerminalManager>,
+    app: AppHandle,
+) -> Result<(), String> {
+    let popout = window.label().to_string();
+    let Some(drag) = drags().lock().unwrap().remove(&popout) else {
+        return Ok(());
+    };
+    let moving: Vec<String> = drag.moving.iter().map(|(p, _)| p.clone()).collect();
+    if !drag.contacts.is_empty() {
+        emit_snap_highlight(
+            &app,
+            &moving
+                .iter()
+                .chain(&drag.contacts)
+                .cloned()
+                .collect::<Vec<_>>(),
+            &[],
+        );
+    }
+    let terminal = manager
+        .resolve(&popout)
+        .ok_or_else(|| format!("popout '{popout}' not found"))?;
+    let tree = &terminal.layout_tree;
+    let panels: Vec<String> = moving
+        .iter()
+        .chain(&drag.contacts)
+        .filter_map(|p| panel_in(&manager, &terminal.id, p))
+        .collect();
+    if !drag.contacts.is_empty() {
+        if let Some(group) = tree.glue(&panels) {
+            notify_panels(&app, &manager, &terminal, &tree.group_members(&group));
+            eprintln!("[popout] glued {} popout(s) into {group}", panels.len());
+        }
+    }
+    for p in &moving {
+        if let (Some(w), Some(panel)) = (app.get_window(p), panel_in(&manager, &terminal.id, p)) {
+            save_bounds(&w, &panel, tree);
+        }
+    }
+    Ok(())
+}
+
+/// Unglue panel `label` from its group, leaving its window where it is.
+#[tauri::command]
+pub fn wm_popout_unglue(
+    label: String,
+    manager: State<'_, TerminalManager>,
+    app: AppHandle,
+) -> Result<(), String> {
+    let terminal = manager
+        .owner_of_panel(&label)
+        .ok_or_else(|| format!("no panel '{label}'"))?;
+    let group = group_of(&terminal.layout_tree, &label);
+    if terminal.layout_tree.unglue(&label) {
+        notify_panels(&app, &manager, &terminal, &group);
+    }
+    Ok(())
+}
+
+/// Minimise the invoking popout together with every popout glued to it.
+#[tauri::command]
+pub fn wm_popout_minimize(
+    window: Window,
+    manager: State<'_, TerminalManager>,
+    app: AppHandle,
+) -> Result<(), String> {
+    let popout = window.label().to_string();
+    let mut targets = vec![popout.clone()];
+    if let Some(terminal) = manager.resolve(&popout) {
+        if let Some(panel) = panel_in(&manager, &terminal.id, &popout) {
+            targets.extend(
+                group_of(&terminal.layout_tree, &panel)
+                    .iter()
+                    .filter_map(|l| manager.popout_for_panel(l))
+                    .filter(|p| *p != popout),
+            );
+        }
+    }
+    for p in targets {
+        if let Some(w) = app.get_window(&p) {
+            let _ = w.minimize();
+        }
+    }
     Ok(())
 }
 
@@ -689,11 +1017,7 @@ pub fn wm_popout_ready(window: Window, manager: State<'_, TerminalManager>) -> O
         let _ = tx.send(());
     }
     let terminal = manager.resolve(&popout)?;
-    let panel = manager
-        .popouts_of(&terminal.id)
-        .into_iter()
-        .find(|(p, _)| *p == popout)?
-        .1;
+    let panel = panel_in(&manager, &terminal.id, &popout)?;
     terminal.layout_tree.panel_tab(&panel)
 }
 
@@ -719,11 +1043,7 @@ pub fn wm_popout_menu(
     let terminal = manager
         .resolve(&popout)
         .ok_or_else(|| format!("popout '{popout}' not found"))?;
-    let panel = manager
-        .popouts_of(&terminal.id)
-        .into_iter()
-        .find(|(p, _)| *p == popout)
-        .map(|(_, panel)| panel)
+    let panel = panel_in(&manager, &terminal.id, &popout)
         .ok_or_else(|| format!("popout '{popout}' not found"))?;
     {
         let mut set = menus_open().lock().unwrap();

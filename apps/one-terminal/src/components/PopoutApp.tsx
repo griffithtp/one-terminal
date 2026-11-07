@@ -14,6 +14,9 @@ import { ADDRESS_BAR_HEIGHT, GENERIC_WEB_WIDGET_APP_ID } from "../lib/genericWeb
  *  window border (`POPOUT_EDGE` in src-tauri/src/terminal/popout.rs), which
  *  the OS resizes natively. */
 const RESIZE_EDGE = 4;
+/** Pointer travel before a header press becomes a drag, so clicks and
+ *  double-clicks on the header still register. */
+const DRAG_DEAD_ZONE = 3;
 const MENU_W = 220;
 const SUBMENU_W = 240;
 
@@ -47,6 +50,8 @@ export function PopoutApp() {
   const [submenu, setSubmenu] = useState<WidgetSubmenu>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [maximized, setMaximized] = useState(false);
+  /** Lit while a drag would glue this window to another (Plan 17-H). */
+  const [snapping, setSnapping] = useState(false);
   const tabRef = useRef<StackTab | null>(null);
   tabRef.current = tab;
 
@@ -58,6 +63,7 @@ export function PopoutApp() {
       listen<StackTab>("wm:popout-state", (e) => {
         if (e.payload.label === panel) setTab(e.payload);
       }),
+      listen<boolean>("wm:popout-snap", (e) => setSnapping(e.payload)),
       listen<{ label: string }>("wm:request-rename", (e) => {
         const t = tabRef.current;
         if (e.payload.label === panel && t) setRenaming(t.displayName ?? t.title);
@@ -130,6 +136,8 @@ export function PopoutApp() {
     getCurrentWindow().startResizeDragging(direction).catch(console.error);
   };
 
+  const startDrag = useHeaderDrag(maximized);
+
   const Content = useMemo(() => headerContentFor(tab?.appId ?? ""), [tab?.appId]);
   const channel = FDC3_CHANNELS.find((c) => c.id === tab?.fdc3Channel);
   const showAddressBar =
@@ -140,10 +148,14 @@ export function PopoutApp() {
   return (
     <div className="wm-popout">
       <header
-        className="wm-panel-header wm-popout__header"
+        className={`wm-panel-header wm-popout__header${snapping ? " wm-popout__header--snapping" : ""}`}
         style={{ height: PANEL_HEADER_HEIGHT }}
-        // Tauri's drag region also handles double-click → toggle maximise.
-        data-tauri-drag-region
+        // Dragged by Rust rather than the OS so popouts can snap and glue
+        // together (Plan 17-H) — see `useHeaderDrag`.
+        onPointerDown={startDrag}
+        onDoubleClick={(e) => {
+          if (e.target === e.currentTarget) win.toggleMaximize().catch(console.error);
+        }}
         onContextMenu={(e) => {
           e.preventDefault();
           if (tab) openMenu({ x: e.clientX, y: e.clientY, anchor: "left" });
@@ -175,6 +187,15 @@ export function PopoutApp() {
             title={channel.name}
             aria-hidden
           />
+        )}
+        {tab?.group && (
+          <span
+            className="wm-popout__glued"
+            title="Glued to neighbouring windows. Alt-drag the header (Option on macOS) to pull it away."
+            aria-label="Glued to neighbouring windows"
+          >
+            ⛓
+          </span>
         )}
         {tab?.keepAlive && (
           <span
@@ -222,7 +243,8 @@ export function PopoutApp() {
           className="wm-panel-header__menu wm-popout__btn"
           aria-label="Minimise"
           title="Minimise"
-          onClick={() => win.minimize().catch(console.error)}
+          // Glued windows minimise together.
+          onClick={() => invoke("wm_popout_minimize").catch(console.error)}
         >
           –
         </button>
@@ -320,6 +342,7 @@ function PopoutMenu({
             stackPath: [],
             nTabs: 1,
             floating: true,
+            group: tab.group,
           }}
           dismiss={dismiss}
           submenu={submenu}
@@ -362,6 +385,66 @@ function RenameInput({
       aria-label="Widget name"
       spellCheck={false}
     />
+  );
+}
+
+/**
+ * Header drag for a popout (Plan 17-H). Past a small dead zone the press
+ * becomes a Rust-driven drag: `wm_popout_drag_start` snapshots the window
+ * and its glue group, each animation frame `wm_popout_drag_move` moves them
+ * to follow the cursor (Rust reads the cursor itself, in physical desktop
+ * pixels, so the window moving under the pointer causes no feedback) and
+ * snaps them to nearby popouts, and `wm_popout_drag_end` glues whatever they
+ * touch. Holding Alt (Option) at the start tears the window out of its group.
+ *
+ * A maximised window keeps the OS drag, which restores it on the way.
+ */
+function useHeaderDrag(maximized: boolean) {
+  return useCallback(
+    (e: React.PointerEvent<HTMLElement>) => {
+      // Buttons, the rename input and resize strips handle their own presses.
+      if (e.button !== 0 || e.target !== e.currentTarget) return;
+      if (maximized) {
+        getCurrentWindow().startDragging().catch(console.error);
+        return;
+      }
+      const el = e.currentTarget;
+      const { pointerId } = e;
+      const [x0, y0] = [e.screenX, e.screenY];
+      const tearOff = e.altKey;
+      el.setPointerCapture(pointerId);
+
+      let started: Promise<unknown> | null = null;
+      let frame = 0;
+      const onMove = (ev: PointerEvent) => {
+        if (!started) {
+          if (Math.hypot(ev.screenX - x0, ev.screenY - y0) < DRAG_DEAD_ZONE) return;
+          started = invoke("wm_popout_drag_start", { tearOff }).catch(console.error);
+        }
+        if (frame) return;
+        frame = requestAnimationFrame(() => {
+          frame = 0;
+          started?.then(() => invoke("wm_popout_drag_move")).catch(console.error);
+        });
+      };
+      const onEnd = () => {
+        el.removeEventListener("pointermove", onMove);
+        el.removeEventListener("pointerup", onEnd);
+        el.removeEventListener("pointercancel", onEnd);
+        el.removeEventListener("lostpointercapture", onEnd);
+        if (frame) cancelAnimationFrame(frame);
+        if (el.hasPointerCapture(pointerId)) el.releasePointerCapture(pointerId);
+        started
+          ?.then(() => invoke("wm_popout_drag_move"))
+          .then(() => invoke("wm_popout_drag_end"))
+          .catch(console.error);
+      };
+      el.addEventListener("pointermove", onMove);
+      el.addEventListener("pointerup", onEnd);
+      el.addEventListener("pointercancel", onEnd);
+      el.addEventListener("lostpointercapture", onEnd);
+    },
+    [maximized]
   );
 }
 
