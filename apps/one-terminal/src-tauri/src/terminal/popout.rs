@@ -779,13 +779,17 @@ fn set_outer_rect(app: &AppHandle, label: &str, r: Rect) {
         ),
         _ => (0, 0),
     };
-    let _ = w.set_position(PhysicalPosition::new(
-        r.x.round() as i32,
-        r.y.round() as i32,
-    ));
+    // Size first, then position: on macOS `setContentSize` keeps the
+    // window's bottom-left corner fixed, so a height change moves its top
+    // edge. Positioning last pins the top-left where it belongs. (Both are
+    // queued to the main thread in call order.)
     let _ = w.set_size(tauri::PhysicalSize::new(
         (r.w.round() as u32).saturating_sub(fw),
         (r.h.round() as u32).saturating_sub(fh),
+    ));
+    let _ = w.set_position(PhysicalPosition::new(
+        r.x.round() as i32,
+        r.y.round() as i32,
     ));
 }
 
