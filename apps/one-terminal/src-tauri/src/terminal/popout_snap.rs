@@ -125,6 +125,147 @@ pub fn snap(moving: &[Rect], others: &[(String, Rect)], threshold: f64) -> Snap 
     Snap { dx, dy, contacts }
 }
 
+// ── Shared-edge resizing ──────────────────────────────────────────────────────
+
+/// Edge distance within which glued windows count as sharing an edge line.
+const SHARE_EPS: f64 = 2.0;
+
+fn transpose(r: Rect) -> Rect {
+    Rect::new(r.y, r.x, r.h, r.w)
+}
+
+/// Resize the glued neighbours of a window that was resized from `old` to
+/// `new`, so that no gap opens and nothing overlaps: every edge of the window
+/// that moved is treated as a line, and every group member with an edge on
+/// that line, connected to the window along it, moves its edge to match. A
+/// left window shrinks when its right neighbour grows leftwards, and grows
+/// when the neighbour shrinks rightwards; top/bottom likewise.
+///
+/// No member is squeezed below `min_w` × `min_h`: the line stops there, and
+/// the resized window itself is corrected to match. A pure move (size
+/// unchanged) changes nothing.
+///
+/// Returns the new rect of every window that changes — the resized window
+/// under `id` only when it had to be corrected.
+pub fn follow_resize(
+    id: &str,
+    old: Rect,
+    new: Rect,
+    group: &[(String, Rect)],
+    min_w: f64,
+    min_h: f64,
+) -> Vec<(String, Rect)> {
+    if (new.w - old.w).abs() < 0.5 && (new.h - old.h).abs() < 0.5 {
+        return Vec::new();
+    }
+    let mut others: Vec<(String, Rect)> = group.iter().filter(|(g, _)| g != id).cloned().collect();
+    // Horizontal edges first, then the same logic on the transposed rects.
+    let cur = follow_axis(old, new, &mut others, min_w);
+    let mut t_others: Vec<(String, Rect)> =
+        others.into_iter().map(|(g, r)| (g, transpose(r))).collect();
+    let cur = transpose(follow_axis(
+        transpose(old),
+        transpose(cur),
+        &mut t_others,
+        min_h,
+    ));
+
+    let mut changed: Vec<(String, Rect)> = t_others
+        .into_iter()
+        .map(|(g, r)| (g, transpose(r)))
+        .filter(|(g, r)| group.iter().any(|(o, before)| o == g && before != r))
+        .collect();
+    if cur != new {
+        changed.push((id.to_string(), cur));
+    }
+    changed
+}
+
+/// [`follow_resize`] along x only: moves the vertical edge lines of `old`
+/// that differ in `new`. Mutates `others`; returns the corrected `new`.
+fn follow_axis(old: Rect, new: Rect, others: &mut [(String, Rect)], min: f64) -> Rect {
+    let mut cur = new;
+    if (new.x - old.x).abs() > 0.5 {
+        cur = move_line(old, old.x, new.x, true, cur, others, min);
+    }
+    if (new.right() - old.right()).abs() > 0.5 {
+        cur = move_line(old, old.right(), cur.right(), false, cur, others, min);
+    }
+    cur
+}
+
+/// Move the vertical line at `from` to `to`. `left_edge` says which edge of
+/// the resized window (`cur`, previously `old`) sits on it.
+fn move_line(
+    old: Rect,
+    from: f64,
+    to: f64,
+    left_edge: bool,
+    mut cur: Rect,
+    others: &mut [(String, Rect)],
+    min: f64,
+) -> Rect {
+    let on_line = |r: &Rect| (r.right() - from).abs() < SHARE_EPS || (r.x - from).abs() < SHARE_EPS;
+    // Members on the line, connected to the window along it (touching
+    // vertically counts, so a column of stacked windows moves as one).
+    let (mut lo, mut hi) = (old.y, old.bottom());
+    let mut on: Vec<usize> = Vec::new();
+    loop {
+        let before = on.len();
+        for (i, (_, r)) in others.iter().enumerate() {
+            if !on.contains(&i) && on_line(r) && overlap(lo, hi, r.y, r.bottom()) > -SHARE_EPS {
+                on.push(i);
+                lo = lo.min(r.y);
+                hi = hi.max(r.bottom());
+            }
+        }
+        if on.len() == before {
+            break;
+        }
+    }
+
+    // Windows left of the line can't shrink below `min`, nor those right of it.
+    let (mut floor, mut ceil) = (f64::NEG_INFINITY, f64::INFINITY);
+    if left_edge {
+        ceil = ceil.min(cur.right() - min);
+    } else {
+        floor = floor.max(cur.x + min);
+    }
+    for &i in &on {
+        let r = others[i].1;
+        if (r.right() - from).abs() < SHARE_EPS {
+            floor = floor.max(r.x + min);
+        } else {
+            ceil = ceil.min(r.right() - min);
+        }
+    }
+    let p = if floor <= ceil {
+        to.clamp(floor, ceil)
+    } else {
+        from
+    };
+
+    let set_left = |r: &mut Rect| {
+        let right = r.right();
+        r.x = p;
+        r.w = right - p;
+    };
+    if left_edge {
+        set_left(&mut cur);
+    } else {
+        cur.w = p - cur.x;
+    }
+    for &i in &on {
+        let r = &mut others[i].1;
+        if (r.right() - from).abs() < SHARE_EPS {
+            r.w = p - r.x;
+        } else {
+            set_left(r);
+        }
+    }
+    cur
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -208,5 +349,134 @@ mod tests {
         let m = [Rect::new(584.0, 0.0, 400.0, 400.0)];
         assert_eq!(snap(&m, &o, SNAP_PX * 1.0), Snap::default());
         assert_eq!(snap(&m, &o, SNAP_PX * 2.0).dx, 16.0);
+    }
+
+    const MIN: f64 = 100.0;
+
+    fn get(changed: &[(String, Rect)], id: &str) -> Option<Rect> {
+        changed.iter().find(|(g, _)| g == id).map(|(_, r)| *r)
+    }
+
+    fn pair() -> Vec<(String, Rect)> {
+        vec![
+            ("L".into(), Rect::new(0.0, 0.0, 400.0, 300.0)),
+            ("R".into(), Rect::new(400.0, 0.0, 400.0, 300.0)),
+        ]
+    }
+
+    #[test]
+    fn growing_right_leftwards_shrinks_left() {
+        let g = pair();
+        let out = follow_resize(
+            "R",
+            g[1].1,
+            Rect::new(350.0, 0.0, 450.0, 300.0),
+            &g,
+            MIN,
+            MIN,
+        );
+        assert_eq!(get(&out, "L"), Some(Rect::new(0.0, 0.0, 350.0, 300.0)));
+        assert_eq!(get(&out, "R"), None, "no correction needed");
+    }
+
+    #[test]
+    fn shrinking_right_rightwards_grows_left() {
+        let g = pair();
+        let out = follow_resize(
+            "R",
+            g[1].1,
+            Rect::new(460.0, 0.0, 340.0, 300.0),
+            &g,
+            MIN,
+            MIN,
+        );
+        assert_eq!(get(&out, "L"), Some(Rect::new(0.0, 0.0, 460.0, 300.0)));
+    }
+
+    #[test]
+    fn resizing_left_rightwards_shrinks_right() {
+        let g = pair();
+        let out = follow_resize("L", g[0].1, Rect::new(0.0, 0.0, 480.0, 300.0), &g, MIN, MIN);
+        assert_eq!(get(&out, "R"), Some(Rect::new(480.0, 0.0, 320.0, 300.0)));
+    }
+
+    #[test]
+    fn top_and_bottom_follow_the_same_way() {
+        let g = vec![
+            ("T".into(), Rect::new(0.0, 0.0, 400.0, 300.0)),
+            ("B".into(), Rect::new(0.0, 300.0, 400.0, 300.0)),
+        ];
+        let out = follow_resize(
+            "B",
+            g[1].1,
+            Rect::new(0.0, 250.0, 400.0, 350.0),
+            &g,
+            MIN,
+            MIN,
+        );
+        assert_eq!(get(&out, "T"), Some(Rect::new(0.0, 0.0, 400.0, 250.0)));
+        let out = follow_resize("T", g[0].1, Rect::new(0.0, 0.0, 400.0, 340.0), &g, MIN, MIN);
+        assert_eq!(get(&out, "B"), Some(Rect::new(0.0, 340.0, 400.0, 260.0)));
+    }
+
+    #[test]
+    fn a_neighbour_stops_at_its_minimum_and_corrects_the_resized_window() {
+        let g = pair();
+        // R's left edge dragged to x=50 would leave L 50 wide; it stops at 100.
+        let out = follow_resize(
+            "R",
+            g[1].1,
+            Rect::new(50.0, 0.0, 750.0, 300.0),
+            &g,
+            MIN,
+            MIN,
+        );
+        assert_eq!(get(&out, "L"), Some(Rect::new(0.0, 0.0, 100.0, 300.0)));
+        assert_eq!(get(&out, "R"), Some(Rect::new(100.0, 0.0, 700.0, 300.0)));
+    }
+
+    #[test]
+    fn every_window_on_the_shared_line_moves_together() {
+        // L spans the height; R1 above R2 on its right.
+        let g = vec![
+            ("L".into(), Rect::new(0.0, 0.0, 400.0, 600.0)),
+            ("R1".into(), Rect::new(400.0, 0.0, 400.0, 300.0)),
+            ("R2".into(), Rect::new(400.0, 300.0, 400.0, 300.0)),
+        ];
+        let out = follow_resize(
+            "R1",
+            g[1].1,
+            Rect::new(380.0, 0.0, 420.0, 300.0),
+            &g,
+            MIN,
+            MIN,
+        );
+        assert_eq!(get(&out, "L"), Some(Rect::new(0.0, 0.0, 380.0, 600.0)));
+        assert_eq!(get(&out, "R2"), Some(Rect::new(380.0, 300.0, 420.0, 300.0)));
+    }
+
+    #[test]
+    fn unrelated_edges_and_pure_moves_change_nothing() {
+        let g = pair();
+        // R's far (right) edge moves — L doesn't share it.
+        let out = follow_resize(
+            "R",
+            g[1].1,
+            Rect::new(400.0, 0.0, 500.0, 300.0),
+            &g,
+            MIN,
+            MIN,
+        );
+        assert!(out.is_empty());
+        // Moved without resizing (e.g. the group drag).
+        let out = follow_resize(
+            "R",
+            g[1].1,
+            Rect::new(420.0, 10.0, 400.0, 300.0),
+            &g,
+            MIN,
+            MIN,
+        );
+        assert!(out.is_empty());
     }
 }

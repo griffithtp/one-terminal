@@ -21,7 +21,9 @@
 //! dragged by [`wm_popout_drag_start`] / [`wm_popout_drag_move`] /
 //! [`wm_popout_drag_end`] rather than the OS, so the windows can be snapped
 //! against each other live ([`super::popout_snap`]) and a glued group moves as
-//! one. Group membership lives on the floating entries, so it's saved with
+//! one. Resizing a glued window drags the edges it shares with its group
+//! along ([`popout_snap::follow_resize`]), so glued windows never gap or
+//! overlap. Group membership lives on the floating entries, so it's saved with
 //! the dashboard and survives stash / restore unchanged.
 //!
 //! Popout window labels are `<terminal_id>-popout-<id>`: still matched by the
@@ -135,6 +137,22 @@ fn focus_echoes() -> &'static Mutex<HashMap<String, Instant>> {
     F.get_or_init(Default::default)
 }
 const FOCUS_ECHO_TTL: Duration = Duration::from_millis(1000);
+
+/// Last-seen outer rect of each popout (physical pixels) — what a resize is
+/// diffed against to tell which edges moved.
+fn known_rects() -> &'static Mutex<HashMap<String, Rect>> {
+    static K: OnceLock<Mutex<HashMap<String, Rect>>> = OnceLock::new();
+    K.get_or_init(Default::default)
+}
+
+/// Popouts just resized by [`follow_glued_resize`] to track a neighbour.
+/// Their own `Moved` / `Resized` events (one per call, with intermediate
+/// rects) must not push their other edges onwards in turn.
+fn adjusting() -> &'static Mutex<HashMap<String, Instant>> {
+    static A: OnceLock<Mutex<HashMap<String, Instant>>> = OnceLock::new();
+    A.get_or_init(Default::default)
+}
+const ADJUST_TTL: Duration = Duration::from_millis(250);
 
 pub fn popout_label(owner: &str) -> String {
     format!(
@@ -397,6 +415,8 @@ pub fn destroy_popout(app: &AppHandle, manager: &TerminalManager, popout: &str) 
     ready_waiters().lock().unwrap().remove(popout);
     drags().lock().unwrap().remove(popout);
     focus_echoes().lock().unwrap().remove(popout);
+    known_rects().lock().unwrap().remove(popout);
+    adjusting().lock().unwrap().remove(popout);
     if let Some(w) = app.get_window(popout) {
         let _ = w.destroy();
     }
@@ -431,6 +451,9 @@ fn install_listeners(app: &AppHandle, popout: &str, panel: &str, tree: &LayoutTr
     let popout_s = popout.to_string();
     let panel_s = panel.to_string();
     let tree_c = tree.clone();
+    if let Some(r) = outer_rect(app, popout) {
+        known_rects().lock().unwrap().insert(popout.to_string(), r);
+    }
     win.on_window_event(move |evt| match evt {
         tauri::WindowEvent::Resized(_) | tauri::WindowEvent::ScaleFactorChanged { .. } => {
             let Some(w) = app_h.get_window(&popout_s) else {
@@ -438,10 +461,13 @@ fn install_listeners(app: &AppHandle, popout: &str, panel: &str, tree: &LayoutTr
             };
             let (lw, lh) = logical_inner_size(&w);
             place(&app_h, &popout_s, &panel_s, &tree_c, lw, lh);
+            follow_glued_resize(&app_h, &w, &panel_s, &tree_c);
             save_bounds(&w, &panel_s, &tree_c);
         }
         tauri::WindowEvent::Moved(_) => {
             if let Some(w) = app_h.get_window(&popout_s) {
+                // A left / top edge resize arrives as a move too.
+                follow_glued_resize(&app_h, &w, &panel_s, &tree_c);
                 save_bounds(&w, &panel_s, &tree_c);
             }
         }
@@ -487,7 +513,7 @@ fn install_listeners(app: &AppHandle, popout: &str, panel: &str, tree: &LayoutTr
 /// detaches and re-attaches the webviews and fires another `Resized` /
 /// `Moved` — calling it from those events loops forever and freezes the app.
 fn save_bounds(win: &Window, panel: &str, tree: &LayoutTree) {
-    if win.is_minimized().unwrap_or(false) {
+    if win.is_minimized().unwrap_or(false) || looks_maximized(win) {
         return;
     }
     let sf = win.scale_factor().unwrap_or(1.0);
@@ -495,12 +521,6 @@ fn save_bounds(win: &Window, panel: &str, tree: &LayoutTree) {
         return;
     };
     let monitor = win.current_monitor().ok().flatten();
-    if monitor
-        .as_ref()
-        .is_some_and(|m| fills_work_area(m.work_area(), pos, size))
-    {
-        return;
-    }
     tree.set_floating_bounds(
         panel,
         PersistedWindowConfig {
@@ -511,6 +531,18 @@ fn save_bounds(win: &Window, panel: &str, tree: &LayoutTree) {
             monitor: monitor.and_then(|m| m.name().cloned()),
         },
     );
+}
+
+/// `true` when `win` fills its monitor's work area — maximised, as far as
+/// we can safely tell (see [`save_bounds`]).
+fn looks_maximized(win: &Window) -> bool {
+    let (Ok(pos), Ok(size)) = (win.outer_position(), win.inner_size()) else {
+        return false;
+    };
+    win.current_monitor()
+        .ok()
+        .flatten()
+        .is_some_and(|m| fills_work_area(m.work_area(), pos, size))
 }
 
 /// `true` when a window at `pos` with inner `size` covers (almost) all of a
@@ -732,6 +764,88 @@ fn outer_rect(app: &AppHandle, label: &str) -> Option<Rect> {
         size.width as f64,
         size.height as f64,
     ))
+}
+
+/// Set window `label`'s outer rect (physical pixels).
+fn set_outer_rect(app: &AppHandle, label: &str, r: Rect) {
+    let Some(w) = app.get_window(label) else {
+        return;
+    };
+    // `set_size` takes the inner size; keep whatever frame the OS adds.
+    let (fw, fh) = match (w.outer_size(), w.inner_size()) {
+        (Ok(o), Ok(i)) => (
+            o.width.saturating_sub(i.width),
+            o.height.saturating_sub(i.height),
+        ),
+        _ => (0, 0),
+    };
+    let _ = w.set_position(PhysicalPosition::new(
+        r.x.round() as i32,
+        r.y.round() as i32,
+    ));
+    let _ = w.set_size(tauri::PhysicalSize::new(
+        (r.w.round() as u32).saturating_sub(fw),
+        (r.h.round() as u32).saturating_sub(fh),
+    ));
+}
+
+/// After popout `win` (hosting `panel`) moved or resized, move the edges its
+/// glue group shares with it so the group keeps no gaps and no overlaps.
+/// Pure moves (the group drag) and maximise / minimise change nothing.
+fn follow_glued_resize(app: &AppHandle, win: &Window, panel: &str, tree: &LayoutTree) {
+    let popout = win.label().to_string();
+    if win.is_minimized().unwrap_or(false) || looks_maximized(win) {
+        return; // keep the pre-maximise rect, so restoring diffs to nothing
+    }
+    let Some(now) = outer_rect(app, &popout) else {
+        return;
+    };
+    let prev = known_rects().lock().unwrap().insert(popout.clone(), now);
+    let echo = adjusting()
+        .lock()
+        .unwrap()
+        .get(&popout)
+        .is_some_and(|at| at.elapsed() < ADJUST_TTL);
+    let Some(prev) = prev.filter(|_| !echo) else {
+        return;
+    };
+    let members = group_of(tree, panel);
+    if members.len() < 2 {
+        return;
+    }
+    let manager = app.state::<TerminalManager>();
+    let group: Vec<(String, Rect)> = members
+        .iter()
+        .filter_map(|l| manager.popout_for_panel(l))
+        .filter(|p| *p != popout)
+        .filter_map(|p| outer_rect(app, &p).map(|r| (p, r)))
+        .collect();
+    let sf = win.scale_factor().unwrap_or(1.0);
+    let changes = popout_snap::follow_resize(
+        &popout,
+        prev,
+        now,
+        &group,
+        POPOUT_MIN_W * sf,
+        POPOUT_MIN_H * sf,
+    );
+    if changes.is_empty() {
+        return;
+    }
+    {
+        let at = Instant::now();
+        let mut adjusting = adjusting().lock().unwrap();
+        let mut known = known_rects().lock().unwrap();
+        for (p, r) in &changes {
+            if *p != popout {
+                adjusting.insert(p.clone(), at);
+            }
+            known.insert(p.clone(), *r);
+        }
+    }
+    for (p, r) in changes {
+        set_outer_rect(app, &p, r);
+    }
 }
 
 /// Bring the other members of `panel`'s glue group to the front behind
