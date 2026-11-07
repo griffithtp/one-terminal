@@ -40,9 +40,15 @@ use super::manager::TerminalManager;
 use super::spawn::is_rect_on_any_monitor;
 use super::state::TerminalState;
 
-/// Inset of the panel from the window's left, right and bottom edges. The
-/// strip of bare window it leaves is where the OS resize hit-test lands (a
-/// child webview covering the edge would swallow it on Windows).
+/// Inset of the panel from the window's left, right and bottom edges. On
+/// Windows the strip of bare window it leaves is where the OS resize hit-test
+/// lands (a child webview covering the edge would swallow it); it's painted in
+/// the theme surface colour ([`set_background`]). macOS resizes a frameless
+/// window from its edges even over child views — as the Terminal window does —
+/// so there the panel runs edge to edge with no border at all.
+#[cfg(target_os = "macos")]
+pub const POPOUT_EDGE: f64 = 0.0;
+#[cfg(not(target_os = "macos"))]
 pub const POPOUT_EDGE: f64 = 4.0;
 pub const POPOUT_MIN_W: f64 = 320.0;
 pub const POPOUT_MIN_H: f64 = 200.0;
@@ -69,6 +75,20 @@ pub enum PanelSource {
 fn ready_waiters() -> &'static Mutex<HashMap<String, oneshot::Sender<()>>> {
     static W: OnceLock<Mutex<HashMap<String, oneshot::Sender<()>>>> = OnceLock::new();
     W.get_or_init(Default::default)
+}
+
+/// Theme surface colour last reported by a popout chrome — new popout windows
+/// are built with it so the native background never flashes the OS default.
+/// Defaults to the dark theme's `--ot-bg-surface`.
+fn last_background() -> &'static Mutex<(u8, u8, u8)> {
+    static C: OnceLock<Mutex<(u8, u8, u8)>> = OnceLock::new();
+    C.get_or_init(|| Mutex::new((0x0f, 0x17, 0x2a)))
+}
+
+fn set_background(win: &Window, (r, g, b): (u8, u8, u8)) {
+    if let Err(e) = win.set_background_color(Some(tauri::window::Color(r, g, b, 255))) {
+        eprintln!("[popout] set background on {}: {e}", win.label());
+    }
 }
 
 /// Popouts whose chrome is currently expanded to the full window for a menu.
@@ -218,6 +238,10 @@ pub fn open_popout(
                     .min_inner_size(POPOUT_MIN_W, POPOUT_MIN_H)
                     .resizable(true)
                     .decorations(false)
+                    .background_color({
+                        let (r, g, b) = *last_background().lock().unwrap();
+                        tauri::window::Color(r, g, b, 255)
+                    })
                     .visible(false);
                 if let Some(b) = &bounds {
                     builder = builder.position(b.x, b.y);
@@ -671,6 +695,15 @@ pub fn wm_popout_ready(window: Window, manager: State<'_, TerminalManager>) -> O
         .find(|(p, _)| *p == popout)?
         .1;
     terminal.layout_tree.panel_tab(&panel)
+}
+
+/// Paint a popout's native window background (the thin resize border around
+/// the panel on Windows) in the theme surface colour `rgb`. Called by the
+/// popout chrome on mount and on theme change; remembered for new popouts.
+#[tauri::command]
+pub fn wm_popout_background(rgb: (u8, u8, u8), window: Window) {
+    *last_background().lock().unwrap() = rgb;
+    set_background(&window, rgb);
 }
 
 /// Grow the popout chrome to the full window while a menu is open (so the

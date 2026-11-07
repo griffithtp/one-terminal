@@ -365,20 +365,20 @@ function RenameInput({
   );
 }
 
-/** Match the native window background (visible as the thin resize border
- *  around the widget) to the active theme's surface colour. */
 /** Logical inner size covering (almost) all of the screen's work area. */
 function fillsScreen(width: number, height: number): boolean {
   const SLACK = 16;
   return width >= window.screen.availWidth - SLACK && height >= window.screen.availHeight - SLACK;
 }
 
+/** Paint the native window background — the thin resize border around the
+ *  widget on Windows — in the active theme's surface colour. */
 export function syncWindowBackground() {
   const css = getComputedStyle(document.documentElement).getPropertyValue("--ot-bg-surface").trim();
   const m = /^#([0-9a-f]{6})$/i.exec(css);
   if (!m) return;
   const n = parseInt(m[1], 16);
-  getCurrentWindow()
-    .setBackgroundColor([(n >> 16) & 255, (n >> 8) & 255, n & 255, 255])
-    .catch(() => {});
+  invoke("wm_popout_background", {
+    rgb: [(n >> 16) & 255, (n >> 8) & 255, n & 255],
+  }).catch(console.error);
 }

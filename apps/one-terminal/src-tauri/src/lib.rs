@@ -1968,6 +1968,7 @@ pub fn run() {
             terminal::popout::wm_focus_popout,
             terminal::popout::wm_popout_ready,
             terminal::popout::wm_popout_menu,
+            terminal::popout::wm_popout_background,
             wm_engine_status,
             wm_engine_install,
             wm_rename_panel,
