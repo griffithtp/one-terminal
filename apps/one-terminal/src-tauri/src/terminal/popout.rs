@@ -23,7 +23,10 @@
 //! against each other live ([`super::popout_snap`]) and a glued group moves as
 //! one. Resizing a glued window drags the edges it shares with its group
 //! along ([`popout_snap::follow_resize`]), so glued windows never gap or
-//! overlap. Group membership lives on the floating entries, so it's saved with
+//! overlap. Maximising a glued member unglues it first
+//! ([`wm_popout_toggle_maximize`]), remembering its place, and restoring it
+//! glues it back there — unless it was moved while maximised. A minimised
+//! member stays glued but is set aside until restored ([`suspend`]). Group membership lives on the floating entries, so it's saved with
 //! the dashboard and survives stash / restore unchanged.
 //!
 //! Popout window labels are `<terminal_id>-popout-<id>`: still matched by the
@@ -153,6 +156,32 @@ fn adjusting() -> &'static Mutex<HashMap<String, Instant>> {
     A.get_or_init(Default::default)
 }
 const ADJUST_TTL: Duration = Duration::from_millis(250);
+
+/// A glued popout set aside while maximised or minimised: the group neither
+/// moves, resizes, raises nor snaps to it, and on restore it goes back to
+/// its old place relative to the group (Plan 17-H).
+struct Suspended {
+    /// Outer rect before it was maximised / minimised.
+    normal: Rect,
+    /// `normal`'s offset from each other member (by panel label) at that
+    /// moment — the first still in place anchors the rejoin.
+    offsets: Vec<(String, f64, f64)>,
+    kind: SuspendKind,
+}
+
+enum SuspendKind {
+    /// Still glued; rejoins when no longer minimised.
+    Minimized,
+    /// Unglued for the duration; glued back on restore. `at` is its rect
+    /// once seen maximised — a later different rect means the user moved it
+    /// (e.g. to another monitor), and it then stays unglued.
+    Maximized { at: Option<Rect> },
+}
+
+fn suspended() -> &'static Mutex<HashMap<String, Suspended>> {
+    static S: OnceLock<Mutex<HashMap<String, Suspended>>> = OnceLock::new();
+    S.get_or_init(Default::default)
+}
 
 pub fn popout_label(owner: &str) -> String {
     format!(
@@ -417,6 +446,7 @@ pub fn destroy_popout(app: &AppHandle, manager: &TerminalManager, popout: &str) 
     focus_echoes().lock().unwrap().remove(popout);
     known_rects().lock().unwrap().remove(popout);
     adjusting().lock().unwrap().remove(popout);
+    suspended().lock().unwrap().remove(popout);
     if let Some(w) = app.get_window(popout) {
         let _ = w.destroy();
     }
@@ -461,11 +491,13 @@ fn install_listeners(app: &AppHandle, popout: &str, panel: &str, tree: &LayoutTr
             };
             let (lw, lh) = logical_inner_size(&w);
             place(&app_h, &popout_s, &panel_s, &tree_c, lw, lh);
+            sync_window_state(&app_h, &w, &panel_s, &tree_c);
             follow_glued_resize(&app_h, &w, &panel_s, &tree_c);
             save_bounds(&w, &panel_s, &tree_c);
         }
         tauri::WindowEvent::Moved(_) => {
             if let Some(w) = app_h.get_window(&popout_s) {
+                sync_window_state(&app_h, &w, &panel_s, &tree_c);
                 // A left / top edge resize arrives as a move too.
                 follow_glued_resize(&app_h, &w, &panel_s, &tree_c);
                 save_bounds(&w, &panel_s, &tree_c);
@@ -474,6 +506,11 @@ fn install_listeners(app: &AppHandle, popout: &str, panel: &str, tree: &LayoutTr
         tauri::WindowEvent::Focused(true) => {
             // Widget hotkeys / palette commands target the active panel.
             tree_c.set_active_panel(&panel_s);
+            // macOS sends no resize when a window is restored from the Dock;
+            // it does focus it.
+            if let Some(w) = app_h.get_window(&popout_s) {
+                sync_window_state(&app_h, &w, &panel_s, &tree_c);
+            }
             // Bring glued members up with it so the group stays together in
             // z-order — unless this focus is our own raise echoing back.
             let echo = focus_echoes()
@@ -798,7 +835,10 @@ fn set_outer_rect(app: &AppHandle, label: &str, r: Rect) {
 /// Pure moves (the group drag) and maximise / minimise change nothing.
 fn follow_glued_resize(app: &AppHandle, win: &Window, panel: &str, tree: &LayoutTree) {
     let popout = win.label().to_string();
-    if win.is_minimized().unwrap_or(false) || looks_maximized(win) {
+    if suspended().lock().unwrap().contains_key(&popout)
+        || win.is_minimized().unwrap_or(false)
+        || looks_maximized(win)
+    {
         return; // keep the pre-maximise rect, so restoring diffs to nothing
     }
     let Some(now) = outer_rect(app, &popout) else {
@@ -821,7 +861,7 @@ fn follow_glued_resize(app: &AppHandle, win: &Window, panel: &str, tree: &Layout
     let group: Vec<(String, Rect)> = members
         .iter()
         .filter_map(|l| manager.popout_for_panel(l))
-        .filter(|p| *p != popout)
+        .filter(|p| *p != popout && !is_set_aside(app, p))
         .filter_map(|p| outer_rect(app, &p).map(|r| (p, r)))
         .collect();
     let sf = win.scale_factor().unwrap_or(1.0);
@@ -852,6 +892,204 @@ fn follow_glued_resize(app: &AppHandle, win: &Window, panel: &str, tree: &Layout
     }
 }
 
+/// `true` while popout `popout` is out of its group's way: set aside, or
+/// currently minimised or maximised.
+fn is_set_aside(app: &AppHandle, popout: &str) -> bool {
+    suspended().lock().unwrap().contains_key(popout)
+        || app
+            .get_window(popout)
+            .is_some_and(|w| w.is_minimized().unwrap_or(false) || looks_maximized(&w))
+}
+
+/// Set glued popout `popout` (hosting `panel`) aside, remembering its normal
+/// rect and its offset from the rest of the group. For a maximise it is also
+/// unglued, so nothing about the group — shared-edge resizing included — can
+/// act on it or be acted on by it while it fills the screen. Returns `false`
+/// (doing nothing) if it isn't glued or is already set aside.
+fn suspend(
+    app: &AppHandle,
+    manager: &TerminalManager,
+    tree: &LayoutTree,
+    popout: &str,
+    panel: &str,
+    kind: SuspendKind,
+) -> bool {
+    let members = group_of(tree, panel);
+    if members.len() < 2 || suspended().lock().unwrap().contains_key(popout) {
+        return false;
+    }
+    let known = |p: &str| {
+        let k = known_rects().lock().unwrap().get(p).copied();
+        k.or_else(|| outer_rect(app, p))
+    };
+    let Some(normal) = known(popout) else {
+        return false;
+    };
+    let offsets = members
+        .iter()
+        .filter(|l| *l != panel)
+        .filter_map(|l| {
+            let p = manager.popout_for_panel(l)?;
+            if suspended().lock().unwrap().contains_key(&p) {
+                return None;
+            }
+            let r = known(&p)?;
+            Some((l.clone(), normal.x - r.x, normal.y - r.y))
+        })
+        .collect();
+    let unglue = matches!(kind, SuspendKind::Maximized { .. });
+    suspended().lock().unwrap().insert(
+        popout.to_string(),
+        Suspended {
+            normal,
+            offsets,
+            kind,
+        },
+    );
+    if unglue && tree.unglue(panel) {
+        if let Some(terminal) = manager.owner_of_panel(panel) {
+            notify_panels(app, manager, &terminal, &members);
+        }
+    }
+    true
+}
+
+/// Put set-aside popout `popout` (hosting `panel`) back at its old place
+/// relative to the first remembered neighbour that's still around and in
+/// place, re-gluing it to that neighbour after a maximise. Stays where it is
+/// if there's none.
+fn rejoin(
+    app: &AppHandle,
+    manager: &TerminalManager,
+    tree: &LayoutTree,
+    popout: &str,
+    panel: &str,
+    s: Suspended,
+) {
+    let was_maximized = matches!(s.kind, SuspendKind::Maximized { .. });
+    let members = group_of(tree, panel);
+    let anchor = s.offsets.iter().find_map(|(l, dx, dy)| {
+        // A minimised member rejoins its own group; an unglued maximised one
+        // any former neighbour still floating.
+        if !was_maximized && !members.contains(l) {
+            return None;
+        }
+        let p = manager.popout_for_panel(l)?;
+        if is_set_aside(app, &p) {
+            return None;
+        }
+        let r = outer_rect(app, &p)?;
+        Some((
+            l.clone(),
+            Rect::new(r.x + dx, r.y + dy, s.normal.w, s.normal.h),
+        ))
+    });
+    let Some((anchor_panel, target)) = anchor else {
+        if let Some(r) = outer_rect(app, popout) {
+            known_rects().lock().unwrap().insert(popout.to_string(), r);
+        }
+        return;
+    };
+    known_rects()
+        .lock()
+        .unwrap()
+        .insert(popout.to_string(), target);
+    set_outer_rect(app, popout, target);
+    if was_maximized {
+        if let Some(group) = tree.glue(&[panel.to_string(), anchor_panel]) {
+            if let Some(terminal) = manager.owner_of_panel(panel) {
+                notify_panels(app, manager, &terminal, &tree.group_members(&group));
+            }
+        }
+    }
+}
+
+/// Track popout `win` (hosting `panel`) entering or leaving the maximised /
+/// minimised state while glued, for the transitions the OS drives itself
+/// (Dock / taskbar, keyboard shortcuts); the header buttons go through
+/// [`wm_popout_toggle_maximize`] / [`wm_popout_minimize`] instead.
+fn sync_window_state(app: &AppHandle, win: &Window, panel: &str, tree: &LayoutTree) {
+    let popout = win.label().to_string();
+    let manager = app.state::<TerminalManager>();
+    let minimized = win.is_minimized().unwrap_or(false);
+    let now = outer_rect(app, &popout);
+
+    enum Next {
+        Nothing,
+        Rejoin,
+        Forget,
+    }
+    let next = {
+        let mut map = suspended().lock().unwrap();
+        match map.get_mut(&popout) {
+            None => Next::Nothing,
+            Some(Suspended {
+                kind: SuspendKind::Minimized,
+                ..
+            }) => {
+                if minimized {
+                    Next::Nothing
+                } else {
+                    Next::Rejoin
+                }
+            }
+            Some(Suspended {
+                normal,
+                kind: SuspendKind::Maximized { at },
+                ..
+            }) => match (now, *at) {
+                _ if minimized => Next::Nothing,
+                (None, _) => Next::Nothing,
+                // Not yet seen at its maximised size.
+                (Some(r), None) => {
+                    if !same_size(r, *normal) {
+                        *at = Some(r);
+                    }
+                    Next::Nothing
+                }
+                // Back at its normal size: restored by the OS.
+                (Some(r), Some(_)) if same_size(r, *normal) => Next::Rejoin,
+                (Some(r), Some(a)) if !same_pos(r, a) => Next::Forget,
+                _ => Next::Nothing,
+            },
+        }
+    };
+    match next {
+        Next::Rejoin => {
+            if let Some(s) = suspended().lock().unwrap().remove(&popout) {
+                rejoin(app, &manager, tree, &popout, panel, s);
+            }
+        }
+        Next::Forget => {
+            suspended().lock().unwrap().remove(&popout);
+            eprintln!("[popout] {popout} moved while maximised: stays unglued");
+        }
+        Next::Nothing => {
+            if minimized {
+                suspend(app, &manager, tree, &popout, panel, SuspendKind::Minimized);
+            } else if looks_maximized(win) {
+                // Maximised by the OS (e.g. Win+Up) rather than the header.
+                suspend(
+                    app,
+                    &manager,
+                    tree,
+                    &popout,
+                    panel,
+                    SuspendKind::Maximized { at: now },
+                );
+            }
+        }
+    }
+}
+
+fn same_size(a: Rect, b: Rect) -> bool {
+    (a.w - b.w).abs() <= 2.0 && (a.h - b.h).abs() <= 2.0
+}
+
+fn same_pos(a: Rect, b: Rect) -> bool {
+    (a.x - b.x).abs() <= 2.0 && (a.y - b.y).abs() <= 2.0
+}
+
 /// Bring the other members of `panel`'s glue group to the front behind
 /// popout `front`, restoring any that are minimised, then refocus `front`.
 fn raise_group(
@@ -861,10 +1099,15 @@ fn raise_group(
     front: &str,
     panel: &str,
 ) {
+    if is_set_aside(app, front) {
+        return; // a maximised member stands alone
+    }
+    // Minimised members come back with the group; maximised ones stay put.
     let others: Vec<String> = group_of(tree, panel)
         .iter()
         .filter(|l| *l != panel)
         .filter_map(|l| manager.popout_for_panel(l))
+        .filter(|p| !app.get_window(p).is_some_and(|w| looks_maximized(&w)))
         .collect();
     if others.is_empty() {
         return;
@@ -930,9 +1173,11 @@ pub fn wm_popout_drag_start(
         .chain([popout.clone()])
         .collect();
     let rect_of = |(p, _): (String, String)| outer_rect(&app, &p).map(|r| (p, r));
+    // Maximised / minimised windows neither move with the group nor attract.
     let (moving, others): (Vec<_>, Vec<_>) = manager
         .popouts_of(&terminal.id)
         .into_iter()
+        .filter(|(p, _)| *p == popout || !is_set_aside(&app, p))
         .filter_map(rect_of)
         .partition(|(p, _)| moving_popouts.contains(p));
     let cursor = window.cursor_position().map_err(|e| e.to_string())?;
@@ -1047,11 +1292,67 @@ pub fn wm_popout_unglue(
     let terminal = manager
         .owner_of_panel(&label)
         .ok_or_else(|| format!("no panel '{label}'"))?;
+    if let Some(p) = manager.popout_for_panel(&label) {
+        suspended().lock().unwrap().remove(&p);
+    }
     let group = group_of(&terminal.layout_tree, &label);
     if terminal.layout_tree.unglue(&label) {
         notify_panels(&app, &manager, &terminal, &group);
     }
     Ok(())
+}
+
+/// Maximise or restore the invoking popout (header button, double-click).
+/// A glued popout is unglued *before* it maximises — remembering its place —
+/// so the group's shared edges never see the maximise as a resize; restoring
+/// it glues it back in that place relative to the group.
+#[tauri::command]
+pub fn wm_popout_toggle_maximize(
+    window: Window,
+    manager: State<'_, TerminalManager>,
+    app: AppHandle,
+) -> Result<(), String> {
+    let popout = window.label().to_string();
+    let terminal = manager
+        .resolve(&popout)
+        .ok_or_else(|| format!("popout '{popout}' not found"))?;
+    let tree = &terminal.layout_tree;
+    let panel = panel_in(&manager, &terminal.id, &popout)
+        .ok_or_else(|| format!("popout '{popout}' not found"))?;
+
+    let restoring = {
+        let mut map = suspended().lock().unwrap();
+        match map.get(&popout) {
+            Some(Suspended {
+                kind: SuspendKind::Maximized { .. },
+                ..
+            }) => map.remove(&popout),
+            _ => None,
+        }
+    };
+    if let Some(s) = restoring {
+        window.unmaximize().map_err(|e| e.to_string())?;
+        // Queued after the restore, so it lands on the restored window.
+        rejoin(&app, &manager, tree, &popout, &panel, s);
+        return Ok(());
+    }
+    if suspend(
+        &app,
+        &manager,
+        tree,
+        &popout,
+        &panel,
+        SuspendKind::Maximized { at: None },
+    ) {
+        return window.maximize().map_err(|e| e.to_string());
+    }
+    // Not glued: a plain toggle.
+    if window.is_maximized().unwrap_or(false) {
+        window.unmaximize()
+    } else {
+        window.maximize()
+    }
+    .map_err(|e| e.to_string())
 }
 
 /// Minimise the invoking popout together with every popout glued to it.
@@ -1062,18 +1363,29 @@ pub fn wm_popout_minimize(
     app: AppHandle,
 ) -> Result<(), String> {
     let popout = window.label().to_string();
-    let mut targets = vec![popout.clone()];
-    if let Some(terminal) = manager.resolve(&popout) {
-        if let Some(panel) = panel_in(&manager, &terminal.id, &popout) {
-            targets.extend(
-                group_of(&terminal.layout_tree, &panel)
-                    .iter()
-                    .filter_map(|l| manager.popout_for_panel(l))
-                    .filter(|p| *p != popout),
-            );
-        }
+    let terminal = manager
+        .resolve(&popout)
+        .ok_or_else(|| format!("popout '{popout}' not found"))?;
+    let tree = &terminal.layout_tree;
+    let panel = panel_in(&manager, &terminal.id, &popout)
+        .ok_or_else(|| format!("popout '{popout}' not found"))?;
+    // A maximised member stands alone, and the group leaves maximised
+    // members be.
+    let mut targets = vec![(popout.clone(), panel.clone())];
+    if !is_set_aside(&app, &popout) {
+        targets.extend(
+            group_of(tree, &panel)
+                .into_iter()
+                .filter(|l| *l != panel)
+                .filter_map(|l| manager.popout_for_panel(&l).map(|p| (p, l)))
+                .filter(|(p, _)| !is_set_aside(&app, p)),
+        );
     }
-    for p in targets {
+    // Record where each sits first — macOS reports no resize on minimise.
+    for (p, l) in &targets {
+        suspend(&app, &manager, tree, p, l, SuspendKind::Minimized);
+    }
+    for (p, _) in targets {
         if let Some(w) = app.get_window(&p) {
             let _ = w.minimize();
         }

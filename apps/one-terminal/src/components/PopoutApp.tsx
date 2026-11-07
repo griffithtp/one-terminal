@@ -136,7 +136,7 @@ export function PopoutApp() {
     getCurrentWindow().startResizeDragging(direction).catch(console.error);
   };
 
-  const startDrag = useHeaderDrag(maximized);
+  const startDrag = useHeaderDrag(maximized, panel);
 
   const Content = useMemo(() => headerContentFor(tab?.appId ?? ""), [tab?.appId]);
   const channel = FDC3_CHANNELS.find((c) => c.id === tab?.fdc3Channel);
@@ -154,7 +154,7 @@ export function PopoutApp() {
         // together (Plan 17-H) — see `useHeaderDrag`.
         onPointerDown={startDrag}
         onDoubleClick={(e) => {
-          if (e.target === e.currentTarget) win.toggleMaximize().catch(console.error);
+          if (e.target === e.currentTarget) toggleMaximize();
         }}
         onContextMenu={(e) => {
           e.preventDefault();
@@ -188,7 +188,8 @@ export function PopoutApp() {
             aria-hidden
           />
         )}
-        {tab?.group && (
+        {/* A maximised member stands apart from its group until restored. */}
+        {tab?.group && !maximized && (
           <span
             className="wm-popout__glued"
             title="Glued to neighbouring windows. Alt-drag the header (Option on macOS) to pull it away."
@@ -253,7 +254,7 @@ export function PopoutApp() {
           className="wm-panel-header__menu wm-popout__btn"
           aria-label={maximized ? "Restore" : "Maximise"}
           title={maximized ? "Restore" : "Maximise"}
-          onClick={() => win.toggleMaximize().catch(console.error)}
+          onClick={toggleMaximize}
         >
           {maximized ? "❐" : "□"}
         </button>
@@ -388,6 +389,12 @@ function RenameInput({
   );
 }
 
+/** Maximise / restore through Rust, which unglues a glued popout before it
+ *  maximises and glues it back in place on restore (Plan 17-H). */
+function toggleMaximize() {
+  invoke("wm_popout_toggle_maximize").catch(console.error);
+}
+
 /**
  * Header drag for a popout (Plan 17-H). Past a small dead zone the press
  * becomes a Rust-driven drag: `wm_popout_drag_start` snapshots the window
@@ -397,20 +404,37 @@ function RenameInput({
  * snaps them to nearby popouts, and `wm_popout_drag_end` glues whatever they
  * touch. Holding Alt (Option) at the start tears the window out of its group.
  *
- * A maximised window keeps the OS drag, which restores it on the way.
+ * A maximised window keeps the OS drag, which restores it on the way — and,
+ * once the press actually moves, first unglues it: moving a maximised
+ * member takes it out of its group rather than snapping it back on restore.
  */
-function useHeaderDrag(maximized: boolean) {
+function useHeaderDrag(maximized: boolean, panel: string) {
   return useCallback(
     (e: React.PointerEvent<HTMLElement>) => {
       // Buttons, the rename input and resize strips handle their own presses.
       if (e.button !== 0 || e.target !== e.currentTarget) return;
-      if (maximized) {
-        getCurrentWindow().startDragging().catch(console.error);
-        return;
-      }
       const el = e.currentTarget;
       const { pointerId } = e;
       const [x0, y0] = [e.screenX, e.screenY];
+      if (maximized) {
+        // Not on press: a double-click to restore mustn't unglue.
+        const onMaxMove = (ev: PointerEvent) => {
+          if (Math.hypot(ev.screenX - x0, ev.screenY - y0) < DRAG_DEAD_ZONE) return;
+          offMax();
+          invoke("wm_popout_unglue", { label: panel })
+            .catch(console.error)
+            .finally(() => getCurrentWindow().startDragging().catch(console.error));
+        };
+        const offMax = () => {
+          el.removeEventListener("pointermove", onMaxMove);
+          el.removeEventListener("pointerup", offMax);
+          el.removeEventListener("pointercancel", offMax);
+        };
+        el.addEventListener("pointermove", onMaxMove);
+        el.addEventListener("pointerup", offMax);
+        el.addEventListener("pointercancel", offMax);
+        return;
+      }
       const tearOff = e.altKey;
       el.setPointerCapture(pointerId);
 
@@ -444,7 +468,7 @@ function useHeaderDrag(maximized: boolean) {
       el.addEventListener("pointercancel", onEnd);
       el.addEventListener("lostpointercapture", onEnd);
     },
-    [maximized]
+    [maximized, panel]
   );
 }
 

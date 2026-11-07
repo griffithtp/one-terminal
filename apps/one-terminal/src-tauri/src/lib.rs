@@ -1974,6 +1974,7 @@ pub fn run() {
             terminal::popout::wm_popout_drag_end,
             terminal::popout::wm_popout_unglue,
             terminal::popout::wm_popout_minimize,
+            terminal::popout::wm_popout_toggle_maximize,
             wm_engine_status,
             wm_engine_install,
             wm_rename_panel,
