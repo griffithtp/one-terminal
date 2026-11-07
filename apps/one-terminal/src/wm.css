@@ -601,6 +601,7 @@ body,
   font-size: 12px;
   cursor: grab;
   user-select: none;
+  -webkit-user-select: none;
   pointer-events: auto;
   z-index: 6;
   box-sizing: border-box;
@@ -678,6 +679,10 @@ body,
   position: relative;
   width: 100vw;
   height: 100vh;
+  /* Nothing in the chrome is selectable text — dragging or double-clicking
+   * the header must never highlight the widget title. */
+  user-select: none;
+  -webkit-user-select: none;
 }
 .wm-popout__header {
   position: relative;
@@ -726,6 +731,8 @@ body,
   cursor: nesw-resize;
 }
 .wm-popout__rename {
+  user-select: text;
+  -webkit-user-select: text;
   flex: 1 1 auto;
   min-width: 0;
   height: 20px;

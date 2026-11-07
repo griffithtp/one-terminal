@@ -371,7 +371,11 @@ pub fn open_popout(
                 let url = format!("popout.html?panel={}", urlencode(&panel_m));
                 win.add_child(
                     WebviewBuilder::new(chrome_label(&popout_m), WebviewUrl::App(url.into()))
-                        .transparent(true),
+                        .transparent(true)
+                        // macOS: the click that activates an inactive popout
+                        // also reaches the header, so it drags straight away
+                        // instead of needing a second press.
+                        .accept_first_mouse(true),
                     LogicalPosition::new(0.0, 0.0),
                     LogicalSize::new(w, PANEL_HEADER_HEIGHT),
                 )
