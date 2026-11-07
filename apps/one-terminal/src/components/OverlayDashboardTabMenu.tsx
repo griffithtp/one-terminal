@@ -33,7 +33,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen, emit } from "@tauri-apps/api/event";
 import { FDC3_CHANNELS } from "./fdc3Channels";
 import { useAppDirectory } from "../hooks/useAppDirectory";
-import type { AppRecord } from "../types";
+import type { AppRecord, HostLayout, StackTab } from "../types";
 
 interface Payload {
   name: string;
@@ -54,6 +54,10 @@ export function OverlayDashboardTabMenu() {
   const [addWidgetOpen, setAddWidgetOpen] = useState(false);
   const [channelOpen, setChannelOpen] = useState(false);
   const [keepAliveOpen, setKeepAliveOpen] = useState(false);
+  const [floatingOpen, setFloatingOpen] = useState(false);
+  /** Widgets of this dashboard popped out into their own window (Plan 17) —
+   *  only known for the active dashboard, whose layout is live. */
+  const [floating, setFloating] = useState<StackTab[]>([]);
   const { apps, enginesFor } = useAppDirectory();
 
   // Safety-net cleanup for the "wait for switch, then open Add Widget"
@@ -72,7 +76,18 @@ export function OverlayDashboardTabMenu() {
       setAddWidgetOpen(false);
       setChannelOpen(false);
       setKeepAliveOpen(false);
+      setFloatingOpen(false);
+      setFloating([]);
       setMenu(e.payload);
+      const name = e.payload.name;
+      Promise.all([
+        invoke<DashboardsPayload>("wm_list_dashboards"),
+        invoke<HostLayout>("wm_host_snapshot"),
+      ])
+        .then(([snap, host]) => {
+          if (snap.active === name) setFloating(host.floating ?? []);
+        })
+        .catch(console.error);
     });
     return () => {
       promise.then((fn) => fn()).catch(() => {});
@@ -84,6 +99,7 @@ export function OverlayDashboardTabMenu() {
     setAddWidgetOpen(false);
     setChannelOpen(false);
     setKeepAliveOpen(false);
+    setFloatingOpen(false);
     invoke("wm_ctx_menu_close").catch(console.error);
   }, []);
 
@@ -384,6 +400,66 @@ export function OverlayDashboardTabMenu() {
             </div>
           )}
         </div>
+
+        {floating.length > 0 && (
+          <div className="wm-tab-ctx-menu__submenu-wrap">
+            <button
+              type="button"
+              role="menuitem"
+              className="wm-tab-ctx-menu__item wm-tab-ctx-menu__item--submenu"
+              aria-haspopup="true"
+              aria-expanded={floatingOpen}
+              onClick={() => {
+                setFloatingOpen((o) => !o);
+                setChannelOpen(false);
+                setKeepAliveOpen(false);
+                setAddWidgetOpen(false);
+              }}
+            >
+              <span className="wm-tab-ctx-menu__item-label">
+                Popped-out widgets ({floating.length})
+              </span>
+              <span className="wm-tab-ctx-menu__submenu-arrow">›</span>
+            </button>
+            {floatingOpen && (
+              <div className="wm-tab-ctx-menu__submenu" role="menu">
+                {floating.map((t) => (
+                  <button
+                    key={t.label}
+                    type="button"
+                    role="menuitem"
+                    className="wm-tab-ctx-menu__item"
+                    title="Bring its window to the front"
+                    onClick={() => {
+                      invoke("wm_focus_popout", { label: t.label }).catch(console.error);
+                      dismiss();
+                    }}
+                  >
+                    {t.displayName ?? t.title}
+                  </button>
+                ))}
+                <div className="wm-tab-ctx-menu__separator" role="separator" />
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="wm-tab-ctx-menu__item"
+                  onClick={() => {
+                    const labels = floating.map((t) => t.label);
+                    dismiss();
+                    // Sequentially: each dock re-raises the overlay.
+                    (async () => {
+                      for (const label of labels) {
+                        await invoke("wm_dock_panel", { label }).catch(console.error);
+                      }
+                    })();
+                  }}
+                >
+                  Dock all back
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="wm-tab-ctx-menu__separator" role="separator" />
 

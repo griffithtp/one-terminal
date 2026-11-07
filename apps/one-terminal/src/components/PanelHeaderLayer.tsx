@@ -157,6 +157,20 @@ function PanelHeader({ panel }: { panel: PanelBounds }) {
         <button
           type="button"
           data-panel-menu
+          className="wm-panel-header__menu wm-panel-header__popout"
+          aria-label={`Pop out ${panel.title}`}
+          title="Pop out into its own window"
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            invoke("wm_popout_panel", { label: panel.id }).catch(console.error);
+          }}
+        >
+          ⧉
+        </button>
+        <button
+          type="button"
+          data-panel-menu
           className="wm-panel-header__menu"
           aria-label={`${panel.title} menu`}
           title="More actions"

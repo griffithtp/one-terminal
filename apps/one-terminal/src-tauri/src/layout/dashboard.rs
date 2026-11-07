@@ -71,6 +71,10 @@ pub struct PersistedDashboard {
     /// cannot be undone.
     #[serde(default)]
     pub closed: bool,
+    /// Panels popped out into their own window (Plan 17). See
+    /// [`FloatingPanel`](super::persist::FloatingPanel).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub floating: Vec<super::persist::FloatingPanel>,
 }
 
 impl PersistedDashboard {
@@ -81,6 +85,7 @@ impl PersistedDashboard {
             meta: self.meta.clone(),
             active_panel: self.active_panel.clone(),
             maximized_stack_id: self.maximized_stack_id.clone(),
+            floating: self.floating.clone(),
         }
     }
 
@@ -95,6 +100,7 @@ impl PersistedDashboard {
             maximized_stack_id: layout.maximized_stack_id,
             default_fdc3_channel: None,
             closed: false,
+            floating: layout.floating,
         }
     }
 
@@ -108,6 +114,7 @@ impl PersistedDashboard {
             maximized_stack_id: None,
             default_fdc3_channel: None,
             closed: false,
+            floating: Vec::new(),
         }
     }
 }
@@ -323,6 +330,7 @@ impl DashboardRegistry {
             dash.meta = current.meta;
             dash.active_panel = current.active_panel;
             dash.maximized_stack_id = current.maximized_stack_id;
+            dash.floating = current.floating;
         }
     }
 

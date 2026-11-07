@@ -462,6 +462,10 @@ pub fn panel_init_script(app: &AppHandle) -> String {
 /// label in one main-thread closure (the same pattern `overlay_prewarm` uses
 /// for the overlay).
 fn recreate_webviews(terminal: &Arc<TerminalState>, app: &AppHandle) -> Result<(), String> {
+    // Popout windows close with the panel they host; the floating entries
+    // survive and are recreated with the new script below.
+    let manager = app.state::<crate::terminal::TerminalManager>();
+    crate::terminal::popout::close_popouts(app, &manager, terminal);
     let script = panel_init_script(app);
     let panels = terminal.layout_tree.panels_for_restore();
     let mut to_close = terminal.layout_tree.take_parked_labels();
@@ -530,6 +534,7 @@ fn recreate_webviews(terminal: &Arc<TerminalState>, app: &AppHandle) -> Result<(
     }
     terminal.layout_tree.reflow(app);
     terminal.layout_tree.emit_host(app);
+    crate::terminal::popout::restore_popouts(app, &manager, terminal);
     crate::overlay_prewarm_in_background(Arc::clone(&terminal.overlay), &terminal.id, app);
     Ok(())
 }

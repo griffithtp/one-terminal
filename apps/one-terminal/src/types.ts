@@ -114,6 +114,8 @@ export interface HostLayout {
   windowHeight: number;
   stacks: StackHeader[];
   splitters: SplitterHandle[];
+  /** Widgets popped out into their own window (Plan 17). */
+  floating: StackTab[];
 }
 
 // ── Overflow menu (tab strip dropdown, rendered in overlay) ───────────────────

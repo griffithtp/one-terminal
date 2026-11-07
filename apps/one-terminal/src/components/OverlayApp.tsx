@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { listen, emit } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
-import { ctxMenuItemsFor, type CtxMenuContext } from "./contextMenuItems";
+import { WidgetMenuItems, type WidgetSubmenu } from "./WidgetMenuItems";
 import { PanelHighlightLayer } from "./CommandPalette";
 import { OverlayMenu } from "./OverlayMenu";
 import { OverlayConfirmDashboardSwitch } from "./OverlayConfirmDashboardSwitch";
@@ -21,8 +21,6 @@ import type {
   LayoutSnapshot,
   OverflowMenuPayload,
 } from "../types";
-import { FDC3_CHANNELS } from "./fdc3Channels";
-import { GENERIC_WEB_WIDGET_APP_ID } from "../lib/genericWebWidget";
 
 // ── Context-menu types ─────────────────────────────────────────────────────────
 
@@ -66,17 +64,6 @@ interface CtxMenuPayload {
    */
   anchor?: "left" | "right";
 }
-
-const ZOOM_LEVELS = [0.75, 0.9, 1.0, 1.1, 1.25, 1.5, 2.0];
-const ZOOM_LABEL: Record<number, string> = {
-  0.75: "75%",
-  0.9: "90%",
-  1.0: "100%",
-  1.1: "110%",
-  1.25: "125%",
-  1.5: "150%",
-  2.0: "200%",
-};
 
 // ── Palette helpers ────────────────────────────────────────────────────────────
 
@@ -133,11 +120,8 @@ function searchCommands(cmds: SerializableCommand[], query: string): Serializabl
 export function OverlayApp() {
   // ── Context menu state ───────────────────────────────────────────────────
   const [menu, setMenu] = useState<CtxMenuPayload | null>(null);
-  const [zoomOpen, setZoomOpen] = useState(false);
-  /** "Set channel" submenu — lists the 8 FDC3 system channels + "No channel"
-   *  for the tab the menu was opened on. Mutually exclusive with Zoom /
-   *  Add Widget (only one submenu open at a time). */
-  const [channelOpen, setChannelOpen] = useState(false);
+  /** Open Zoom / Set channel submenu of the per-widget items (one at a time). */
+  const [widgetSubmenu, setWidgetSubmenu] = useState<WidgetSubmenu>(null);
   /** "Add Widget" submenu — when open, the ctx menu shows an app list and a
    *  "View all widgets" footer beneath that item. Mutually exclusive with
    *  the Zoom submenu so opening one closes the other. */
@@ -191,8 +175,7 @@ export function OverlayApp() {
         await Promise.all([
           listen<CtxMenuPayload>("wm:ctx-menu", (e) => {
             setMenu(e.payload);
-            setZoomOpen(false);
-            setChannelOpen(false);
+            setWidgetSubmenu(null);
             setAddWidgetOpen(false);
             setOverflowMenu(null);
           }),
@@ -293,25 +276,11 @@ export function OverlayApp() {
     invoke("wm_ctx_menu_close").catch(console.error);
   }
 
-  // ── Set-channel submenu actions ──────────────────────────────────────────
-  // Joins/leaves the FDC3 channel for the tab the ctx menu was opened on
-  // (`menu.tabLabel`) — per-widget, not per-Terminal. See
-  // `wm_set_panel_fdc3_channel` in layout/commands.rs.
-
-  function selectChannel(id: string | null) {
-    if (!menu?.tabLabel) return;
-    invoke("wm_set_panel_fdc3_channel", { label: menu.tabLabel, channelId: id }).catch(
-      console.error
-    );
-    dismiss();
-  }
-
   // ── Context menu actions ─────────────────────────────────────────────────
 
   function dismiss() {
     setMenu(null);
-    setZoomOpen(false);
-    setChannelOpen(false);
+    setWidgetSubmenu(null);
     setAddWidgetOpen(false);
     invoke("wm_ctx_menu_close").catch(console.error);
   }
@@ -321,8 +290,7 @@ export function OverlayApp() {
   // App Menu drawer). Parking would race with the next overlay_raise.
   function dismissForOverlaySwap() {
     setMenu(null);
-    setZoomOpen(false);
-    setChannelOpen(false);
+    setWidgetSubmenu(null);
     setAddWidgetOpen(false);
   }
 
@@ -560,19 +528,8 @@ export function OverlayApp() {
           const SUBMENU_W = 240;
           const parentRight = useRightAnchor ? menu.x : (left ?? 0) + menuW;
           const flipSubmenuLeft = parentRight + SUBMENU_W > window.innerWidth - 8;
-          const currentZoom = menu.zoomFactor ?? 1.0;
           const hasTab = !!menu.tabLabel;
           const kind = menu.kind ?? (hasTab ? "tab" : "stack-kebab");
-          const isStandalone = hasTab && menu.stackPath.length === 0;
-          const customItems = hasTab ? ctxMenuItemsFor(menu.appId ?? "") : [];
-          const customCtx: CtxMenuContext = {
-            appId: menu.appId ?? "",
-            label: menu.tabLabel ?? "",
-            title: menu.displayName ?? "",
-            displayName: menu.displayName,
-            stackPath: menu.stackPath,
-            nTabs: menu.nTabs,
-          };
 
           // "Add Widget" expands into an inline submenu listing every app in
           // the App Directory. Clicking an app emits `wm:launch-app-from-menu`
@@ -628,8 +585,7 @@ export function OverlayApp() {
                         aria-expanded={addWidgetOpen}
                         onClick={() => {
                           setAddWidgetOpen((o) => !o);
-                          setZoomOpen(false);
-                          setChannelOpen(false);
+                          setWidgetSubmenu(null);
                         }}
                       >
                         Add Widget
@@ -714,257 +670,24 @@ export function OverlayApp() {
                     hasTab && (
                       <>
                         {addWidgetItem}
-                        <button
-                          type="button"
-                          role="menuitem"
-                          className="wm-tab-ctx-menu__item"
-                          onClick={duplicate}
-                        >
-                          Duplicate
-                        </button>
-
-                        <div className="wm-tab-ctx-menu__separator" role="separator" />
-
-                        <button
-                          type="button"
-                          role="menuitem"
-                          className="wm-tab-ctx-menu__item"
-                          onClick={() => {
-                            invoke("wm_request_rename", { label: menu.tabLabel }).catch(
-                              console.error
-                            );
-                            dismiss();
+                        <WidgetMenuItems
+                          target={{
+                            label: menu.tabLabel ?? "",
+                            appId: menu.appId ?? "",
+                            displayName: menu.displayName,
+                            zoomFactor: menu.zoomFactor,
+                            fdc3Channel: menu.fdc3Channel,
+                            keepAlive: menu.keepAlive,
+                            showAddressBar: menu.showAddressBar,
+                            stackPath: menu.stackPath,
+                            nTabs: menu.nTabs,
+                            floating: false,
                           }}
-                        >
-                          Rename
-                        </button>
-                        <button
-                          type="button"
-                          role="menuitem"
-                          className="wm-tab-ctx-menu__item"
-                          onClick={() => {
-                            invoke("wm_rename_panel", {
-                              label: menu.tabLabel,
-                              displayName: null,
-                            }).catch(console.error);
-                            dismiss();
-                          }}
-                        >
-                          Reset name
-                        </button>
-
-                        <div className="wm-tab-ctx-menu__separator" role="separator" />
-
-                        <div className="wm-tab-ctx-menu__submenu-wrap">
-                          <button
-                            type="button"
-                            role="menuitem"
-                            className="wm-tab-ctx-menu__item wm-tab-ctx-menu__item--submenu"
-                            aria-haspopup="true"
-                            aria-expanded={zoomOpen}
-                            onClick={() => {
-                              setZoomOpen((o) => !o);
-                              setChannelOpen(false);
-                            }}
-                          >
-                            Zoom
-                            <span className="wm-tab-ctx-menu__submenu-arrow">›</span>
-                          </button>
-                          {zoomOpen && (
-                            <div className="wm-tab-ctx-menu__submenu" role="menu">
-                              {ZOOM_LEVELS.map((level) => {
-                                const active = Math.abs(currentZoom - level) < 0.01;
-                                return (
-                                  <button
-                                    key={level}
-                                    type="button"
-                                    role="menuitemradio"
-                                    aria-checked={active}
-                                    className={`wm-tab-ctx-menu__item wm-tab-ctx-menu__item--zoom${active ? " wm-tab-ctx-menu__item--zoom-active" : ""}`}
-                                    onClick={() => {
-                                      invoke("wm_set_zoom", {
-                                        label: menu.tabLabel,
-                                        zoomFactor: level,
-                                      }).catch(console.error);
-                                      dismiss();
-                                    }}
-                                  >
-                                    <span className="wm-tab-ctx-menu__zoom-check">
-                                      {active ? "✓" : ""}
-                                    </span>
-                                    {ZOOM_LABEL[level]}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          )}
-                        </div>
-
-                        <button
-                          type="button"
-                          role="menuitem"
-                          className="wm-tab-ctx-menu__item"
-                          onClick={() => {
-                            invoke("wm_set_zoom", {
-                              label: menu.tabLabel,
-                              zoomFactor: 1.0,
-                            }).catch(console.error);
-                            dismiss();
-                          }}
-                        >
-                          Reset zoom
-                        </button>
-
-                        <div className="wm-tab-ctx-menu__separator" role="separator" />
-
-                        <div className="wm-tab-ctx-menu__submenu-wrap">
-                          <button
-                            type="button"
-                            role="menuitem"
-                            className="wm-tab-ctx-menu__item wm-tab-ctx-menu__item--submenu"
-                            aria-haspopup="true"
-                            aria-expanded={channelOpen}
-                            onClick={() => {
-                              setChannelOpen((o) => !o);
-                              setZoomOpen(false);
-                            }}
-                          >
-                            <span className="wm-tab-ctx-menu__item-label">
-                              <span
-                                className="wm-tab-ctx-menu__channel-dot"
-                                style={{
-                                  background:
-                                    FDC3_CHANNELS.find((c) => c.id === menu.fdc3Channel)?.color ??
-                                    "transparent",
-                                }}
-                                aria-hidden
-                              />
-                              Set channel
-                            </span>
-                            <span className="wm-tab-ctx-menu__submenu-arrow">›</span>
-                          </button>
-                          {channelOpen && (
-                            <div className="wm-tab-ctx-menu__submenu" role="menu">
-                              <button
-                                type="button"
-                                role="menuitemradio"
-                                aria-checked={!menu.fdc3Channel}
-                                className="wm-tab-ctx-menu__item wm-tab-ctx-menu__item--channel"
-                                onClick={() => selectChannel(null)}
-                              >
-                                <span
-                                  className="wm-tab-ctx-menu__channel-dot wm-tab-ctx-menu__channel-dot--none"
-                                  aria-hidden
-                                />
-                                No channel
-                              </button>
-                              {FDC3_CHANNELS.map((ch) => (
-                                <button
-                                  key={ch.id}
-                                  type="button"
-                                  role="menuitemradio"
-                                  aria-checked={menu.fdc3Channel === ch.id}
-                                  className="wm-tab-ctx-menu__item wm-tab-ctx-menu__item--channel"
-                                  onClick={() => selectChannel(ch.id)}
-                                >
-                                  <span
-                                    className="wm-tab-ctx-menu__channel-dot"
-                                    style={{ background: ch.color }}
-                                    aria-hidden
-                                  />
-                                  {ch.name}
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-
-                        <button
-                          type="button"
-                          role="menuitemcheckbox"
-                          aria-checked={!!menu.keepAlive}
-                          className="wm-tab-ctx-menu__item"
-                          onClick={() => {
-                            invoke("wm_set_panel_keep_alive", {
-                              label: menu.tabLabel,
-                              keepAlive: !menu.keepAlive,
-                            }).catch(console.error);
-                            dismiss();
-                          }}
-                        >
-                          <span className="wm-tab-ctx-menu__zoom-check">
-                            {menu.keepAlive ? "✓" : ""}
-                          </span>
-                          Keep running in background
-                        </button>
-
-                        {menu.appId === GENERIC_WEB_WIDGET_APP_ID && (
-                          <button
-                            type="button"
-                            role="menuitemcheckbox"
-                            aria-checked={!!menu.showAddressBar}
-                            className="wm-tab-ctx-menu__item"
-                            onClick={() => {
-                              invoke("wm_set_panel_show_address_bar", {
-                                label: menu.tabLabel,
-                                showAddressBar: !menu.showAddressBar,
-                              }).catch(console.error);
-                              dismiss();
-                            }}
-                          >
-                            <span className="wm-tab-ctx-menu__zoom-check">
-                              {menu.showAddressBar ? "✓" : ""}
-                            </span>
-                            Show address bar
-                          </button>
-                        )}
-
-                        {customItems.length > 0 && (
-                          <>
-                            <div className="wm-tab-ctx-menu__separator" role="separator" />
-                            {customItems.map((item, i) => (
-                              <button
-                                key={i}
-                                type="button"
-                                role="menuitem"
-                                className={`wm-tab-ctx-menu__item${item.danger ? " wm-tab-ctx-menu__item--danger" : ""}`}
-                                onClick={() => item.onClick(customCtx, dismiss)}
-                              >
-                                {item.label}
-                              </button>
-                            ))}
-                          </>
-                        )}
-
-                        <div className="wm-tab-ctx-menu__separator" role="separator" />
-
-                        <button
-                          type="button"
-                          role="menuitem"
-                          className="wm-tab-ctx-menu__item wm-tab-ctx-menu__item--danger"
-                          onClick={() => {
-                            invoke("close_tab", { label: menu.tabLabel }).catch(console.error);
-                            dismiss();
-                          }}
-                        >
-                          Close tab
-                        </button>
-
-                        {!isStandalone && (
-                          <button
-                            type="button"
-                            role="menuitem"
-                            className="wm-tab-ctx-menu__item wm-tab-ctx-menu__item--danger"
-                            onClick={() => {
-                              invoke("wm_close_stack", { path: menu.stackPath }).catch(
-                                console.error
-                              );
-                              dismiss();
-                            }}
-                          >
-                            Close group ({menu.nTabs} {menu.nTabs === 1 ? "tab" : "tabs"})
-                          </button>
-                        )}
+                          dismiss={dismiss}
+                          submenu={widgetSubmenu}
+                          onSubmenu={setWidgetSubmenu}
+                          onDuplicate={duplicate}
+                        />
                       </>
                     )
                   );

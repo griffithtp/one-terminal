@@ -671,6 +671,63 @@ body,
   color: var(--ot-text-strong);
 }
 
+/* ── Popout window chrome (Plan 17) ───────────────────────────────────────── */
+/* The popout's chrome webview is sized to the header strip, growing to the
+ * full window (transparent) only while a menu is open. */
+.wm-popout {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+}
+.wm-popout__header {
+  position: relative;
+  width: 100%;
+  cursor: default;
+}
+.wm-popout__header:active {
+  cursor: default;
+}
+/* Clicks on the title / badges fall through to the drag-region header. */
+.wm-popout__header > :not(button):not(input):not(.wm-popout__resize) {
+  pointer-events: none;
+}
+.wm-popout__btn {
+  font-size: 13px;
+}
+.wm-panel-header__popout {
+  font-size: 12px;
+}
+.wm-popout__resize {
+  position: absolute;
+  top: 0;
+  z-index: 1;
+}
+.wm-popout__resize--n {
+  left: 0;
+  right: 0;
+  cursor: ns-resize;
+}
+.wm-popout__resize--nw {
+  left: 0;
+  cursor: nwse-resize;
+}
+.wm-popout__resize--ne {
+  right: 0;
+  cursor: nesw-resize;
+}
+.wm-popout__rename {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 20px;
+  padding: 0 6px;
+  font: inherit;
+  color: var(--ot-text-strong);
+  background: var(--ot-bg-elevated);
+  border: 1px solid var(--ot-accent);
+  border-radius: 3px;
+  outline: none;
+}
+
 /* ── Generic Web Widget address-bar row ───────────────────────────────────── */
 .wm-panel-address-bar {
   display: flex;

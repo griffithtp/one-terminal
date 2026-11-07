@@ -25,6 +25,7 @@
     "core:window:allow-set-position",
     "core:event:allow-emit",
     "core:event:allow-emit-to",
-    "core:event:allow-listen"
+    "core:event:allow-listen",
+    "core:window:allow-set-background-color"
   ]
 }

@@ -18,6 +18,9 @@ pub struct HostLayout {
     pub window_height: f64,
     pub stacks: Vec<StackHeader>,
     pub splitters: Vec<SplitterHandle>,
+    /// Panels popped out into their own window (Plan 17) — not laid out in
+    /// this window, listed so the chrome can offer Focus / Dock back.
+    pub floating: Vec<StackTab>,
 }
 
 #[derive(Clone, Serialize)]
@@ -164,6 +167,7 @@ pub fn compute_host_layout(
         window_height: origin_y + content_h,
         stacks,
         splitters,
+        floating: Vec::new(),
     }
 }
 
