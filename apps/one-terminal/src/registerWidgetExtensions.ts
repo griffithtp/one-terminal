@@ -4,7 +4,7 @@
  * feature files that register them.
  *
  * Imported by both the Terminal entry (`main.tsx`) and the popout window entry
- * (`popout.tsx`, Plan 17), so a widget's custom menu items appear identically
+ * (`popout.tsx`), so a widget's custom menu items appear identically
  * whether it's tiled in a Terminal or popped out. Add registration imports
  * here rather than in `main.tsx`.
  *

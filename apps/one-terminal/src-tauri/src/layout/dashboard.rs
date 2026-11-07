@@ -71,7 +71,7 @@ pub struct PersistedDashboard {
     /// cannot be undone.
     #[serde(default)]
     pub closed: bool,
-    /// Panels popped out into their own window (Plan 17). See
+    /// Panels popped out into their own window. See
     /// [`FloatingPanel`](super::persist::FloatingPanel).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub floating: Vec<super::persist::FloatingPanel>,

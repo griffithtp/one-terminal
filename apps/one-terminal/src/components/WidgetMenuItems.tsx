@@ -27,9 +27,9 @@ export interface WidgetMenuTarget {
   /** Path to the containing Stack; `[]` for a standalone or popped-out panel. */
   stackPath: number[];
   nTabs: number;
-  /** `true` when the widget is popped out into its own window (Plan 17). */
+  /** `true` when the widget is popped out into its own window. */
   floating: boolean;
-  /** Glue group when popped out and glued to other popouts (Plan 17-H). */
+  /** Glue group when popped out and glued to other popouts. */
   group?: string;
 }
 

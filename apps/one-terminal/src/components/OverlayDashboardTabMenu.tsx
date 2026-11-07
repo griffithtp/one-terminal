@@ -55,7 +55,7 @@ export function OverlayDashboardTabMenu() {
   const [channelOpen, setChannelOpen] = useState(false);
   const [keepAliveOpen, setKeepAliveOpen] = useState(false);
   const [floatingOpen, setFloatingOpen] = useState(false);
-  /** Widgets of this dashboard popped out into their own window (Plan 17) —
+  /** Widgets of this dashboard popped out into their own window —
    *  only known for the active dashboard, whose layout is live. */
   const [floating, setFloating] = useState<StackTab[]>([]);
   const { apps, enginesFor } = useAppDirectory();

@@ -11,7 +11,7 @@ import {
 } from "./theme/themeStore";
 import "./wm.css";
 
-// Popout window entry (Plan 17) — the header + widget menu of one popped-out
+// Popout window entry — the header + widget menu of one popped-out
 // widget. Deliberately light: no Terminal chrome, dashboards or palette.
 
 applyTheme(loadTheme());

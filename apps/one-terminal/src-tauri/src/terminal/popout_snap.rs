@@ -1,4 +1,4 @@
-//! Magnetic snapping between popout windows (Plan 17-H) — pure geometry, no
+//! Magnetic snapping between popout windows — pure geometry, no
 //! Tauri, so it's unit-tested directly.
 //!
 //! While a popout (or a glued group of them) is dragged, each moving window's

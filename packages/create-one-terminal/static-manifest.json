@@ -177,6 +177,10 @@
       "overlay": "enterprise"
     },
     {
+      "path": "apps/one-terminal/popout.html",
+      "overlay": "shared"
+    },
+    {
       "path": "apps/one-terminal/src-tauri/capabilities/default.json",
       "overlay": "shared"
     },
@@ -258,6 +262,14 @@
     },
     {
       "path": "apps/one-terminal/src-tauri/src/terminal/mod.rs",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src-tauri/src/terminal/popout.rs",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src-tauri/src/terminal/popout_snap.rs",
       "overlay": "shared"
     },
     {
@@ -401,6 +413,10 @@
       "overlay": "shared"
     },
     {
+      "path": "apps/one-terminal/src/components/PopoutApp.tsx",
+      "overlay": "shared"
+    },
+    {
       "path": "apps/one-terminal/src/components/SplitterHandleLayer.tsx",
       "overlay": "shared"
     },
@@ -410,6 +426,10 @@
     },
     {
       "path": "apps/one-terminal/src/components/WidgetCatalog.tsx",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/components/WidgetMenuItems.tsx",
       "overlay": "shared"
     },
     {
@@ -530,6 +550,14 @@
     },
     {
       "path": "apps/one-terminal/src/main.tsx",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/popout.tsx",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/registerWidgetExtensions.ts",
       "overlay": "shared"
     },
     {

@@ -1,4 +1,4 @@
-//! Popout windows (Plan 17) — a panel detached from a Terminal's tiling tree
+//! Popout windows — a panel detached from a Terminal's tiling tree
 //! into its own OS window, and docked back.
 //!
 //! A popout is a dumb host: the panel's `LeafMeta` (and its entry in the
@@ -17,7 +17,7 @@
 //! `reparent`/`add_child` always insert on top, so the chrome is always added
 //! after the panel.
 //!
-//! Popouts of one Terminal can be glued together (Plan 17-H): the header is
+//! Popouts of one Terminal can be glued together: the header is
 //! dragged by [`wm_popout_drag_start`] / [`wm_popout_drag_move`] /
 //! [`wm_popout_drag_end`] rather than the OS, so the windows can be snapped
 //! against each other live ([`super::popout_snap`]) and a glued group moves as
@@ -111,7 +111,7 @@ fn menus_open() -> &'static Mutex<HashSet<String>> {
     M.get_or_init(Default::default)
 }
 
-/// A header drag in progress (Plan 17-H), keyed by the dragged popout.
+/// A header drag in progress, keyed by the dragged popout.
 struct Drag {
     /// Cursor position at drag start, physical desktop pixels.
     cursor: PhysicalPosition<f64>,
@@ -159,7 +159,7 @@ const ADJUST_TTL: Duration = Duration::from_millis(250);
 
 /// A glued popout set aside while maximised or minimised: the group neither
 /// moves, resizes, raises nor snaps to it, and on restore it goes back to
-/// its old place relative to the group (Plan 17-H).
+/// its old place relative to the group.
 struct Suspended {
     /// Outer rect before it was maximised / minimised.
     normal: Rect,
@@ -762,7 +762,7 @@ pub fn dock_panel(app: &AppHandle, manager: &TerminalManager, label: &str) -> Re
     Ok(())
 }
 
-// ── Glue groups (Plan 17-H) ───────────────────────────────────────────────────
+// ── Glue groups ───────────────────────────────────────────────────────────────
 
 /// Labels of every panel glued with `label`, itself included; empty if it
 /// isn't glued.

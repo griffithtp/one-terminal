@@ -672,7 +672,7 @@ body,
   color: var(--ot-text-strong);
 }
 
-/* ── Popout window chrome (Plan 17) ───────────────────────────────────────── */
+/* ── Popout window chrome ─────────────────────────────────────────────────── */
 /* The popout's chrome webview is sized to the header strip, growing to the
  * full window (transparent) only while a menu is open. */
 .wm-popout {
@@ -699,7 +699,7 @@ body,
 .wm-popout__btn {
   font-size: 13px;
 }
-/* Plan 17-H: accent edge while a drag would glue this window to another. */
+/* Accent edge while a drag would glue this window to another. */
 .wm-popout__header--snapping {
   box-shadow: inset 0 -2px 0 var(--ot-accent);
 }

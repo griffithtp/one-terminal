@@ -30,7 +30,7 @@ interface MenuAnchor {
 }
 
 /**
- * Chrome of a popout window (Plan 17): the header strip above a popped-out
+ * Chrome of a popout window: the header strip above a popped-out
  * widget, plus its menu. Rendered in the `<popout>-chrome` webview, which is
  * sized to the header strip and grows to the full window (transparent) only
  * while a menu is open — so the menu draws above the widget without an extra
@@ -50,7 +50,7 @@ export function PopoutApp() {
   const [submenu, setSubmenu] = useState<WidgetSubmenu>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [maximized, setMaximized] = useState(false);
-  /** Lit while a drag would glue this window to another (Plan 17-H). */
+  /** Lit while a drag would glue this window to another. */
   const [snapping, setSnapping] = useState(false);
   const tabRef = useRef<StackTab | null>(null);
   tabRef.current = tab;
@@ -151,7 +151,7 @@ export function PopoutApp() {
         className={`wm-panel-header wm-popout__header${snapping ? " wm-popout__header--snapping" : ""}`}
         style={{ height: PANEL_HEADER_HEIGHT }}
         // Dragged by Rust rather than the OS so popouts can snap and glue
-        // together (Plan 17-H) — see `useHeaderDrag`.
+        // together — see `useHeaderDrag`.
         onPointerDown={startDrag}
         onDoubleClick={(e) => {
           if (e.target === e.currentTarget) toggleMaximize();
@@ -390,13 +390,13 @@ function RenameInput({
 }
 
 /** Maximise / restore through Rust, which unglues a glued popout before it
- *  maximises and glues it back in place on restore (Plan 17-H). */
+ *  maximises and glues it back in place on restore. */
 function toggleMaximize() {
   invoke("wm_popout_toggle_maximize").catch(console.error);
 }
 
 /**
- * Header drag for a popout (Plan 17-H). Past a small dead zone the press
+ * Header drag for a popout. Past a small dead zone the press
  * becomes a Rust-driven drag: `wm_popout_drag_start` snapshots the window
  * and its glue group, each animation frame `wm_popout_drag_move` moves them
  * to follow the cursor (Rust reads the cursor itself, in physical desktop

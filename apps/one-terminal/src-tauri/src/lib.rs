@@ -1917,7 +1917,7 @@ pub fn run() {
             // Emit the initial terminal list to all chrome webviews.
             manager.emit_terminals(app.handle());
 
-            // ── Restore popped-out widgets (Plan 17) ──────────────────────
+            // ── Restore popped-out widgets ────────────────────────────────
             // Deferred off the setup closure: opening a popout dispatches to
             // the main thread and waits, which would deadlock here — and it
             // keeps popouts from delaying the Terminals' first paint.

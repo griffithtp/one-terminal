@@ -111,7 +111,7 @@ pub struct PersistedLayout {
     /// Stable id of the maximised Stack, if any.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub maximized_stack_id: Option<String>,
-    /// Panels popped out of the tree into their own window (Plan 17). Their
+    /// Panels popped out of the tree into their own window. Their
     /// metadata stays in `meta`; they're simply absent from `tree`.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub floating: Vec<FloatingPanel>,
@@ -133,7 +133,7 @@ pub struct FloatingPanel {
     /// Where the panel goes back to when docked.
     #[serde(default)]
     pub dock_hint: DockHint,
-    /// Glue group (Plan 17-H): popouts sharing an id were snapped edge to
+    /// Glue group: popouts sharing an id were snapped edge to
     /// edge and move together. `None` = not glued. A group always has at
     /// least two members — one left alone is dissolved.
     #[serde(default, skip_serializing_if = "Option::is_none")]

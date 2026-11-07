@@ -29,7 +29,7 @@ struct ManagerInner {
     /// persisted — killing the process drops every lock for free, so
     /// there's no "stale lock survived a crash" state to recover.
     active_locks: HashMap<String, String>,
-    /// Open popout windows (Plan 17): popout window label → its panel and
+    /// Open popout windows: popout window label → its panel and
     /// owning Terminal. Runtime-only — the floating list itself is persisted
     /// with the dashboard on the owner's `LayoutTree`.
     popouts: HashMap<String, PopoutState>,
@@ -115,7 +115,7 @@ impl TerminalManager {
     }
 
     /// Resolve the Terminal a command acts on from the invoking window's
-    /// label: the Terminal itself, or — for a popout window (Plan 17) — the
+    /// label: the Terminal itself, or — for a popout window — the
     /// Terminal that owns its panel. Commands use this (via `get_terminal!`)
     /// so every panel command works unchanged when invoked from a popout.
     pub fn resolve(&self, window_label: &str) -> Option<Arc<TerminalState>> {

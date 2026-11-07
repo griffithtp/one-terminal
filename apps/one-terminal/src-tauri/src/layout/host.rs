@@ -18,7 +18,7 @@ pub struct HostLayout {
     pub window_height: f64,
     pub stacks: Vec<StackHeader>,
     pub splitters: Vec<SplitterHandle>,
-    /// Panels popped out into their own window (Plan 17) — not laid out in
+    /// Panels popped out into their own window — not laid out in
     /// this window, listed so the chrome can offer Focus / Dock back.
     pub floating: Vec<StackTab>,
 }
@@ -74,7 +74,7 @@ pub struct StackTab {
     /// when this tab is active (Generic Web Widget panels only). Defaults
     /// to `false` — hidden until the user opts in via the tab context menu.
     pub show_address_bar: bool,
-    /// Glue group of a popped-out panel (Plan 17-H). `None` when tiled or
+    /// Glue group of a popped-out panel. `None` when tiled or
     /// not glued.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub group: Option<String>,

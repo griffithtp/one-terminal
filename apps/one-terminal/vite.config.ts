@@ -15,7 +15,7 @@ export default defineConfig({
     minify: !process.env.TAURI_DEBUG ? "esbuild" : false,
     sourcemap: !!process.env.TAURI_DEBUG,
     rollupOptions: {
-      // Popout windows (Plan 17) load a separate, light entry — header +
+      // Popout windows load a separate, light entry — header +
       // widget menu only — so popping a widget out doesn't pay for the
       // full Terminal chrome bundle.
       input: {

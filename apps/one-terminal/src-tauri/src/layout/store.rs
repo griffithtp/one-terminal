@@ -75,7 +75,7 @@ struct Inner {
     /// removed), at which point `resolve_maximized_path` returns None and
     /// the normal layout resumes.
     maximized_stack_id: Option<String>,
-    /// Panels popped out of `root` into their own window (Plan 17). Their
+    /// Panels popped out of `root` into their own window. Their
     /// `meta` entries stay here — the owning Terminal is unchanged — they're
     /// just not laid out by `reflow`.
     floating: Vec<FloatingPanel>,
@@ -946,7 +946,7 @@ impl LayoutTree {
         removed
     }
 
-    /// Pop the Leaf `label` out of the tree into the floating list (Plan 17),
+    /// Pop the Leaf `label` out of the tree into the floating list,
     /// keeping its metadata and webview. Records a [`DockHint`] so
     /// [`dock`](Self::dock) can put it back where it was. Returns the new
     /// floating entry, or `None` if `label` isn't a tiled leaf.
@@ -981,7 +981,7 @@ impl LayoutTree {
         Some(floating)
     }
 
-    /// Return a floating panel to the tree (Plan 17), tried in order: back
+    /// Return a floating panel to the tree, tried in order: back
     /// into its original Stack at its original index; next to its recorded
     /// sibling; as a new tab beside the active panel; as the root of an
     /// empty tree. The docked leaf becomes active. Returns `false` if `label`
@@ -1093,7 +1093,7 @@ impl LayoutTree {
         changed
     }
 
-    /// Glue group of floating panel `label` (Plan 17-H), if any.
+    /// Glue group of floating panel `label`, if any.
     pub fn floating_group(&self, label: &str) -> Option<String> {
         let g = self.inner.read().unwrap();
         g.floating
@@ -2141,7 +2141,7 @@ fn valid_floating(
 }
 
 /// Clear the glue group of any floating panel that is its group's only
-/// member — left behind by a dock, close or unglue (Plan 17-H).
+/// member — left behind by a dock, close or unglue.
 fn dissolve_singleton_groups(floating: &mut [FloatingPanel]) {
     let mut counts: HashMap<String, usize> = HashMap::new();
     for g in floating.iter().filter_map(|f| f.group.as_ref()) {
