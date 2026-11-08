@@ -601,6 +601,7 @@ body,
   font-size: 12px;
   cursor: grab;
   user-select: none;
+  -webkit-user-select: none;
   pointer-events: auto;
   z-index: 6;
   box-sizing: border-box;
@@ -669,6 +670,79 @@ body,
 .wm-panel-header__menu:hover {
   background: var(--ot-bg-elevated-hover);
   color: var(--ot-text-strong);
+}
+
+/* ── Popout window chrome ─────────────────────────────────────────────────── */
+/* The popout's chrome webview is sized to the header strip, growing to the
+ * full window (transparent) only while a menu is open. */
+.wm-popout {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  /* Nothing in the chrome is selectable text — dragging or double-clicking
+   * the header must never highlight the widget title. */
+  user-select: none;
+  -webkit-user-select: none;
+}
+.wm-popout__header {
+  position: relative;
+  width: 100%;
+  cursor: default;
+}
+.wm-popout__header:active {
+  cursor: default;
+}
+/* Clicks on the title / badges fall through to the drag-region header. */
+.wm-popout__header > :not(button):not(input):not(.wm-popout__resize) {
+  pointer-events: none;
+}
+.wm-popout__btn {
+  font-size: 13px;
+}
+/* Accent edge while a drag would glue this window to another. */
+.wm-popout__header--snapping {
+  box-shadow: inset 0 -2px 0 var(--ot-accent);
+}
+.wm-popout__glued {
+  font-size: 10px;
+  line-height: 1;
+  color: var(--ot-accent-strong);
+  flex-shrink: 0;
+}
+.wm-panel-header__popout {
+  font-size: 12px;
+}
+.wm-popout__resize {
+  position: absolute;
+  top: 0;
+  z-index: 1;
+}
+.wm-popout__resize--n {
+  left: 0;
+  right: 0;
+  cursor: ns-resize;
+}
+.wm-popout__resize--nw {
+  left: 0;
+  cursor: nwse-resize;
+}
+.wm-popout__resize--ne {
+  right: 0;
+  cursor: nesw-resize;
+}
+.wm-popout__rename {
+  user-select: text;
+  -webkit-user-select: text;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 20px;
+  padding: 0 6px;
+  font: inherit;
+  color: var(--ot-text-strong);
+  background: var(--ot-bg-elevated);
+  border: 1px solid var(--ot-accent);
+  border-radius: 3px;
+  outline: none;
 }
 
 /* ── Generic Web Widget address-bar row ───────────────────────────────────── */

@@ -68,6 +68,9 @@ export interface StackTab {
    *  when this tab is active (Generic Web Widget panels only). Defaults to
    *  `false` — hidden until the user opts in via the tab context menu. */
   showAddressBar: boolean;
+  /** Glue group of a popped-out panel; absent when tiled or
+   *  not glued to another popout. */
+  group?: string;
 }
 
 export interface StackHeader {
@@ -114,6 +117,8 @@ export interface HostLayout {
   windowHeight: number;
   stacks: StackHeader[];
   splitters: SplitterHandle[];
+  /** Widgets popped out into their own window. */
+  floating: StackTab[];
 }
 
 // ── Overflow menu (tab strip dropdown, rendered in overlay) ───────────────────

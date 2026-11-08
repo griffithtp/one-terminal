@@ -19,6 +19,7 @@ use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 
 use super::dashboard::PersistedDashboard;
+use super::docking::DropZone;
 use super::node::LayoutNode;
 
 // ── Leaf-level metadata ───────────────────────────────────────────────────────
@@ -110,6 +111,49 @@ pub struct PersistedLayout {
     /// Stable id of the maximised Stack, if any.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub maximized_stack_id: Option<String>,
+    /// Panels popped out of the tree into their own window. Their
+    /// metadata stays in `meta`; they're simply absent from `tree`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub floating: Vec<FloatingPanel>,
+}
+
+// ── Floating (popped-out) panels ──────────────────────────────────────────────
+
+/// A panel detached from the tiling tree into its own popout window. The
+/// popout window's label is runtime-only and isn't persisted — a fresh one is
+/// minted whenever the popout is (re)opened.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct FloatingPanel {
+    /// Webview label of the panel — unchanged by detaching.
+    pub label: String,
+    /// Last-known popout window geometry. `width == 0.0` = not yet placed.
+    #[serde(default)]
+    pub bounds: PersistedWindowConfig,
+    /// Where the panel goes back to when docked.
+    #[serde(default)]
+    pub dock_hint: DockHint,
+    /// Glue group: popouts sharing an id were snapped edge to
+    /// edge and move together. `None` = not glued. A group always has at
+    /// least two members — one left alone is dissolved.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
+}
+
+/// Where a floating panel returns to on dock, tried in order: back into the
+/// Stack with `stack_id` at `index`; else next to `sibling` per `zone`; else
+/// as a new tab in the active Stack.
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct DockHint {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub stack_id: Option<String>,
+    #[serde(default)]
+    pub index: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sibling: Option<String>,
+    #[serde(default)]
+    pub zone: DropZone,
 }
 
 // ── Window config ─────────────────────────────────────────────────────────────
@@ -117,7 +161,7 @@ pub struct PersistedLayout {
 /// Saved OS window position and size. Values are logical pixels.
 /// Width/height of `0.0` signals "not yet saved" — callers fall back to default
 /// geometry and OS-chosen positioning in that case.
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct PersistedWindowConfig {
     pub x: f64,

@@ -12,10 +12,12 @@ use tauri::{
 use uuid::Uuid;
 
 use super::dashboard::{DashboardError, DashboardRegistry, DashboardSession, DashboardsSnapshot};
-use super::docking::{add_leaf_as_sibling, append_to_stack_at, is_stack_at, move_leaf, DropZone};
-use super::host::{compute_host_layout, HostLayout};
+use super::docking::{
+    add_leaf_as_sibling, append_to_stack_at, insert_into_stack_at, is_stack_at, move_leaf, DropZone,
+};
+use super::host::{compute_host_layout, HostLayout, StackTab};
 use super::node::{Direction, LayoutNode};
-use super::persist::{self, PersistedLayout, PersistedLeafMeta};
+use super::persist::{self, DockHint, FloatingPanel, PersistedLayout, PersistedLeafMeta};
 use super::reflow::{
     park_label_offscreen, park_offscreen, reflow_layout, SPLITTER_THICKNESS, TAB_STRIP_HEIGHT,
 };
@@ -73,6 +75,10 @@ struct Inner {
     /// removed), at which point `resolve_maximized_path` returns None and
     /// the normal layout resumes.
     maximized_stack_id: Option<String>,
+    /// Panels popped out of `root` into their own window. Their
+    /// `meta` entries stay here — the owning Terminal is unchanged — they're
+    /// just not laid out by `reflow`.
+    floating: Vec<FloatingPanel>,
     width: f64,
     height: f64,
 }
@@ -124,6 +130,7 @@ impl LayoutTree {
                 meta: HashMap::new(),
                 active_panel: None,
                 maximized_stack_id: None,
+                floating: Vec::new(),
                 width,
                 height,
             })),
@@ -216,6 +223,7 @@ impl LayoutTree {
                     .collect();
                 g.active_panel = layout.active_panel;
                 g.maximized_stack_id = layout.maximized_stack_id;
+                g.floating = valid_floating(layout.floating, g.root.as_ref(), &g.meta);
             }
 
             *self.session.write().unwrap() = session;
@@ -267,6 +275,7 @@ impl LayoutTree {
             g.meta.clear();
             g.active_panel = None;
             g.maximized_stack_id = None;
+            g.floating.clear();
         }
         self.schedule_save(500);
     }
@@ -444,7 +453,7 @@ impl LayoutTree {
                     None
                 }
             });
-        compute_host_layout(
+        let mut layout = compute_host_layout(
             g.root.as_ref(),
             max_path,
             0.0,
@@ -459,7 +468,31 @@ impl LayoutTree {
             &fdc3_channels,
             &keep_alives,
             &show_address_bars,
-        )
+        );
+        layout.floating = g
+            .floating
+            .iter()
+            .filter_map(|f| panel_tab(&g.meta, &f.label))
+            .collect();
+        layout
+    }
+
+    /// Header state for one panel — the payload a popout window's chrome
+    /// renders (`wm:popout-state`). `None` if `label` isn't a panel here.
+    pub fn panel_tab(&self, label: &str) -> Option<StackTab> {
+        let g = self.inner.read().unwrap();
+        let mut tab = panel_tab(&g.meta, label)?;
+        tab.group = g
+            .floating
+            .iter()
+            .find(|f| f.label == label)
+            .and_then(|f| f.group.clone());
+        Some(tab)
+    }
+
+    /// `true` if `label` is a panel of this Terminal, tiled or floating.
+    pub fn has_panel(&self, label: &str) -> bool {
+        self.inner.read().unwrap().meta.contains_key(label)
     }
 
     /// Emit the host-shell projection (tab strips + splitter handles) so the
@@ -882,6 +915,16 @@ impl LayoutTree {
     pub fn remove_panel(&self, label: &str) -> bool {
         let removed = {
             let mut g = self.inner.write().unwrap();
+            // A popped-out panel isn't in the tree — closing it just forgets
+            // its floating entry and metadata.
+            if let Some(i) = g.floating.iter().position(|f| f.label == label) {
+                g.floating.remove(i);
+                dissolve_singleton_groups(&mut g.floating);
+                g.meta.remove(label);
+                drop(g);
+                self.schedule_save(500);
+                return true;
+            }
             let removed = super::docking::remove_leaf(&mut g.root, label);
             if !removed {
                 return false;
@@ -901,6 +944,225 @@ impl LayoutTree {
             self.schedule_save(500);
         }
         removed
+    }
+
+    /// Pop the Leaf `label` out of the tree into the floating list,
+    /// keeping its metadata and webview. Records a [`DockHint`] so
+    /// [`dock`](Self::dock) can put it back where it was. Returns the new
+    /// floating entry, or `None` if `label` isn't a tiled leaf.
+    pub fn detach(&self, label: &str) -> Option<FloatingPanel> {
+        let floating = {
+            let mut g = self.inner.write().unwrap();
+            let root = g.root.as_ref()?;
+            let mut path = Vec::new();
+            if !super::docking::find_leaf_path(root, label, &mut path) {
+                return None;
+            }
+            let dock_hint = dock_hint_for(root, &path);
+            super::docking::remove_leaf(&mut g.root, label);
+            if g.active_panel.as_deref() == Some(label) {
+                let fallback = g.maximized_stack_id.as_deref().and_then(|id| {
+                    g.root
+                        .as_ref()
+                        .and_then(|r| first_leaf_in_stack_with_id(r, id))
+                });
+                g.active_panel = fallback.or_else(|| g.root.as_ref().and_then(first_leaf_label));
+            }
+            let entry = FloatingPanel {
+                label: label.to_string(),
+                bounds: Default::default(),
+                dock_hint,
+                group: None,
+            };
+            g.floating.push(entry.clone());
+            entry
+        };
+        self.schedule_save(500);
+        Some(floating)
+    }
+
+    /// Return a floating panel to the tree, tried in order: back
+    /// into its original Stack at its original index; next to its recorded
+    /// sibling; as a new tab beside the active panel; as the root of an
+    /// empty tree. The docked leaf becomes active. Returns `false` if `label`
+    /// isn't floating.
+    pub fn dock(&self, label: &str) -> bool {
+        {
+            let mut g = self.inner.write().unwrap();
+            let Some(i) = g.floating.iter().position(|f| f.label == label) else {
+                return false;
+            };
+            let hint = g.floating.remove(i).dock_hint;
+            dissolve_singleton_groups(&mut g.floating);
+            let leaf = LayoutNode::Leaf {
+                label: label.to_string(),
+                weight: 1.0,
+            };
+
+            let stack_path = hint.stack_id.as_deref().and_then(|id| {
+                let mut p = Vec::new();
+                g.root
+                    .as_ref()
+                    .is_some_and(|r| find_stack_path_by_id(r, id, &mut p))
+                    .then_some(p)
+            });
+            let path_of = |root: Option<&LayoutNode>, l: &str| {
+                let mut p = Vec::new();
+                root.is_some_and(|r| super::docking::find_leaf_path(r, l, &mut p))
+                    .then_some(p)
+            };
+            let sibling_path = hint
+                .sibling
+                .as_deref()
+                .and_then(|l| path_of(g.root.as_ref(), l));
+            let active_path = g
+                .active_panel
+                .clone()
+                .or_else(|| g.root.as_ref().and_then(first_leaf_label))
+                .and_then(|l| path_of(g.root.as_ref(), &l));
+
+            if g.root.is_none() {
+                g.root = Some(leaf);
+            } else if let Some(p) = stack_path {
+                insert_into_stack_at(g.root.as_mut().unwrap(), &p, hint.index, leaf);
+            } else if let Some(p) = sibling_path {
+                place_near(&mut g.root, &p, hint.zone, leaf);
+            } else if let Some(p) = active_path {
+                place_near(&mut g.root, &p, DropZone::Center, leaf);
+            } else {
+                add_leaf_as_sibling(&mut g.root, &[], DropZone::Right, leaf);
+            }
+            // Edge inserts wrap the leaf in a one-tab Stack; a panel that was
+            // a bare leaf before detaching goes back to being one.
+            if hint.stack_id.is_none() {
+                if let Some(root) = g.root.as_mut() {
+                    unwrap_singleton_stack(root, label);
+                }
+            }
+            g.active_panel = Some(label.to_string());
+        }
+        self.schedule_save(500);
+        true
+    }
+
+    /// Popped-out panels with what it takes to (re)create each one's webview:
+    /// `(entry, url, fdc3_channel)`.
+    pub fn floating(&self) -> Vec<(FloatingPanel, String, Option<String>)> {
+        let g = self.inner.read().unwrap();
+        g.floating
+            .iter()
+            .filter_map(|f| {
+                let m = g.meta.get(&f.label)?;
+                Some((f.clone(), m.url.clone(), m.fdc3_channel.clone()))
+            })
+            .collect()
+    }
+
+    /// Claim a kept-alive webview parked by a dashboard switch, so the
+    /// caller can reuse it. Returns `true` if `label` was parked.
+    pub fn take_parked(&self, label: &str) -> bool {
+        self.parked.write().unwrap().remove(label).is_some()
+    }
+
+    /// `true` if `label` is currently popped out rather than tiled.
+    pub fn is_floating(&self, label: &str) -> bool {
+        self.inner
+            .read()
+            .unwrap()
+            .floating
+            .iter()
+            .any(|f| f.label == label)
+    }
+
+    /// Record a popout window's latest geometry so it reopens in place.
+    /// Debounced like other layout saves. Returns `false` if not floating.
+    pub fn set_floating_bounds(&self, label: &str, bounds: persist::PersistedWindowConfig) -> bool {
+        let changed = {
+            let mut g = self.inner.write().unwrap();
+            match g.floating.iter_mut().find(|f| f.label == label) {
+                Some(f) if f.bounds != bounds => {
+                    f.bounds = bounds;
+                    true
+                }
+                _ => false,
+            }
+        };
+        if changed {
+            self.schedule_save(500);
+        }
+        changed
+    }
+
+    /// Glue group of floating panel `label`, if any.
+    pub fn floating_group(&self, label: &str) -> Option<String> {
+        let g = self.inner.read().unwrap();
+        g.floating
+            .iter()
+            .find(|f| f.label == label)
+            .and_then(|f| f.group.clone())
+    }
+
+    /// Labels of the floating panels glued in `group`.
+    pub fn group_members(&self, group: &str) -> Vec<String> {
+        let g = self.inner.read().unwrap();
+        g.floating
+            .iter()
+            .filter(|f| f.group.as_deref() == Some(group))
+            .map(|f| f.label.clone())
+            .collect()
+    }
+
+    /// Glue every floating panel in `labels` into one group: the existing
+    /// group of the first glued one, or a new id. Groups any of them were in
+    /// are merged whole, so gluing onto one member glues onto all of it.
+    /// Returns the group id, or `None` if fewer than two floating panels
+    /// are involved.
+    pub fn glue(&self, labels: &[String]) -> Option<String> {
+        let group = {
+            let mut g = self.inner.write().unwrap();
+            let involved: Vec<&FloatingPanel> = g
+                .floating
+                .iter()
+                .filter(|f| labels.contains(&f.label))
+                .collect();
+            if involved.len() < 2 {
+                return None;
+            }
+            let merged: HashSet<String> = involved.iter().filter_map(|f| f.group.clone()).collect();
+            let group = involved
+                .iter()
+                .find_map(|f| f.group.clone())
+                .unwrap_or_else(|| Uuid::new_v4().simple().to_string()[..8].to_string());
+            for f in g.floating.iter_mut() {
+                if labels.contains(&f.label) || f.group.as_ref().is_some_and(|x| merged.contains(x))
+                {
+                    f.group = Some(group.clone());
+                }
+            }
+            group
+        };
+        self.schedule_save(500);
+        Some(group)
+    }
+
+    /// Unglue floating panel `label` from its group; a group left with one
+    /// member is dissolved. Returns `false` if it wasn't glued.
+    pub fn unglue(&self, label: &str) -> bool {
+        let changed = {
+            let mut g = self.inner.write().unwrap();
+            match g.floating.iter_mut().find(|f| f.label == label) {
+                Some(f) if f.group.is_some() => {
+                    f.group = None;
+                    dissolve_singleton_groups(&mut g.floating);
+                    true
+                }
+                _ => false,
+            }
+        };
+        if changed {
+            self.schedule_save(500);
+        }
+        changed
     }
 
     /// Move the Leaf with `source_label` to `target_path` under `zone` semantics.
@@ -1182,11 +1444,7 @@ impl LayoutTree {
         // Collect what's currently alive so we can diff.
         let current_labels: Vec<String> = {
             let g = self.inner.read().unwrap();
-            let mut labels = Vec::new();
-            if let Some(root) = &g.root {
-                collect_leaf_labels(root, &mut labels);
-            }
-            labels
+            live_labels(&g)
         };
 
         // Load the clean snapshot and reset Inner.
@@ -1260,11 +1518,7 @@ impl LayoutTree {
         // those flagged `keep_alive` to park off-screen instead.
         let (to_destroy, to_park): (Vec<String>, Vec<String>) = {
             let g = self.inner.read().unwrap();
-            let mut labels = Vec::new();
-            if let Some(root) = &g.root {
-                collect_leaf_labels(root, &mut labels);
-            }
-            labels
+            live_labels(&g)
                 .into_iter()
                 .partition(|label| !g.meta.get(label).map(|m| m.keep_alive).unwrap_or(false))
         };
@@ -1362,11 +1616,7 @@ impl LayoutTree {
 
         let (to_destroy, to_park): (Vec<String>, Vec<String>) = {
             let g = self.inner.read().unwrap();
-            let mut labels = Vec::new();
-            if let Some(root) = &g.root {
-                collect_leaf_labels(root, &mut labels);
-            }
-            labels
+            live_labels(&g)
                 .into_iter()
                 .partition(|label| !g.meta.get(label).map(|m| m.keep_alive).unwrap_or(false))
         };
@@ -1457,11 +1707,7 @@ impl LayoutTree {
             let is_active = registry.id_of(name).as_deref() == Some(session.active.as_str());
             let labels = if is_active {
                 let g = self.inner.read().unwrap();
-                let mut out = Vec::new();
-                if let Some(root) = &g.root {
-                    collect_leaf_labels(root, &mut out);
-                }
-                out
+                live_labels(&g)
             } else {
                 vec![]
             };
@@ -1545,11 +1791,7 @@ impl LayoutTree {
             let is_active = registry.id_of(name).as_deref() == Some(session.active.as_str());
             let labels = if is_active {
                 let g = self.inner.read().unwrap();
-                let mut out = Vec::new();
-                if let Some(root) = &g.root {
-                    collect_leaf_labels(root, &mut out);
-                }
-                out
+                live_labels(&g)
             } else {
                 vec![]
             };
@@ -1649,6 +1891,7 @@ impl LayoutTree {
                         .collect();
                     g.active_panel = l.active_panel;
                     g.maximized_stack_id = l.maximized_stack_id;
+                    g.floating = valid_floating(l.floating, g.root.as_ref(), &g.meta);
 
                     // Collect panel pairs depth-first from the new tree.
                     if let Some(root) = &g.root {
@@ -1663,6 +1906,7 @@ impl LayoutTree {
                 g.meta.clear();
                 g.active_panel = None;
                 g.maximized_stack_id = None;
+                g.floating.clear();
                 Vec::new()
             }
         }
@@ -1855,6 +2099,169 @@ fn snapshot_for_persist(inner: &Inner) -> PersistedLayout {
         meta,
         active_panel: inner.active_panel.clone(),
         maximized_stack_id: inner.maximized_stack_id.clone(),
+        floating: inner.floating.clone(),
+    }
+}
+
+fn panel_tab(meta: &HashMap<String, LeafMeta>, label: &str) -> Option<StackTab> {
+    let m = meta.get(label)?;
+    Some(StackTab {
+        label: label.to_string(),
+        title: m.title.clone(),
+        url: m.url.clone(),
+        app_id: m.app_id.clone(),
+        display_name: m.display_name.clone(),
+        zoom_factor: m.zoom_factor,
+        fdc3_channel: m.fdc3_channel.clone(),
+        keep_alive: m.keep_alive,
+        show_address_bar: m.show_address_bar,
+        group: None,
+    })
+}
+
+/// Keep only floating entries that still have metadata and aren't also in the
+/// tree — a hand-edited or partially-written file mustn't produce a panel that
+/// is both tiled and popped out, or a popout with nothing to load.
+fn valid_floating(
+    floating: Vec<FloatingPanel>,
+    root: Option<&LayoutNode>,
+    meta: &HashMap<String, LeafMeta>,
+) -> Vec<FloatingPanel> {
+    let mut seen = HashSet::new();
+    let mut floating: Vec<FloatingPanel> = floating
+        .into_iter()
+        .filter(|f| {
+            meta.contains_key(&f.label)
+                && !root.is_some_and(|r| contains_label(r, &f.label))
+                && seen.insert(f.label.clone())
+        })
+        .collect();
+    dissolve_singleton_groups(&mut floating);
+    floating
+}
+
+/// Clear the glue group of any floating panel that is its group's only
+/// member — left behind by a dock, close or unglue.
+fn dissolve_singleton_groups(floating: &mut [FloatingPanel]) {
+    let mut counts: HashMap<String, usize> = HashMap::new();
+    for g in floating.iter().filter_map(|f| f.group.as_ref()) {
+        *counts.entry(g.clone()).or_default() += 1;
+    }
+    for f in floating.iter_mut() {
+        if f.group.as_ref().is_some_and(|g| counts[g] < 2) {
+            f.group = None;
+        }
+    }
+}
+
+/// Compute where a leaf at `path` should return to after being detached.
+/// Records its Stack (if any) and position, plus an adjacent leaf and side
+/// to fall back to should that Stack have dissolved by the time it docks.
+fn dock_hint_for(root: &LayoutNode, path: &[usize]) -> DockHint {
+    let mut hint = DockHint::default();
+    let Some((&leaf_idx, parent_path)) = path.split_last() else {
+        // Bare root leaf — nothing to anchor to.
+        return hint;
+    };
+    // Node whose siblings anchor the fallback: the leaf itself, or its Stack
+    // when this leaf is the Stack's only tab (the Stack dissolves with it).
+    let mut anchor_path = path;
+    if let Some(LayoutNode::Stack { id, children, .. }) = node_at(root, parent_path) {
+        hint.stack_id = Some(id.clone());
+        hint.index = leaf_idx;
+        if children.len() > 1 {
+            let other = if leaf_idx > 0 { leaf_idx - 1 } else { 1 };
+            hint.sibling = children.get(other).and_then(first_leaf_label);
+            hint.zone = DropZone::Center;
+            return hint;
+        }
+        anchor_path = parent_path;
+    }
+    let Some((&anchor_idx, split_path)) = anchor_path.split_last() else {
+        return hint;
+    };
+    if let Some(LayoutNode::Splitter {
+        direction,
+        children,
+        ..
+    }) = node_at(root, split_path)
+    {
+        let (other, zone) = if anchor_idx > 0 {
+            let z = match direction {
+                Direction::Horizontal => DropZone::Right,
+                Direction::Vertical => DropZone::Bottom,
+            };
+            (anchor_idx - 1, z)
+        } else {
+            let z = match direction {
+                Direction::Horizontal => DropZone::Left,
+                Direction::Vertical => DropZone::Top,
+            };
+            (1, z)
+        };
+        hint.sibling = children.get(other).and_then(first_leaf_label);
+        hint.zone = zone;
+    }
+    hint
+}
+
+/// Replace a one-tab Stack holding `label` with the bare leaf, keeping the
+/// Stack's weight. Returns `true` if a Stack was unwrapped.
+fn unwrap_singleton_stack(node: &mut LayoutNode, label: &str) -> bool {
+    let replacement = match node {
+        LayoutNode::Stack {
+            weight, children, ..
+        } if children.len() == 1
+            && matches!(&children[0], LayoutNode::Leaf { label: l, .. } if l == label) =>
+        {
+            Some(LayoutNode::Leaf {
+                label: label.to_string(),
+                weight: *weight,
+            })
+        }
+        LayoutNode::Splitter { children, .. } => {
+            return children
+                .iter_mut()
+                .any(|c| unwrap_singleton_stack(c, label));
+        }
+        _ => None,
+    };
+    match replacement {
+        Some(leaf) => {
+            *node = leaf;
+            true
+        }
+        None => false,
+    }
+}
+
+/// Insert `leaf` relative to the leaf at `target_path`: `Center` joins its
+/// Stack as a new tab (or wraps both into a Stack); edges split beside it —
+/// beside its whole Stack when it's a tab, so the leaf never lands inside it.
+fn place_near(
+    root: &mut Option<LayoutNode>,
+    target_path: &[usize],
+    zone: DropZone,
+    leaf: LayoutNode,
+) {
+    let parent_path = target_path.split_last().map(|(_, p)| p);
+    let in_stack = match (root.as_ref(), parent_path) {
+        (Some(r), Some(p)) => is_stack_at(r, p),
+        _ => false,
+    };
+    match (zone, parent_path) {
+        (DropZone::Center, Some(p)) if in_stack => {
+            append_to_stack_at(root.as_mut().unwrap(), p, leaf);
+        }
+        (DropZone::Center, _) => {
+            add_leaf_as_sibling(root, target_path, zone, leaf);
+        }
+        (_, Some(p)) if in_stack => {
+            add_leaf_as_sibling(root, p, zone, leaf);
+        }
+        _ => {
+            add_leaf_as_sibling(root, target_path, zone, leaf);
+        }
     }
 }
 
@@ -1924,6 +2331,17 @@ impl LayoutTree {
 
 fn short_id() -> String {
     Uuid::new_v4().to_string()[..8].to_string()
+}
+
+/// Every panel webview label belonging to the live layout: tiled leaves
+/// (depth-first) followed by popped-out panels.
+fn live_labels(g: &Inner) -> Vec<String> {
+    let mut out = Vec::new();
+    if let Some(root) = &g.root {
+        collect_leaf_labels(root, &mut out);
+    }
+    out.extend(g.floating.iter().map(|f| f.label.clone()));
+    out
 }
 
 fn collect_leaf_labels(node: &LayoutNode, out: &mut Vec<String>) {
@@ -2319,5 +2737,305 @@ fn set_weight(node: &mut LayoutNode, w: f64) {
         LayoutNode::Leaf { weight, .. }
         | LayoutNode::Splitter { weight, .. }
         | LayoutNode::Stack { weight, .. } => *weight = w,
+    }
+}
+
+#[cfg(test)]
+mod floating_tests {
+    use super::*;
+
+    fn tree() -> LayoutTree {
+        LayoutTree::new(
+            "t",
+            1000.0,
+            800.0,
+            Arc::new(RwLock::new(DashboardRegistry::default())),
+        )
+    }
+
+    fn spec(name: &str) -> PanelSpec {
+        PanelSpec {
+            app_id: name.into(),
+            url: format!("https://example.com/{name}"),
+            title: name.into(),
+            engine_binding: None,
+        }
+    }
+
+    /// Structural fingerprint of the tree — labels and node kinds, ignoring
+    /// weights and Stack ids (which a rebuilt Stack gets afresh).
+    fn shape(t: &LayoutTree) -> String {
+        fn walk(n: &LayoutNode, out: &mut String) {
+            match n {
+                LayoutNode::Leaf { label, .. } => out.push_str(label.rsplit('-').next().unwrap()),
+                LayoutNode::Splitter {
+                    direction,
+                    children,
+                    ..
+                } => {
+                    out.push_str(if *direction == Direction::Horizontal {
+                        "H("
+                    } else {
+                        "V("
+                    });
+                    for (i, c) in children.iter().enumerate() {
+                        if i > 0 {
+                            out.push(',');
+                        }
+                        walk(c, out);
+                    }
+                    out.push(')');
+                }
+                LayoutNode::Stack { children, .. } => {
+                    out.push_str("S[");
+                    for (i, c) in children.iter().enumerate() {
+                        if i > 0 {
+                            out.push(',');
+                        }
+                        walk(c, out);
+                    }
+                    out.push(']');
+                }
+            }
+        }
+        let mut out = String::new();
+        t.with_root(|r| walk(r, &mut out));
+        out
+    }
+
+    fn add(t: &LayoutTree, name: &str, target: Option<&str>, dir: Option<SplitDir>) -> String {
+        let label = format!("t-panel-{name}");
+        t.add_panel_with_label(&label, spec(name), target, dir)
+    }
+
+    #[test]
+    fn detach_and_dock_restores_tab_position() {
+        let t = tree();
+        let a = add(&t, "a", None, None);
+        let b = add(&t, "b", Some(&a), None);
+        let c = add(&t, "c", Some(&b), None);
+        let before = shape(&t);
+
+        let f = t.detach(&b).expect("b is tiled");
+        assert_eq!(f.dock_hint.index, 1);
+        assert!(f.dock_hint.stack_id.is_some());
+        assert!(t.is_floating(&b));
+        assert!(!shape(&t).contains('b'));
+        assert_ne!(t.active_panel().as_deref(), Some(b.as_str()));
+
+        assert!(t.dock(&b));
+        assert_eq!(shape(&t), before);
+        assert_eq!(t.active_panel().as_deref(), Some(b.as_str()));
+        assert!(!t.is_floating(&b));
+        let _ = c;
+    }
+
+    #[test]
+    fn detach_and_dock_restores_split_side() {
+        let t = tree();
+        let a = add(&t, "a", None, None);
+        let b = add(&t, "b", Some(&a), Some(SplitDir::Horizontal));
+        let c = add(&t, "c", Some(&b), Some(SplitDir::Vertical));
+        let before = shape(&t);
+
+        for label in [&a, &b, &c] {
+            t.detach(label).expect("tiled");
+            assert!(t.dock(label));
+            assert_eq!(shape(&t), before, "round trip of {label}");
+        }
+    }
+
+    #[test]
+    fn dock_falls_back_when_stack_and_sibling_are_gone() {
+        let t = tree();
+        let a = add(&t, "a", None, None);
+        let b = add(&t, "b", Some(&a), None); // S[a,b]
+        let c = add(&t, "c", Some(&b), Some(SplitDir::Horizontal));
+
+        t.detach(&b).unwrap();
+        assert!(t.remove_panel(&a)); // dissolves b's Stack and its sibling
+        assert!(t.dock(&b));
+        assert!(shape(&t).contains('b'));
+        assert!(shape(&t).contains('c'));
+        assert_eq!(t.active_panel().as_deref(), Some(b.as_str()));
+    }
+
+    #[test]
+    fn last_panel_detaches_to_empty_tree_and_docks_as_root() {
+        let t = tree();
+        let a = add(&t, "a", None, None);
+        t.detach(&a).unwrap();
+        assert!(t.with_root(|_| ()).is_none());
+        assert_eq!(t.active_panel(), None);
+        assert!(t.dock(&a));
+        assert_eq!(shape(&t), "a");
+    }
+
+    #[test]
+    fn detach_rejects_unknown_and_floating_labels() {
+        let t = tree();
+        let a = add(&t, "a", None, None);
+        assert!(t.detach("t-panel-nope").is_none());
+        t.detach(&a).unwrap();
+        assert!(t.detach(&a).is_none());
+        assert!(!t.dock("t-panel-nope"));
+    }
+
+    #[test]
+    fn closing_a_floating_panel_forgets_it() {
+        let t = tree();
+        let a = add(&t, "a", None, None);
+        let b = add(&t, "b", Some(&a), None);
+        t.detach(&b).unwrap();
+        assert!(t.remove_panel(&b));
+        assert!(t.floating().is_empty());
+        assert!(t.panel_tab(&b).is_none());
+        assert!(!t.dock(&b));
+        assert_eq!(t.fdc3_channel(&b), None);
+    }
+
+    #[test]
+    fn floating_round_trips_through_persisted_layout() {
+        let t = tree();
+        let a = add(&t, "a", None, None);
+        let b = add(&t, "b", Some(&a), None);
+        t.detach(&b).unwrap();
+        let bounds = persist::PersistedWindowConfig {
+            x: 10.0,
+            y: 20.0,
+            width: 400.0,
+            height: 300.0,
+            monitor: None,
+        };
+        assert!(t.set_floating_bounds(&b, bounds.clone()));
+        assert!(!t.set_floating_bounds(&b, bounds.clone()), "unchanged");
+
+        let layout = snapshot_for_persist(&t.inner.read().unwrap());
+        let json = serde_json::to_string(&layout).unwrap();
+        let back: PersistedLayout = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.floating, layout.floating);
+        assert_eq!(back.floating[0].bounds, bounds);
+        assert!(back.meta.contains_key(&b));
+
+        let t2 = tree();
+        t2.apply_layout_to_inner(Some(back));
+        assert!(t2.is_floating(&b));
+        assert!(t2.dock(&b));
+        assert_eq!(
+            shape(&t2),
+            shape(&t)
+                .replace('a', "S[a,b]")
+                .replace("S[S[a,b]]", "S[a,b]")
+        );
+    }
+
+    #[test]
+    fn invalid_floating_entries_are_dropped_on_load() {
+        let t = tree();
+        let a = add(&t, "a", None, None);
+        let mut layout = snapshot_for_persist(&t.inner.read().unwrap());
+        // `a` is tiled, `ghost` has no meta — both must be discarded.
+        for label in [a.as_str(), "t-panel-ghost"] {
+            layout.floating.push(FloatingPanel {
+                label: label.into(),
+                bounds: Default::default(),
+                dock_hint: Default::default(),
+                group: None,
+            });
+        }
+        let t2 = tree();
+        t2.apply_layout_to_inner(Some(layout));
+        assert!(t2.floating().is_empty());
+        assert!(!t2.take_parked("t-panel-ghost"));
+    }
+
+    #[test]
+    fn glue_merges_groups_and_unglue_dissolves_singletons() {
+        let t = tree();
+        let a = add(&t, "a", None, None);
+        let b = add(&t, "b", Some(&a), None);
+        let c = add(&t, "c", Some(&a), None);
+        let d = add(&t, "d", Some(&a), None);
+        assert!(
+            t.glue(&[b.clone(), c.clone()]).is_none(),
+            "not floating yet"
+        );
+        for l in [&b, &c, &d] {
+            t.detach(l).unwrap();
+        }
+        assert!(
+            t.glue(std::slice::from_ref(&b)).is_none(),
+            "needs two members"
+        );
+
+        let g1 = t.glue(&[b.clone(), c.clone()]).unwrap();
+        assert_eq!(t.floating_group(&b).as_deref(), Some(g1.as_str()));
+        assert_eq!(t.panel_tab(&c).unwrap().group.as_deref(), Some(g1.as_str()));
+        // Gluing d onto c pulls in c's whole group.
+        let g2 = t.glue(&[d.clone(), c.clone()]).unwrap();
+        assert_eq!(g2, g1);
+        let mut members = t.group_members(&g1);
+        members.sort();
+        assert_eq!(members, vec![b.clone(), c.clone(), d.clone()]);
+
+        assert!(t.unglue(&c));
+        assert!(!t.unglue(&c), "already unglued");
+        assert_eq!(t.group_members(&g1).len(), 2);
+        // Docking b leaves d alone — its group dissolves.
+        assert!(t.dock(&b));
+        assert_eq!(t.floating_group(&d), None);
+    }
+
+    #[test]
+    fn closing_a_glued_panel_dissolves_a_pair() {
+        let t = tree();
+        let a = add(&t, "a", None, None);
+        let b = add(&t, "b", Some(&a), None);
+        let c = add(&t, "c", Some(&a), None);
+        t.detach(&b).unwrap();
+        t.detach(&c).unwrap();
+        t.glue(&[b.clone(), c.clone()]).unwrap();
+        assert!(t.remove_panel(&b));
+        assert_eq!(t.floating_group(&c), None);
+    }
+
+    #[test]
+    fn glue_groups_round_trip_and_singletons_are_dropped_on_load() {
+        let t = tree();
+        let a = add(&t, "a", None, None);
+        let b = add(&t, "b", Some(&a), None);
+        let c = add(&t, "c", Some(&a), None);
+        t.detach(&b).unwrap();
+        t.detach(&c).unwrap();
+        let g = t.glue(&[b.clone(), c.clone()]).unwrap();
+        let mut layout = snapshot_for_persist(&t.inner.read().unwrap());
+        let json = serde_json::to_string(&layout).unwrap();
+        let back: PersistedLayout = serde_json::from_str(&json).unwrap();
+        let t2 = tree();
+        t2.apply_layout_to_inner(Some(back));
+        assert_eq!(t2.floating_group(&c).as_deref(), Some(g.as_str()));
+
+        // A hand-edited file with a one-member group loads unglued.
+        layout.floating.retain(|f| f.label == b);
+        let t3 = tree();
+        t3.apply_layout_to_inner(Some(layout));
+        assert_eq!(t3.floating_group(&b), None);
+    }
+
+    #[test]
+    fn floating_entry_without_group_field_loads_unglued() {
+        let json = r#"{"label":"t-panel-a","bounds":{"x":0,"y":0,"width":0,"height":0}}"#;
+        let f: FloatingPanel = serde_json::from_str(json).unwrap();
+        assert_eq!(f.group, None);
+        assert!(!serde_json::to_string(&f).unwrap().contains("group"));
+    }
+
+    #[test]
+    fn layout_without_floating_field_still_loads() {
+        let json = r#"{"tree":{"type":"leaf","label":"t-panel-a"},"meta":{}}"#;
+        let l: PersistedLayout = serde_json::from_str(json).unwrap();
+        assert!(l.floating.is_empty());
+        let json = serde_json::to_string(&l).unwrap();
+        assert!(!json.contains("floating"), "empty list isn't written");
     }
 }

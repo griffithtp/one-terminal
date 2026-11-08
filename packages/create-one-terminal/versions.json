@@ -2,6 +2,13 @@
   "schemaVersion": 1,
   "versions": [
     {
+      "version": "0.2.1",
+      "releaseDate": "2026-11-07",
+      "breaking": false,
+      "changelogUrl": "https://github.com/one-terminal/one-terminal/releases/tag/v0.2.1",
+      "migrations": []
+    },
+    {
       "version": "0.2.0",
       "releaseDate": "2026-10-31",
       "breaking": true,
@@ -438,7 +445,7 @@
           "type": "structural",
           "id": "shared-dashboard-registry",
           "target": "apps/one-terminal/src-tauri/src/layout/dashboard.rs",
-          "description": "Plan 15 \u2014 dashboards move from N per-Terminal lists to one process-wide shared registry (DashboardRegistry + DashboardSession split, stable dashboard ids, cross-window live sync, an in-memory active-dashboard exclusivity lock, and Duplicate/Move-here actions for a dashboard locked elsewhere). Replaces 7 backend files wholesale \u2014 they must all land together, since a partial apply will not compile. The on-disk data migration itself (merging each existing terminals/<id>/dashboards.json into one shared dashboards.json, disambiguating any name collisions) is NOT a scaffolder step: it runs automatically, once, the first time the upgraded app launches (TerminalManager::load_dashboards_registry / persist::load_or_migrate_registry) \u2014 nothing manual required here.",
+          "description": "Plan 15 — dashboards move from N per-Terminal lists to one process-wide shared registry (DashboardRegistry + DashboardSession split, stable dashboard ids, cross-window live sync, an in-memory active-dashboard exclusivity lock, and Duplicate/Move-here actions for a dashboard locked elsewhere). Replaces 7 backend files wholesale — they must all land together, since a partial apply will not compile. The on-disk data migration itself (merging each existing terminals/<id>/dashboards.json into one shared dashboards.json, disambiguating any name collisions) is NOT a scaffolder step: it runs automatically, once, the first time the upgraded app launches (TerminalManager::load_dashboards_registry / persist::load_or_migrate_registry) — nothing manual required here.",
           "appliesTo": "both",
           "operations": [
             {

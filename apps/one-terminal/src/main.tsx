@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
+import "./registerWidgetExtensions";
 import { initWidgetInstanceCommands } from "./commands/widgetInstanceCommands";
 import { initKeyboardListener, initGlobalShortcutListener } from "./commands/keyboardListener";
 import { initKeybindingsBridge } from "./commands/keybindingsBridge";

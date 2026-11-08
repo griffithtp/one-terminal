@@ -15,6 +15,12 @@ export interface CtxMenuContext {
   stackPath: number[];
   /** Total number of tabs in this stack. */
   nTabs: number;
+  /** `true` when the widget is popped out into its own window — `stackPath`
+   *  is then `[]` and `nTabs` is `1`. */
+  floating: boolean;
+  /** Glue group id when the popped-out widget is glued to other popouts;
+   *  `undefined` otherwise. */
+  group?: string;
 }
 
 export interface CtxMenuItemDef {

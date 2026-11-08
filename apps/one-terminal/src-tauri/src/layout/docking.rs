@@ -11,13 +11,14 @@
 //! valid through the insert step (the shift adjustment handles the one place
 //! indices can move during extract).
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use super::node::{gen_stack_id, Direction, LayoutNode};
 
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum DropZone {
+    #[default]
     Center,
     Left,
     Right,
@@ -184,6 +185,30 @@ pub fn append_to_stack_at(root: &mut LayoutNode, path: &[usize], leaf: LayoutNod
             let new_idx = children.len();
             children.push(reset_weight(leaf));
             *active = new_idx;
+            true
+        }
+        _ => false,
+    }
+}
+
+/// Insert `leaf` as child `index` (clamped) of the Stack at `path` and make
+/// it active. Returns `true` if the node at `path` is a Stack and was mutated.
+pub fn insert_into_stack_at(
+    root: &mut LayoutNode,
+    path: &[usize],
+    index: usize,
+    leaf: LayoutNode,
+) -> bool {
+    let Some(node) = walk_mut(root, path, 0) else {
+        return false;
+    };
+    match node {
+        LayoutNode::Stack {
+            children, active, ..
+        } => {
+            let i = index.min(children.len());
+            children.insert(i, reset_weight(leaf));
+            *active = i;
             true
         }
         _ => false,

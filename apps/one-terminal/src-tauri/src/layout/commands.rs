@@ -36,7 +36,7 @@ pub(crate) fn channel_join_script(channel_id: &Option<String>) -> Result<String,
 /// label is not registered. Used by all commands that mutate layout state.
 macro_rules! get_terminal {
     ($manager:expr, $window:expr) => {
-        match $manager.get($window.label()) {
+        match $manager.resolve($window.label()) {
             Some(t) => t,
             None => return Err(format!("terminal '{}' not found", $window.label())),
         }
@@ -170,14 +170,24 @@ pub fn close_tab(
     app: AppHandle,
 ) -> Result<(), String> {
     let terminal = get_terminal!(manager, window);
+    let group = crate::terminal::popout::group_of(&terminal.layout_tree, &label);
     if !terminal.layout_tree.remove_leaf(&label) {
         return Err(format!("no leaf with label '{label}' in layout tree"));
     }
     if let Some(wv) = app.get_webview(&label) {
         wv.close().map_err(|e| e.to_string())?;
     }
+    // A popped-out panel takes its (now empty) popout window with it.
+    if let Some(popout) = manager.popout_for_panel(&label) {
+        manager.remove_popout(&popout);
+        if let Some(w) = app.get_window(&popout) {
+            let _ = w.destroy();
+        }
+    }
     terminal.layout_tree.reflow(&app);
     terminal.layout_tree.emit_host(&app);
+    // Popouts it was glued to may have lost their group.
+    crate::terminal::popout::notify_panels(&app, &manager, &terminal, &group);
     Ok(())
 }
 
@@ -255,13 +265,7 @@ pub fn wm_rename_tab(
     if !terminal.layout_tree.rename_panel(&label, trimmed) {
         return Err(format!("no panel with label '{label}'"));
     }
-    terminal.layout_tree.emit_host(&app);
-    if let Some(snap) = terminal.layout_tree.snapshot() {
-        let chrome = format!("{}-chrome", window.label());
-        if let Some(wv) = app.get_webview(&chrome) {
-            let _ = wv.emit("wm:layout", &snap);
-        }
-    }
+    manager.notify_panel_changed(&app, &terminal, &label);
     Ok(())
 }
 
@@ -282,13 +286,7 @@ pub async fn wm_rename_panel(
     if !terminal.layout_tree.set_display_name(&label, display_name) {
         return Err(format!("no panel with label '{label}'"));
     }
-    terminal.layout_tree.emit_host(&app);
-    if let Some(snap) = terminal.layout_tree.snapshot() {
-        let chrome = format!("{}-chrome", window.label());
-        if let Some(wv) = app.get_webview(&chrome) {
-            let _ = wv.emit("wm:layout", &snap);
-        }
-    }
+    manager.notify_panel_changed(&app, &terminal, &label);
     Ok(())
 }
 
@@ -311,13 +309,7 @@ pub async fn wm_set_zoom(
     if let Some(wv) = app.get_webview(&label) {
         wv.set_zoom(clamped).map_err(|e| e.to_string())?;
     }
-    terminal.layout_tree.emit_host(&app);
-    if let Some(snap) = terminal.layout_tree.snapshot() {
-        let chrome = format!("{}-chrome", window.label());
-        if let Some(wv) = app.get_webview(&chrome) {
-            let _ = wv.emit("wm:layout", &snap);
-        }
-    }
+    manager.notify_panel_changed(&app, &terminal, &label);
     Ok(())
 }
 
@@ -330,7 +322,7 @@ pub fn wm_get_panel_fdc3_channel(
     manager: State<'_, TerminalManager>,
 ) -> Option<String> {
     manager
-        .get(window.label())
+        .resolve(window.label())
         .and_then(|t| t.layout_tree.fdc3_channel(&label))
 }
 
@@ -371,13 +363,7 @@ pub fn wm_set_panel_fdc3_channel(
         wv.eval(&script).map_err(|e| e.to_string())?;
     }
 
-    terminal.layout_tree.emit_host(&app);
-    if let Some(snap) = terminal.layout_tree.snapshot() {
-        let chrome = format!("{}-chrome", window.label());
-        if let Some(wv) = app.get_webview(&chrome) {
-            let _ = wv.emit("wm:layout", &snap);
-        }
-    }
+    manager.notify_panel_changed(&app, &terminal, &label);
     Ok(())
 }
 
@@ -390,7 +376,7 @@ pub fn wm_get_panel_keep_alive(
     manager: State<'_, TerminalManager>,
 ) -> bool {
     manager
-        .get(window.label())
+        .resolve(window.label())
         .map(|t| t.layout_tree.keep_alive(&label))
         .unwrap_or(false)
 }
@@ -412,13 +398,7 @@ pub fn wm_set_panel_keep_alive(
         return Err(format!("no panel with label '{label}'"));
     }
 
-    terminal.layout_tree.emit_host(&app);
-    if let Some(snap) = terminal.layout_tree.snapshot() {
-        let chrome = format!("{}-chrome", window.label());
-        if let Some(wv) = app.get_webview(&chrome) {
-            let _ = wv.emit("wm:layout", &snap);
-        }
-    }
+    manager.notify_panel_changed(&app, &terminal, &label);
     Ok(())
 }
 
@@ -444,13 +424,7 @@ pub fn wm_set_panel_show_address_bar(
     }
 
     terminal.layout_tree.reflow(&app);
-    terminal.layout_tree.emit_host(&app);
-    if let Some(snap) = terminal.layout_tree.snapshot() {
-        let chrome = format!("{}-chrome", window.label());
-        if let Some(wv) = app.get_webview(&chrome) {
-            let _ = wv.emit("wm:layout", &snap);
-        }
-    }
+    manager.notify_panel_changed(&app, &terminal, &label);
     Ok(())
 }
 
@@ -637,13 +611,15 @@ pub async fn wm_delete_dashboard(
     }
 
     let locked_elsewhere = manager.locked_dashboard_ids_excluding(&terminal_id);
-    let deleted = terminal.layout_tree.delete_dashboard(
-        &name,
-        &locked_elsewhere,
-        &window,
-        &app,
-        &crate::agent::panel_init_script(&app),
-    )?;
+    let deleted = crate::terminal::popout::with_popouts_stashed(&app, &manager, &terminal, || {
+        terminal.layout_tree.delete_dashboard(
+            &name,
+            &locked_elsewhere,
+            &window,
+            &app,
+            &crate::agent::panel_init_script(&app),
+        )
+    })?;
     if deleted {
         terminal.layout_tree.persist_dashboards();
         // This terminal's active dashboard may have changed as a fallback
@@ -700,13 +676,15 @@ pub async fn wm_close_dashboard(
     }
 
     let locked_elsewhere = manager.locked_dashboard_ids_excluding(&terminal_id);
-    let closed = terminal.layout_tree.close_dashboard(
-        &name,
-        &locked_elsewhere,
-        &window,
-        &app,
-        &crate::agent::panel_init_script(&app),
-    )?;
+    let closed = crate::terminal::popout::with_popouts_stashed(&app, &manager, &terminal, || {
+        terminal.layout_tree.close_dashboard(
+            &name,
+            &locked_elsewhere,
+            &window,
+            &app,
+            &crate::agent::panel_init_script(&app),
+        )
+    })?;
     if closed {
         terminal.layout_tree.persist_dashboards();
         // This terminal's active dashboard may have changed as a fallback

@@ -12,6 +12,8 @@
 
 pub mod instances;
 pub mod manager;
+pub mod popout;
+pub mod popout_snap;
 pub mod spawn;
 pub mod state;
 

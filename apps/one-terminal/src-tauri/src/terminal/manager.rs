@@ -29,6 +29,19 @@ struct ManagerInner {
     /// persisted — killing the process drops every lock for free, so
     /// there's no "stale lock survived a crash" state to recover.
     active_locks: HashMap<String, String>,
+    /// Open popout windows: popout window label → its panel and
+    /// owning Terminal. Runtime-only — the floating list itself is persisted
+    /// with the dashboard on the owner's `LayoutTree`.
+    popouts: HashMap<String, PopoutState>,
+}
+
+/// One open popout window hosting a single floating panel.
+#[derive(Debug, Clone)]
+pub struct PopoutState {
+    /// Id (= window label) of the Terminal whose `LayoutTree` owns the panel.
+    pub owner: String,
+    /// Webview label of the hosted panel.
+    pub panel: String,
 }
 
 // ── TerminalListItem ──────────────────────────────────────────────────────────
@@ -60,6 +73,7 @@ impl TerminalManager {
                 terminals: IndexMap::new(),
                 next_id: 2,
                 active_locks: HashMap::new(),
+                popouts: HashMap::new(),
             })),
             dashboards: Arc::new(RwLock::new(DashboardRegistry::new())),
         }
@@ -98,6 +112,89 @@ impl TerminalManager {
     /// not registered (e.g. the window was already closed).
     pub fn get(&self, id: &str) -> Option<Arc<TerminalState>> {
         self.inner.read().unwrap().terminals.get(id).cloned()
+    }
+
+    /// Resolve the Terminal a command acts on from the invoking window's
+    /// label: the Terminal itself, or — for a popout window — the
+    /// Terminal that owns its panel. Commands use this (via `get_terminal!`)
+    /// so every panel command works unchanged when invoked from a popout.
+    pub fn resolve(&self, window_label: &str) -> Option<Arc<TerminalState>> {
+        let g = self.inner.read().unwrap();
+        if let Some(t) = g.terminals.get(window_label) {
+            return Some(Arc::clone(t));
+        }
+        let owner = &g.popouts.get(window_label)?.owner;
+        g.terminals.get(owner).cloned()
+    }
+
+    /// The Terminal whose layout owns panel `label`, tiled or floating.
+    /// Looked up by metadata, not by the label's `<terminal_id>-panel-`
+    /// prefix: a dashboard moved with "Move here" keeps its panels' original
+    /// labels, so the prefix can name a different window.
+    pub fn owner_of_panel(&self, label: &str) -> Option<Arc<TerminalState>> {
+        self.list()
+            .into_iter()
+            .find(|t| t.layout_tree.has_panel(label))
+    }
+
+    /// Record an open popout window for `panel`, owned by Terminal `owner`.
+    pub fn register_popout(&self, popout: &str, owner: &str, panel: &str) {
+        self.inner.write().unwrap().popouts.insert(
+            popout.to_string(),
+            PopoutState {
+                owner: owner.to_string(),
+                panel: panel.to_string(),
+            },
+        );
+    }
+
+    /// Forget a popout window. Returns its state if it was registered.
+    pub fn remove_popout(&self, popout: &str) -> Option<PopoutState> {
+        self.inner.write().unwrap().popouts.remove(popout)
+    }
+
+    /// Label of the popout window currently hosting `panel`, if any.
+    pub fn popout_for_panel(&self, panel: &str) -> Option<String> {
+        self.inner
+            .read()
+            .unwrap()
+            .popouts
+            .iter()
+            .find(|(_, p)| p.panel == panel)
+            .map(|(label, _)| label.clone())
+    }
+
+    /// Popout windows owned by Terminal `owner`, as `(popout, panel)` pairs.
+    pub fn popouts_of(&self, owner: &str) -> Vec<(String, String)> {
+        self.inner
+            .read()
+            .unwrap()
+            .popouts
+            .iter()
+            .filter(|(_, p)| p.owner == owner)
+            .map(|(label, p)| (label.clone(), p.panel.clone()))
+            .collect()
+    }
+
+    /// Publish a change to panel `label`'s metadata (title, zoom, channel,
+    /// keep-alive, address bar): `wm:host-layout` + `wm:layout` to the owning
+    /// Terminal's chrome, plus `wm:popout-state` to the popout chrome when the
+    /// panel is popped out. Panel commands call this instead of emitting to
+    /// `<window.label()>-chrome`, which is the popout when invoked from one.
+    pub fn notify_panel_changed(&self, app: &AppHandle, terminal: &TerminalState, label: &str) {
+        let tree = &terminal.layout_tree;
+        tree.emit_host(app);
+        if let Some(snap) = tree.snapshot() {
+            let chrome = format!("{}-chrome", terminal.id);
+            if let Some(wv) = app.get_webview(&chrome) {
+                let _ = wv.emit("wm:layout", &snap);
+            }
+        }
+        if let (Some(popout), Some(tab)) = (self.popout_for_panel(label), tree.panel_tab(label)) {
+            if let Some(wv) = app.get_webview(&format!("{popout}-chrome")) {
+                let _ = wv.emit("wm:popout-state", &tab);
+            }
+        }
     }
 
     /// Remove and return a terminal entry. Used when a Terminal window closes.
@@ -517,6 +614,73 @@ mod tests {
             r1.is_ok(),
             r2.is_ok(),
             "exactly one of the two racing acquires must succeed, got {r1:?} / {r2:?}"
+        );
+    }
+
+    fn add_panel(t: &TerminalState, label: &str) {
+        t.layout_tree.add_panel_with_label(
+            label,
+            crate::layout::store::PanelSpec {
+                app_id: "app".into(),
+                url: "https://example.com".into(),
+                title: "App".into(),
+                engine_binding: None,
+            },
+            None,
+            None,
+        );
+    }
+
+    #[test]
+    fn resolve_maps_popout_windows_to_their_owner() {
+        let manager = TerminalManager::new();
+        test_terminal(&manager, "terminal-main", "Main");
+        let other = test_terminal(&manager, "terminal-2", "Other");
+
+        assert_eq!(manager.resolve("terminal-2").unwrap().id, "terminal-2");
+        assert!(manager.resolve("terminal-2-popout-x").is_none());
+
+        manager.register_popout("terminal-2-popout-x", "terminal-2", "p");
+        assert_eq!(manager.resolve("terminal-2-popout-x").unwrap().id, other.id);
+        assert_eq!(
+            manager.popout_for_panel("p").as_deref(),
+            Some("terminal-2-popout-x")
+        );
+        assert_eq!(
+            manager.popouts_of("terminal-2"),
+            vec![("terminal-2-popout-x".to_string(), "p".to_string())]
+        );
+        assert!(manager.popouts_of("terminal-main").is_empty());
+
+        assert_eq!(
+            manager.remove_popout("terminal-2-popout-x").unwrap().panel,
+            "p"
+        );
+        assert!(manager.resolve("terminal-2-popout-x").is_none());
+        assert!(manager.popout_for_panel("p").is_none());
+    }
+
+    #[test]
+    fn owner_of_panel_ignores_the_label_prefix() {
+        let manager = TerminalManager::new();
+        test_terminal(&manager, "terminal-main", "Main");
+        let other = test_terminal(&manager, "terminal-2", "Other");
+        // A panel minted by terminal-main, now living in terminal-2 (as
+        // after "Move here").
+        add_panel(&other, "terminal-main-panel-abc");
+
+        let owner = manager.owner_of_panel("terminal-main-panel-abc").unwrap();
+        assert_eq!(owner.id, "terminal-2");
+        assert!(manager.owner_of_panel("terminal-main-panel-zzz").is_none());
+
+        // Still owned while popped out.
+        other.layout_tree.detach("terminal-main-panel-abc").unwrap();
+        assert_eq!(
+            manager
+                .owner_of_panel("terminal-main-panel-abc")
+                .unwrap()
+                .id,
+            "terminal-2"
         );
     }
 }

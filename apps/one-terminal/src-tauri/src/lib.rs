@@ -39,7 +39,7 @@ use webview_pool::WebviewPool;
 /// miss.  Mirrors the macro in `layout/commands.rs` for use in lib.rs commands.
 macro_rules! get_terminal {
     ($manager:expr, $window:expr) => {
-        match $manager.get($window.label()) {
+        match $manager.resolve($window.label()) {
             Some(t) => t,
             None => return Err(format!("terminal '{}' not found", $window.label())),
         }
@@ -234,6 +234,7 @@ fn wm_host_snapshot(window: Window, manager: State<'_, TerminalManager>) -> Host
             window_height: 0.0,
             stacks: vec![],
             splitters: vec![],
+            floating: vec![],
         },
     }
 }
@@ -776,11 +777,15 @@ async fn wm_ctx_menu_open(
 /// Emitted as `wm:request-rename` so the tab strip can focus the input
 /// without a backend round-trip for state.
 #[tauri::command]
-fn wm_request_rename(label: String, app: AppHandle) {
-    // Panel labels are "{terminal_id}-panel-{uuid}" — extract the terminal prefix.
-    if let Some(terminal_id) = label.split("-panel-").next() {
-        let chrome = format!("{}-chrome", terminal_id);
-        if let Some(wv) = app.get_webview(&chrome) {
+fn wm_request_rename(label: String, manager: State<'_, TerminalManager>, app: AppHandle) {
+    // Resolve the owner by metadata, not the label's `<terminal_id>-panel-`
+    // prefix — a dashboard moved with "Move here" keeps its panels' original
+    // labels. A popped-out panel renames inline in its popout's header.
+    let host = manager
+        .popout_for_panel(&label)
+        .or_else(|| manager.owner_of_panel(&label).map(|t| t.id.clone()));
+    if let Some(host) = host {
+        if let Some(wv) = app.get_webview(&format!("{host}-chrome")) {
             let _ = wv.emit("wm:request-rename", serde_json::json!({ "label": label }));
         }
     }
@@ -1092,11 +1097,11 @@ async fn wm_switch_dashboard(
         }
     }
 
-    if let Err(e) =
+    if let Err(e) = terminal::popout::with_popouts_stashed(&app, &manager, &terminal, || {
         terminal
             .layout_tree
             .switch_dashboard(&name, &window, &app, &agent::panel_init_script(&app))
-    {
+    }) {
         // The switch didn't actually happen (e.g. NeedsConfirm) — restore
         // whatever this terminal's lock state was before we reserved the
         // target, rather than leaving a phantom lock on a dashboard we
@@ -1178,12 +1183,14 @@ async fn wm_move_dashboard(
             }
 
             let owner_locked_elsewhere = manager.locked_dashboard_ids_excluding(&owner_id);
-            owner_terminal.layout_tree.force_switch_away(
-                &owner_locked_elsewhere,
-                &owner_window,
-                &app,
-                &agent::panel_init_script(&app),
-            )?;
+            terminal::popout::with_popouts_stashed(&app, &manager, &owner_terminal, || {
+                owner_terminal.layout_tree.force_switch_away(
+                    &owner_locked_elsewhere,
+                    &owner_window,
+                    &app,
+                    &agent::panel_init_script(&app),
+                )
+            })?;
             owner_terminal.layout_tree.persist_dashboards();
 
             {
@@ -1211,11 +1218,11 @@ async fn wm_move_dashboard(
             terminal_name: owner_name,
         });
     }
-    if let Err(e) =
+    if let Err(e) = terminal::popout::with_popouts_stashed(&app, &manager, &terminal, || {
         terminal
             .layout_tree
             .switch_dashboard(&name, &window, &app, &agent::panel_init_script(&app))
-    {
+    }) {
         if !previous_active_id.is_empty() {
             let _ = manager.acquire_dashboard_lock(&previous_active_id, &terminal_id);
         } else {
@@ -1248,9 +1255,11 @@ async fn wm_discard_dashboard(
         .ok_or_else(|| DashboardError::Other {
             message: format!("terminal '{}' not found", window.label()),
         })?;
-    terminal
-        .layout_tree
-        .discard_dashboard(&window, &app, &agent::panel_init_script(&app))?;
+    terminal::popout::with_popouts_stashed(&app, &manager, &terminal, || {
+        terminal
+            .layout_tree
+            .discard_dashboard(&window, &app, &agent::panel_init_script(&app))
+    })?;
     {
         let mut inner = terminal.overlay.lock().unwrap();
         inner.stale = true;
@@ -1601,6 +1610,10 @@ fn wm_close_terminal(
     // window can switch to it immediately — the lock is in-memory only and
     // would otherwise linger, wrongly, past this window's lifetime.
     manager.release_dashboard_locks_for(&label);
+    // Popouts go with their Terminal; they're persisted with the dashboard.
+    if let Some(t) = manager.get(&label) {
+        terminal::popout::close_popouts(&app, &manager, &t);
+    }
     manager.remove(&label);
 
     if let Ok(data_dir) = app.path().app_data_dir() {
@@ -1904,6 +1917,20 @@ pub fn run() {
             // Emit the initial terminal list to all chrome webviews.
             manager.emit_terminals(app.handle());
 
+            // ── Restore popped-out widgets ────────────────────────────────
+            // Deferred off the setup closure: opening a popout dispatches to
+            // the main thread and waits, which would deadlock here — and it
+            // keeps popouts from delaying the Terminals' first paint.
+            {
+                let app_h = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    let manager = app_h.state::<TerminalManager>();
+                    for t in manager.list() {
+                        terminal::popout::restore_popouts(&app_h, &manager, &t);
+                    }
+                });
+            }
+
             // ── Resize + move listener for terminal-main ──────────────────
             install_window_listeners(
                 WIN,
@@ -1936,6 +1963,18 @@ pub fn run() {
             wm_rename_tab,
             wm_toggle_maximize_stack,
             close_tab,
+            terminal::popout::wm_popout_panel,
+            terminal::popout::wm_dock_panel,
+            terminal::popout::wm_focus_popout,
+            terminal::popout::wm_popout_ready,
+            terminal::popout::wm_popout_menu,
+            terminal::popout::wm_popout_background,
+            terminal::popout::wm_popout_drag_start,
+            terminal::popout::wm_popout_drag_move,
+            terminal::popout::wm_popout_drag_end,
+            terminal::popout::wm_popout_unglue,
+            terminal::popout::wm_popout_minimize,
+            terminal::popout::wm_popout_toggle_maximize,
             wm_engine_status,
             wm_engine_install,
             wm_rename_panel,

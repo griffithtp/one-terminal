@@ -1,5 +1,6 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { fileURLToPath } from "node:url";
 
 export default defineConfig({
   plugins: [react()],
@@ -14,6 +15,13 @@ export default defineConfig({
     minify: !process.env.TAURI_DEBUG ? "esbuild" : false,
     sourcemap: !!process.env.TAURI_DEBUG,
     rollupOptions: {
+      // Popout windows load a separate, light entry — header +
+      // widget menu only — so popping a widget out doesn't pay for the
+      // full Terminal chrome bundle.
+      input: {
+        main: fileURLToPath(new URL("index.html", import.meta.url)),
+        popout: fileURLToPath(new URL("popout.html", import.meta.url)),
+      },
       output: {
         manualChunks(id) {
           if (id.includes("node_modules/react/") || id.includes("node_modules/react-dom/")) {
