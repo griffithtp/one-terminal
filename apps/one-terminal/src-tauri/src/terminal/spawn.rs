@@ -320,7 +320,11 @@ fn spawn_or_restore(
         WebviewBuilder::new(
             format!("{label}-chrome"),
             WebviewUrl::App("index.html".into()),
-        ),
+        )
+        // macOS: the click that activates an inactive Terminal also reaches
+        // the header, so it drags straight away instead of needing a second
+        // press.
+        .accept_first_mouse(true),
         LogicalPosition::new(0.0, 0.0),
         LogicalSize::new(init_w, init_h),
     )
