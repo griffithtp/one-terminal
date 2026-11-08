@@ -1792,7 +1792,11 @@ pub fn run() {
             };
 
             win.add_child(
-                WebviewBuilder::new(CHROME, WebviewUrl::App("index.html".into())),
+                WebviewBuilder::new(CHROME, WebviewUrl::App("index.html".into()))
+                    // macOS: the click that activates an inactive Terminal
+                    // also reaches the header, so it drags straight away
+                    // instead of needing a second press.
+                    .accept_first_mouse(true),
                 LogicalPosition::new(0.0, 0.0),
                 LogicalSize::new(init_w, init_h),
             )?;
@@ -2023,6 +2027,26 @@ pub fn run() {
             wm_list_saved_terminals,
             wm_close_terminal,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running one-terminal");
+        .build(tauri::generate_context!())
+        .expect("error while building one-terminal")
+        .run(|app, event| {
+            // Clicking the Dock icon only deminiaturises a window when the
+            // app has none visible — so with a widget popped out, a
+            // minimised Terminal could never be brought back. Restore every
+            // minimised Terminal ourselves.
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Reopen { .. } = event {
+                let manager = app.state::<TerminalManager>();
+                for terminal in manager.list() {
+                    if let Some(w) = app.get_window(&terminal.id) {
+                        if w.is_minimized().unwrap_or(false) {
+                            let _ = w.unminimize();
+                            let _ = w.set_focus();
+                        }
+                    }
+                }
+            }
+            #[cfg(not(target_os = "macos"))]
+            let _ = (app, event);
+        });
 }
