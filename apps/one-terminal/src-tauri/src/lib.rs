@@ -1082,6 +1082,11 @@ async fn wm_switch_dashboard(
         })?;
     let terminal_id = window.label().to_string();
 
+    // Load the latest copy of the target if another process changed it.
+    if let Ok(data_dir) = app.path().app_data_dir() {
+        manager.refresh_dashboards(&data_dir);
+    }
+
     // Reserve the lock *before* attempting the switch, not after — two
     // windows racing to switch to the same dashboard must not both proceed
     // to `switch_dashboard` (which would leave both actually displaying it).
@@ -1343,9 +1348,9 @@ fn wm_duplicate_dashboard_to(
 
     let created = target
         .layout_tree
-        .with_registry_mut(|r| r.create_from(trimmed, dashboard));
+        .with_registry_mut(|r| r.create_from(trimmed.clone(), dashboard));
     if created {
-        target.layout_tree.persist_dashboards();
+        target.layout_tree.reopen_dashboard(&trimmed);
         manager.emit_dashboards_all(&app);
     }
     Ok(created)
@@ -1413,7 +1418,7 @@ fn start_instance_discovery(
                 }
                 let line = line.trim();
                 let reply = if line == "list" {
-                    let names = manager.dashboards().read().unwrap().list();
+                    let names = manager.open_dashboard_names();
                     serde_json::json!({ "dashboards": names }).to_string()
                 } else if let Some(name) = line.strip_prefix("get ") {
                     let dashboard = manager
@@ -1447,7 +1452,7 @@ fn start_instance_discovery(
 /// even if their active dashboards happen to share a name.
 fn instance_label(manager: &TerminalManager) -> String {
     let pid = std::process::id();
-    let total = manager.dashboards().read().unwrap().list().len();
+    let total = manager.open_dashboard_names().len();
     let active = manager
         .get(WIN)
         .map(|t| t.layout_tree.dashboards_snapshot())
@@ -1551,7 +1556,7 @@ fn wm_duplicate_from_instance(
         r.create_from(candidate.clone(), dashboard);
         candidate
     });
-    terminal.layout_tree.persist_dashboards();
+    terminal.layout_tree.reopen_dashboard(&new_name);
     manager.emit_dashboards_all(&app);
     Ok(new_name)
 }
@@ -1564,12 +1569,12 @@ fn open_new_window(
     manager: &TerminalManager,
     app: &AppHandle,
 ) -> Result<terminal::state::TerminalInfo, String> {
-    let label = manager.next_label();
+    let (label, name) = manager.next_terminal();
     let pool_size = std::env::var("OT_WEBVIEW_POOL_SIZE")
         .ok()
         .and_then(|v| v.parse::<usize>().ok())
         .unwrap_or(1);
-    let info = terminal::spawn::spawn_terminal(&label, None, manager, app, pool_size, None)?;
+    let info = terminal::spawn::spawn_terminal(&label, Some(name), manager, app, pool_size, None)?;
     manager.emit_terminals(app);
     Ok(info)
 }
@@ -1636,9 +1641,13 @@ fn wm_close_terminal(
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // When set by the Desktop Agent, skip all disk restore so this process
-    // starts with a clean slate (zero dashboards, no extra terminal windows).
-    let fresh_start = std::env::var("OT_FRESH_START").is_ok();
+    // Set by the Desktop Agent's launcher "Open" / tray "Open New Terminal":
+    // open one blank Terminal — no dashboard tabs, no restored windows —
+    // instead of restoring the saved session. The account's dashboards are
+    // still loaded so the user can open any of them. `OT_FRESH_START` is
+    // the variable's old name.
+    let new_terminal = std::env::var_os("OT_NEW_TERMINAL").is_some()
+        || std::env::var_os("OT_FRESH_START").is_some();
 
     let cfg = TerminalConfig::load();
     let manager = TerminalManager::new();
@@ -1656,6 +1665,12 @@ pub fn run() {
         .unwrap_or(1);
     let pool = WebviewPool::new(pool_size);
     let instance_id = uuid::Uuid::new_v4().to_string();
+    if new_terminal {
+        // Every process's first window is `terminal-main`; give this one its
+        // own session directory so it can't overwrite (or be restored as)
+        // the `terminals/main/` session of the process that restored it.
+        layout_persist::set_main_terminal_dir(instance_id[..8].to_string());
+    }
     println!(
         "[wm] engine: {}@{} (runtime={:?})",
         identity.binding.family.as_dir(),
@@ -1691,15 +1706,21 @@ pub fn run() {
             app.manage(agent_selection);
             let panel_init_script = agent::panel_init_script(app.handle());
 
+            // ── Pick this process's main window session ─────────────────────
+            if !new_terminal {
+                if let Ok(data_dir) = app.path().app_data_dir() {
+                    layout_persist::adopt_saved_terminal_as_main(&data_dir);
+                }
+            }
+
             // ── Load the shared dashboard registry ──────────────────────────
             // Must happen before any `LayoutTree::init` below, which resolves
             // its terminal's `active_dashboard` against this registry. Runs
-            // the one-time Issue 15-B migration on first launch after
-            // upgrading from a pre-15-B install.
-            if !fresh_start {
-                if let Ok(data_dir) = app.path().app_data_dir() {
-                    manager.load_dashboards_registry(&data_dir);
-                }
+            // the one-time format migrations on first launch after
+            // upgrading. Loaded for a new Terminal too: it opens no tabs,
+            // but lists every dashboard so the user can open one.
+            if let Ok(data_dir) = app.path().app_data_dir() {
+                manager.load_dashboards_registry(&data_dir);
             }
 
             // ── Cross-instance discovery ────────────────────────────────────
@@ -1712,8 +1733,21 @@ pub fn run() {
             }
 
             // ── Load persisted layout state ───────────────────────────────
-            // Skip when OT_FRESH_START is set (Desktop Agent "Open New Terminal").
-            if !fresh_start {
+            // A new Terminal starts empty; it only needs the AppHandle so
+            // its own changes are saved.
+            if new_terminal {
+                tree.register_app_handle(app.handle());
+                // Save the (empty) session now, so this Terminal comes back
+                // on the next restore even if nothing in it changes.
+                if let Ok(data_dir) = app.path().app_data_dir() {
+                    let persist = layout_persist::TerminalPersist::default();
+                    if let Err(e) =
+                        layout_persist::save_terminal_dashboards(WIN, &persist, &data_dir)
+                    {
+                        eprintln!("[wm] save new Terminal session: {e}");
+                    }
+                }
+            } else {
                 tree.init(app.handle())?;
 
                 // A terminal implicitly holds a lock on its own active
@@ -1913,8 +1947,8 @@ pub fn run() {
 
             // ── Restore saved non-main terminals ──────────────────────────
             // Each saved terminal/<id>/dashboards.json becomes a new OS window
-            // with its own layout and panel webviews. Skipped on fresh start.
-            if !fresh_start {
+            // with its own layout and panel webviews. Skipped for a new Terminal.
+            if !new_terminal {
                 terminal::spawn::load_persisted_terminals(&manager, app.handle(), pool_size);
             }
 

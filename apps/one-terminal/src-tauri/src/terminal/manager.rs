@@ -20,8 +20,8 @@ use super::state::TerminalState;
 struct ManagerInner {
     /// Open terminals in creation order.
     terminals: IndexMap<String, Arc<TerminalState>>,
-    /// Monotonically increasing counter for generating unique terminal IDs.
-    /// Starts at 2; "terminal-main" occupies the implied slot 1.
+    /// Monotonically increasing counter for new Terminals' display names
+    /// ("Terminal 2", …). Starts at 2; "terminal-main" is the implied 1.
     next_id: u32,
     /// In-memory-only active-dashboard exclusivity lock (Issue 15-D):
     /// dashboard id → id of the terminal currently displaying it. A
@@ -85,17 +85,53 @@ impl TerminalManager {
         Arc::clone(&self.dashboards)
     }
 
-    /// Load the shared dashboard registry from `<data_dir>/dashboards.json`,
-    /// running the one-time Issue 15-B migration first if it doesn't exist
-    /// yet but pre-existing per-terminal dashboard lists do. Must be called
-    /// once, before any `LayoutTree::init` runs, so every terminal's session
-    /// resolves its `active_dashboard` against fully-populated content.
+    /// Load the shared dashboard registry from `<data_dir>/dashboards/`,
+    /// running the one-time migrations first if it doesn't exist yet but an
+    /// older format does. Must be called once, before any `LayoutTree::init`
+    /// runs, so every terminal's session resolves its open tabs and
+    /// `active_dashboard` against fully-populated content.
     pub fn load_dashboards_registry(&self, data_dir: &std::path::Path) {
         let persisted = crate::layout::persist::load_or_migrate_registry(data_dir);
         let mut registry = self.dashboards.write().unwrap();
         for d in persisted.dashboards {
-            registry.dashboards.insert(d.name.clone(), d);
+            registry.insert_unique(d);
         }
+    }
+
+    /// Pick up dashboards other `one-terminal` processes created, changed,
+    /// or deleted on disk since this process last looked. Dashboards active
+    /// in one of this process's windows are left as they are (see
+    /// `DashboardRegistry::apply_changes`). Returns `true` if the registry
+    /// changed — the caller should then `emit_dashboards_all`.
+    pub fn refresh_dashboards(&self, data_dir: &std::path::Path) -> bool {
+        let changes = crate::layout::persist::scan_registry_changes(data_dir);
+        if changes.is_empty() {
+            return false;
+        }
+        let live: HashSet<String> = self
+            .list()
+            .iter()
+            .map(|t| t.layout_tree.active_dashboard_id())
+            .filter(|id| !id.is_empty())
+            .collect();
+        self.dashboards
+            .write()
+            .unwrap()
+            .apply_changes(changes, &live)
+    }
+
+    /// Names of every dashboard open as a tab in any of this process's
+    /// windows, each once, in window then tab order.
+    pub fn open_dashboard_names(&self) -> Vec<String> {
+        let mut names: Vec<String> = Vec::new();
+        for t in self.list() {
+            for name in t.layout_tree.dashboards_snapshot().dashboards {
+                if !names.contains(&name) {
+                    names.push(name);
+                }
+            }
+        }
+        names
     }
 
     /// Register a freshly-spawned terminal. Replaces any existing entry with
@@ -213,13 +249,24 @@ impl TerminalManager {
             .collect()
     }
 
-    /// Generate the next unique terminal window label (`"terminal-2"`,
-    /// `"terminal-3"`, …). Increments the internal counter atomically.
-    pub fn next_label(&self) -> String {
+    /// Generate a window label and display name for a new Terminal window:
+    /// `("terminal-3f9c2a1b", "Terminal 2")`. The label also names the
+    /// window's `terminals/<id>/` session directory, which every
+    /// `one-terminal` process shares — so it must be unique across
+    /// processes, not just within this one (a per-process counter gave two
+    /// processes the same `terminal-2`, and the second deleted the first's
+    /// saved session on spawn).
+    pub fn next_terminal(&self) -> (String, String) {
+        let uuid = uuid::Uuid::new_v4().simple().to_string();
+        (format!("terminal-{}", &uuid[..8]), self.next_display_name())
+    }
+
+    /// Next default display name for a Terminal window: "Terminal 2", …
+    pub fn next_display_name(&self) -> String {
         let mut g = self.inner.write().unwrap();
-        let id = g.next_id;
+        let n = g.next_id;
         g.next_id += 1;
-        format!("terminal-{id}")
+        format!("Terminal {n}")
     }
 
     /// Build a `TerminalListItem` for every registered terminal and emit

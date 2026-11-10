@@ -59,6 +59,7 @@ pub fn is_rect_on_any_monitor(app: &AppHandle, x: f64, y: f64, w: f64, h: f64) -
 /// Install resize and move listeners on `win` that:
 /// 1. Reflow the layout tree and resize the chrome webview on `Resized`.
 /// 2. Debounce-save the window position to disk on `Resized` and `Moved`.
+/// 3. Pick up dashboards other Terminal processes changed, on `Focused`.
 pub fn install_window_listeners(
     terminal_id: &str,
     win: &Window,
@@ -82,6 +83,15 @@ pub fn install_window_listeners(
                 let chrome = format!("{terminal_id_s}-chrome");
                 if let Some(wv) = app_h.get_webview(&chrome) {
                     let _ = wv.emit("wm:confirm-close", serde_json::json!(null));
+                }
+            }
+            tauri::WindowEvent::Focused(true) => {
+                // Cheap when nothing changed: one `stat` per dashboard file.
+                let manager = app_h.state::<TerminalManager>();
+                if let Ok(data_dir) = app_h.path().app_data_dir() {
+                    if manager.refresh_dashboards(&data_dir) {
+                        manager.emit_dashboards_all(&app_h);
+                    }
                 }
             }
             tauri::WindowEvent::Resized(phys) => {
@@ -190,7 +200,13 @@ pub fn restore_terminal(
         .app_data_dir()
         .ok()
         .and_then(|d| persist::load_terminal_for(label, &d));
-    spawn_or_restore(label, None, manager, app, pool_size, persist, true)
+    // A Terminal opened from the Desktop Agent as its own process saved no
+    // name (its first window is the process's main one, which has none).
+    let name = persist
+        .as_ref()
+        .filter(|p| p.name.is_empty())
+        .map(|_| manager.next_display_name());
+    spawn_or_restore(label, name, manager, app, pool_size, persist, true)
 }
 
 /// Scan `<data_dir>/terminals/` for saved non-main terminal directories and

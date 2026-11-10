@@ -1,19 +1,22 @@
 //! Layout persistence — serialise/deserialise the full layout state to disk.
 //!
 //! Format: `<data_dir>/terminals/<id>/dashboards.json` (`TerminalPersist`,
-//! per-window session state) plus one shared `<data_dir>/dashboards.json`
-//! (`PersistedDashboardRegistry`, Issue 15-B) holding every dashboard's
-//! content.
+//! per-window session state: open tabs, active dashboard, geometry) plus
+//! the shared registry, one `<data_dir>/dashboards/<dashboard id>.json`
+//! per dashboard, which every `one-terminal` process reads and writes.
 //!
 //! Migration: if the old `<data_dir>/layout.json` exists it is converted
 //! in-place to a single-dashboard `TerminalPersist`, written to the new path,
 //! and the old file is deleted. Separately, Issue 15-B's
 //! `load_or_migrate_registry` handles the one-time upgrade from N isolated
 //! per-terminal dashboard lists (each `TerminalPersist.dashboards`, pre-15-B)
-//! to the one shared `dashboards.json`.
+//! to the shared registry, and `load_registry` splits the interim single
+//! shared `<data_dir>/dashboards.json` into per-dashboard files.
 
-use std::collections::HashMap;
-use std::path::Path;
+use std::collections::{HashMap, HashSet};
+use std::path::{Path, PathBuf};
+use std::sync::{Mutex, OnceLock};
+use std::time::SystemTime;
 
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
@@ -179,11 +182,11 @@ pub struct PersistedWindowConfig {
 /// Per-window session state written to `terminals/<id>/dashboards.json`.
 ///
 /// Until Issue 15-B this also carried `dashboards: Vec<PersistedDashboard>`
-/// — dashboard *content* now lives exclusively in the shared
-/// [`PersistedDashboardRegistry`] (`<data_dir>/dashboards.json`), so this
-/// type only holds what's genuinely per-Terminal-window: which dashboard
-/// (by name) this window was last showing, its auto-save preference, and
-/// its OS window geometry.
+/// — dashboard *content* now lives exclusively in the shared registry
+/// (`<data_dir>/dashboards/<id>.json`), so this type only holds what's
+/// genuinely per-Terminal-window: which dashboards this window has open as
+/// tabs, which one (by name) it was last showing, its auto-save preference,
+/// and its OS window geometry.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TerminalPersist {
@@ -191,6 +194,13 @@ pub struct TerminalPersist {
     #[serde(default)]
     pub name: String,
     pub active_dashboard: String,
+    /// Stable ids of the dashboards open as tabs in this window, in tab
+    /// order. `None` only for a file written before this field existed —
+    /// back then "open" was a single registry-wide flag
+    /// (`PersistedDashboard::closed`), so such a window opens every
+    /// dashboard not flagged closed (see `DashboardSession::from_persist`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub open_dashboards: Option<Vec<String>>,
     #[serde(default = "default_auto_save")]
     pub auto_save: bool,
     /// Saved OS window position and size; zeroed = use OS default.
@@ -203,6 +213,7 @@ impl Default for TerminalPersist {
         Self {
             name: String::new(),
             active_dashboard: "Default".to_string(),
+            open_dashboards: Some(Vec::new()),
             auto_save: true,
             window: PersistedWindowConfig::default(),
         }
@@ -245,10 +256,32 @@ struct LegacyTerminalPersist {
 
 // ── Path helpers ──────────────────────────────────────────────────────────────
 
+/// `terminals/` subdirectory this process's `terminal-main` window persists
+/// to, when it isn't the default `main` — see [`set_main_terminal_dir`].
+static MAIN_TERMINAL_DIR: OnceLock<String> = OnceLock::new();
+
+/// Persist this process's `terminal-main` window under `terminals/<dir>/`
+/// instead of `terminals/main/`. Every `one-terminal` process names its
+/// first window `terminal-main`, so a process opened as a *new* Terminal
+/// (`OT_NEW_TERMINAL`) calls this with a unique `dir` — otherwise it would
+/// share, and overwrite, the session file of whichever process restored
+/// `terminals/main/`. The next restore picks `<dir>` up as an ordinary
+/// saved Terminal (`list_saved_terminal_ids`). Must be called before
+/// anything is loaded or saved; later calls are ignored.
+pub fn set_main_terminal_dir(dir: String) {
+    let _ = MAIN_TERMINAL_DIR.set(dir);
+}
+
 /// Derive the `terminals/` subdirectory name from a terminal window label.
 ///
-/// `"terminal-main"` → `"main"`, `"terminal-2"` → `"2"`, etc.
+/// `"terminal-main"` → `"main"` (or the [`set_main_terminal_dir`] override),
+/// `"terminal-2"` → `"2"`, etc.
 fn terminal_dir_name(terminal_id: &str) -> &str {
+    if terminal_id == "terminal-main" {
+        if let Some(dir) = MAIN_TERMINAL_DIR.get() {
+            return dir;
+        }
+    }
     terminal_id.strip_prefix("terminal-").unwrap_or(terminal_id)
 }
 
@@ -271,12 +304,22 @@ pub fn save_terminal_for(
         .join("terminals")
         .join(terminal_dir_name(terminal_id));
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let json = serde_json::to_string(persist).map_err(|e| e.to_string())?;
-    let tmp = dir.join("dashboards.json.tmp");
-    let dest = dir.join("dashboards.json");
-    std::fs::write(&tmp, json).map_err(|e| e.to_string())?;
-    std::fs::rename(&tmp, &dest).map_err(|e| e.to_string())?;
-    Ok(())
+    let json = serde_json::to_vec(persist).map_err(|e| e.to_string())?;
+    write_atomic(&dir.join("dashboards.json"), &json)
+}
+
+/// Write `bytes` to `dest` via a temp file + rename, so a reader never sees
+/// a half-written file. The temp name carries this process's pid: several
+/// `one-terminal` processes share the data dir, and two writing the same
+/// destination must not also share a temp file.
+fn write_atomic(dest: &Path, bytes: &[u8]) -> Result<(), String> {
+    let file_name = dest
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or_else(|| format!("bad path {}", dest.display()))?;
+    let tmp = dest.with_file_name(format!("{file_name}.{}.tmp", std::process::id()));
+    std::fs::write(&tmp, bytes).map_err(|e| e.to_string())?;
+    std::fs::rename(&tmp, dest).map_err(|e| e.to_string())
 }
 
 /// Backwards-compatible alias — saves the primary terminal.
@@ -284,8 +327,8 @@ pub fn save_terminal(persist: &TerminalPersist, data_dir: &Path) -> Result<(), S
     save_terminal_for("terminal-main", persist, data_dir)
 }
 
-/// Update only the session fields (`active_dashboard`, `auto_save`),
-/// preserving `name` and `window` from the existing file.
+/// Update only the session fields (`active_dashboard`, `open_dashboards`,
+/// `auto_save`), preserving `name` and `window` from the existing file.
 ///
 /// Used by `LayoutTree::schedule_save` so layout auto-saves don't overwrite the
 /// terminal name or window position that were written by other commands.
@@ -298,38 +341,313 @@ pub fn save_terminal_dashboards(
 ) -> Result<(), String> {
     let mut existing =
         load_terminal_for(terminal_id, data_dir).unwrap_or_else(|| TerminalPersist {
-            name: terminal_dir_name(terminal_id).to_string(),
+            // A `set_main_terminal_dir` directory is a random id, not a name
+            // worth showing; restore names such a Terminal itself.
+            name: if terminal_id == "terminal-main" && MAIN_TERMINAL_DIR.get().is_some() {
+                String::new()
+            } else {
+                terminal_dir_name(terminal_id).to_string()
+            },
             ..Default::default()
         });
     existing.active_dashboard = persist.active_dashboard.clone();
+    existing.open_dashboards = persist.open_dashboards.clone();
     existing.auto_save = persist.auto_save;
     save_terminal_for(terminal_id, &existing, data_dir)
 }
 
-// ── Shared registry: load / save / migrate ────────────────────────────────────
+// ── Shared registry: one file per dashboard ──────────────────────────────────
+//
+// Every dashboard is stored in its own `<data_dir>/dashboards/<id>.json`.
+// Several independent `one-terminal` processes share this directory, each
+// with its own in-memory copy of the registry, so a save must only ever
+// touch what *this* process changed: rewriting a single shared file from a
+// stale in-memory copy silently discarded every dashboard another process
+// had created since (the lost-update bug the old `dashboards.json` had).
+//
+// `KNOWN` remembers, per file, the content this process last wrote or read.
+// `save_registry` writes a dashboard only when its content differs from
+// that, and deletes only files it knows about whose dashboard is gone from
+// its registry (i.e. deleted here). `scan_registry_changes` uses the same
+// record to pick up what other processes wrote since.
 
-fn registry_path(data_dir: &Path) -> std::path::PathBuf {
+fn legacy_registry_path(data_dir: &Path) -> PathBuf {
     data_dir.join("dashboards.json")
 }
 
-/// Load `<data_dir>/dashboards.json`. Returns `None` if it doesn't exist or
-/// can't be parsed — callers use this to distinguish "already on the new
-/// format" from "needs `load_or_migrate_registry`".
-pub fn load_registry(data_dir: &Path) -> Option<PersistedDashboardRegistry> {
-    let bytes = std::fs::read(registry_path(data_dir)).ok()?;
-    serde_json::from_slice(&bytes).ok()
+fn dashboards_dir(data_dir: &Path) -> PathBuf {
+    data_dir.join("dashboards")
 }
 
-/// Write `registry` to `<data_dir>/dashboards.json` atomically (write to a
-/// `.tmp` file, then rename over the destination).
+fn dashboard_path(dir: &Path, id: &str) -> PathBuf {
+    // Ids are UUIDs; anything else is defanged so it can't escape `dir`.
+    let safe: String = id
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' || c == '_' {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    dir.join(format!("{safe}.json"))
+}
+
+/// What this process last saw of one dashboard file.
+#[derive(Clone, Debug)]
+struct FileStamp {
+    id: String,
+    hash: u64,
+    modified: Option<SystemTime>,
+    len: u64,
+}
+
+fn known_files() -> &'static Mutex<HashMap<PathBuf, FileStamp>> {
+    static KNOWN: OnceLock<Mutex<HashMap<PathBuf, FileStamp>>> = OnceLock::new();
+    KNOWN.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn content_hash(bytes: &[u8]) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    bytes.hash(&mut h);
+    h.finish()
+}
+
+/// Serialise with object keys sorted. `PersistedDashboard::meta` is a
+/// `HashMap`, whose iteration order differs per process — without this,
+/// a dashboard read from another process's file would never compare equal
+/// to its own bytes, and every save would rewrite it from a possibly stale
+/// copy.
+fn canonical_bytes(dashboard: &PersistedDashboard) -> Result<Vec<u8>, String> {
+    let value = serde_json::to_value(dashboard).map_err(|e| e.to_string())?;
+    serde_json::to_vec(&value).map_err(|e| e.to_string())
+}
+
+fn stamp(path: &Path, id: &str, hash: u64) -> FileStamp {
+    let meta = std::fs::metadata(path).ok();
+    FileStamp {
+        id: id.to_string(),
+        hash,
+        modified: meta.as_ref().and_then(|m| m.modified().ok()),
+        len: meta.map(|m| m.len()).unwrap_or(0),
+    }
+}
+
+/// Read and parse one dashboard file, returning it with its content hash.
+fn read_dashboard(path: &Path) -> Option<(PersistedDashboard, u64)> {
+    let bytes = std::fs::read(path).ok()?;
+    let dashboard: PersistedDashboard = serde_json::from_slice(&bytes).ok()?;
+    // Hash our canonical form rather than the raw bytes, so a file written
+    // by an older build (or by hand) is still recognised as unchanged.
+    let hash = content_hash(&canonical_bytes(&dashboard).ok()?);
+    Some((dashboard, hash))
+}
+
+fn dashboard_files(dir: &Path) -> Vec<PathBuf> {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return Vec::new();
+    };
+    entries
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.extension().and_then(|e| e.to_str()) == Some("json"))
+        .collect()
+}
+
+/// Load every dashboard from `<data_dir>/dashboards/`, sorted by name.
+/// Returns `None` if no registry exists in any format — callers use this
+/// to distinguish "already on the new format" from "needs
+/// `load_or_migrate_registry`".
+///
+/// A pre-existing single-file `<data_dir>/dashboards.json` is split into
+/// per-dashboard files first (kept as `dashboards.json.migrated`).
+pub fn load_registry(data_dir: &Path) -> Option<PersistedDashboardRegistry> {
+    let dir = dashboards_dir(data_dir);
+    if !dir.is_dir() {
+        return migrate_single_file_registry(data_dir);
+    }
+    let mut known = known_files().lock().unwrap();
+    let mut dashboards = Vec::new();
+    for path in dashboard_files(&dir) {
+        let Some((dashboard, hash)) = read_dashboard(&path) else {
+            eprintln!(
+                "[layout] skipping unreadable dashboard file {}",
+                path.display()
+            );
+            continue;
+        };
+        known.insert(path.clone(), stamp(&path, &dashboard.id, hash));
+        dashboards.push(dashboard);
+    }
+    dashboards.sort_by_key(|d| d.name.to_lowercase());
+    Some(PersistedDashboardRegistry { dashboards })
+}
+
+/// One-time upgrade from the single shared `dashboards.json` to one file
+/// per dashboard. Order matters for crash-safety: terminal files gain their
+/// `openDashboards` first (from the old file's order — the per-file format
+/// has none), then the dashboard files are written, and only then is the
+/// old file moved aside. A crash part-way just re-runs this next launch.
+fn migrate_single_file_registry(data_dir: &Path) -> Option<PersistedDashboardRegistry> {
+    let legacy_path = legacy_registry_path(data_dir);
+    let bytes = std::fs::read(&legacy_path).ok()?;
+    let registry: PersistedDashboardRegistry = serde_json::from_slice(&bytes).ok()?;
+    backfill_open_dashboards(data_dir, &registry);
+    if let Err(e) = save_registry(data_dir, &registry) {
+        eprintln!("[layout] migration: failed to split dashboards.json: {e}");
+        return Some(registry);
+    }
+    let _ = std::fs::rename(&legacy_path, data_dir.join("dashboards.json.migrated"));
+    eprintln!(
+        "[layout] migrated dashboards.json → dashboards/ ({} dashboard(s))",
+        registry.dashboards.len()
+    );
+    Some(registry)
+}
+
+/// Give every saved Terminal written before per-window open lists existed
+/// an explicit `openDashboards`: every dashboard not flagged `closed`, in
+/// `registry` order — exactly the tabs it showed before, since "closed" was
+/// then one flag shared by all windows.
+fn backfill_open_dashboards(data_dir: &Path, registry: &PersistedDashboardRegistry) {
+    let open: Vec<String> = registry
+        .dashboards
+        .iter()
+        .filter(|d| !d.closed)
+        .map(|d| d.id.clone())
+        .collect();
+    for path in dashboard_files_in_terminals(data_dir) {
+        let Ok(bytes) = std::fs::read(&path) else {
+            continue;
+        };
+        let Ok(mut persist) = serde_json::from_slice::<TerminalPersist>(&bytes) else {
+            continue;
+        };
+        if persist.open_dashboards.is_some() {
+            continue;
+        }
+        persist.open_dashboards = Some(open.clone());
+        if let Ok(json) = serde_json::to_vec(&persist) {
+            if let Err(e) = write_atomic(&path, &json) {
+                eprintln!("[layout] migration: {}: {e}", path.display());
+            }
+        }
+    }
+}
+
+fn dashboard_files_in_terminals(data_dir: &Path) -> Vec<PathBuf> {
+    let Ok(entries) = std::fs::read_dir(data_dir.join("terminals")) else {
+        return Vec::new();
+    };
+    entries
+        .flatten()
+        .map(|e| e.path().join("dashboards.json"))
+        .filter(|p| p.is_file())
+        .collect()
+}
+
+/// Write `registry` to `<data_dir>/dashboards/`: each dashboard whose
+/// content changed since this process last wrote or read it, and a delete
+/// for each file this process knows about whose dashboard is no longer in
+/// `registry`. Files this process has never seen (dashboards created by
+/// another process since the last scan) are left alone.
 pub fn save_registry(data_dir: &Path, registry: &PersistedDashboardRegistry) -> Result<(), String> {
-    std::fs::create_dir_all(data_dir).map_err(|e| e.to_string())?;
-    let json = serde_json::to_string(registry).map_err(|e| e.to_string())?;
-    let tmp = data_dir.join("dashboards.json.tmp");
-    let dest = registry_path(data_dir);
-    std::fs::write(&tmp, json).map_err(|e| e.to_string())?;
-    std::fs::rename(&tmp, &dest).map_err(|e| e.to_string())?;
-    Ok(())
+    let dir = dashboards_dir(data_dir);
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let mut known = known_files().lock().unwrap();
+    let mut live: HashSet<PathBuf> = HashSet::with_capacity(registry.dashboards.len());
+    let mut first_error = None;
+
+    for dashboard in &registry.dashboards {
+        let path = dashboard_path(&dir, &dashboard.id);
+        live.insert(path.clone());
+        let bytes = canonical_bytes(dashboard)?;
+        let hash = content_hash(&bytes);
+        if known.get(&path).is_some_and(|s| s.hash == hash) {
+            continue;
+        }
+        match write_atomic(&path, &bytes) {
+            Ok(()) => {
+                known.insert(path.clone(), stamp(&path, &dashboard.id, hash));
+            }
+            Err(e) => {
+                first_error.get_or_insert(e);
+            }
+        }
+    }
+
+    let deleted: Vec<PathBuf> = known
+        .keys()
+        .filter(|p| p.parent() == Some(dir.as_path()) && !live.contains(*p))
+        .cloned()
+        .collect();
+    for path in deleted {
+        match std::fs::remove_file(&path) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => {
+                first_error.get_or_insert(e.to_string());
+                continue;
+            }
+        }
+        known.remove(&path);
+    }
+
+    first_error.map_or(Ok(()), Err)
+}
+
+/// A change another process made to the shared registry on disk.
+#[derive(Debug)]
+pub enum RegistryChange {
+    /// Created or modified elsewhere — carries the dashboard as now on disk.
+    Upserted(Box<PersistedDashboard>),
+    /// Deleted elsewhere — carries the dashboard's id.
+    Removed(String),
+}
+
+/// Diff `<data_dir>/dashboards/` against what this process last wrote or
+/// read, and record the current files as seen. Unchanged files cost one
+/// `stat` each (no read), so this is cheap enough to run on window focus.
+pub fn scan_registry_changes(data_dir: &Path) -> Vec<RegistryChange> {
+    let dir = dashboards_dir(data_dir);
+    let mut known = known_files().lock().unwrap();
+    let mut changes = Vec::new();
+    let mut seen: HashSet<PathBuf> = HashSet::new();
+
+    for path in dashboard_files(&dir) {
+        seen.insert(path.clone());
+        let meta = std::fs::metadata(&path).ok();
+        let modified = meta.as_ref().and_then(|m| m.modified().ok());
+        let len = meta.map(|m| m.len()).unwrap_or(0);
+        if let Some(s) = known.get(&path) {
+            if modified.is_some() && s.modified == modified && s.len == len {
+                continue;
+            }
+        }
+        let Some((dashboard, hash)) = read_dashboard(&path) else {
+            continue;
+        };
+        let unchanged = known.get(&path).is_some_and(|s| s.hash == hash);
+        known.insert(path.clone(), stamp(&path, &dashboard.id, hash));
+        if !unchanged {
+            changes.push(RegistryChange::Upserted(Box::new(dashboard)));
+        }
+    }
+
+    let removed: Vec<PathBuf> = known
+        .keys()
+        .filter(|p| p.parent() == Some(dir.as_path()) && !seen.contains(*p))
+        .cloned()
+        .collect();
+    for path in removed {
+        if let Some(s) = known.remove(&path) {
+            changes.push(RegistryChange::Removed(s.id));
+        }
+    }
+
+    changes
 }
 
 /// Load the shared registry, running the one-time migration first if it
@@ -337,11 +655,11 @@ pub fn save_registry(data_dir: &Path, registry: &PersistedDashboardRegistry) -> 
 /// does. Must be called once, before any `LayoutTree::init` resolves a
 /// session against the registry (see `TerminalManager::load_dashboards_registry`).
 ///
-/// Migration order matters for crash-safety: the merged shared file is
+/// Migration order matters for crash-safety: the merged shared registry is
 /// written first and only once that succeeds are the per-terminal files
 /// rewritten (dashboards dropped, active_dashboard repointed at the merged
 /// name). If the process dies between those two steps, the next launch
-/// finds `dashboards.json` already present and simply loads it — it will
+/// finds the registry already present and simply loads it — it will
 /// not re-migrate or double-merge; at worst a few per-terminal files still
 /// carry their now-redundant legacy `dashboards` array, which the trimmed
 /// `TerminalPersist` deserializer just ignores.
@@ -356,7 +674,7 @@ pub fn load_or_migrate_registry(data_dir: &Path) -> PersistedDashboardRegistry {
         return PersistedDashboardRegistry::default();
     };
 
-    let mut source_dirs: Vec<(String, std::path::PathBuf)> = entries
+    let mut source_dirs: Vec<(String, PathBuf)> = entries
         .flatten()
         .filter_map(|e| {
             let path = e.path();
@@ -425,12 +743,23 @@ pub fn load_or_migrate_registry(data_dir: &Path) -> PersistedDashboardRegistry {
         dashboards: merged.into_values().collect(),
     };
 
-    // Write the shared file FIRST — only once it's confirmed on disk do we
-    // touch any per-terminal file (see crash-safety note above).
+    // Write the shared registry FIRST — only once it's confirmed on disk do
+    // we touch any per-terminal file (see crash-safety note above).
     if let Err(e) = save_registry(data_dir, &registry) {
-        eprintln!("[layout] migration: failed to write shared dashboards.json: {e}");
+        eprintln!("[layout] migration: failed to write shared dashboard registry: {e}");
         return registry;
     }
+
+    // Each pre-15-B Terminal showed exactly its own dashboards as tabs.
+    let open_ids = |legacy: &LegacyTerminalPersist| -> Vec<String> {
+        let own: HashSet<&str> = legacy.dashboards.iter().map(|d| d.id.as_str()).collect();
+        registry
+            .dashboards
+            .iter()
+            .filter(|d| own.contains(d.id.as_str()) && !d.closed)
+            .map(|d| d.id.clone())
+            .collect()
+    };
 
     for (dir_name, legacy, active_rename) in &rewrites {
         let trimmed = TerminalPersist {
@@ -438,6 +767,7 @@ pub fn load_or_migrate_registry(data_dir: &Path) -> PersistedDashboardRegistry {
             active_dashboard: active_rename
                 .clone()
                 .unwrap_or_else(|| legacy.active_dashboard.clone()),
+            open_dashboards: Some(open_ids(legacy)),
             auto_save: legacy.auto_save,
             window: legacy.window.clone(),
         };
@@ -483,13 +813,14 @@ pub fn list_saved_terminal_ids(data_dir: &Path) -> Vec<String> {
     let Ok(entries) = std::fs::read_dir(&terminals_dir) else {
         return Vec::new();
     };
+    let main = terminal_dir_name("terminal-main");
     let mut ids: Vec<String> = entries
         .flatten()
         .filter_map(|e| {
             let path = e.path();
             if path.is_dir() && path.join("dashboards.json").exists() {
                 let name = path.file_name()?.to_str()?;
-                if name != "main" {
+                if name != main {
                     return Some(format!("terminal-{name}"));
                 }
             }
@@ -498,6 +829,21 @@ pub fn list_saved_terminal_ids(data_dir: &Path) -> Vec<String> {
         .collect();
     ids.sort();
     ids
+}
+
+/// When restoring and there's no `terminals/main/` session, make the first
+/// other saved session this process's `terminal-main` window (via
+/// [`set_main_terminal_dir`]) instead of opening an extra blank one next
+/// to it. Terminals opened from the Desktop Agent each save under their
+/// own id, never `main`, so this is the usual case. Must run before
+/// anything loads or saves `terminal-main`.
+pub fn adopt_saved_terminal_as_main(data_dir: &Path) {
+    if load_terminal_for("terminal-main", data_dir).is_some() {
+        return;
+    }
+    if let Some(id) = list_saved_terminal_ids(data_dir).first() {
+        set_main_terminal_dir(terminal_dir_name(id).to_string());
+    }
 }
 
 // ── Delete ────────────────────────────────────────────────────────────────────
@@ -545,10 +891,12 @@ pub fn load_terminal(data_dir: &Path) -> Option<TerminalPersist> {
     if let Ok(bytes) = std::fs::read(&old_path) {
         if let Ok(old) = serde_json::from_slice::<PersistedLayout>(&bytes) {
             let dashboard = PersistedDashboard::from_layout("Default".to_string(), old);
+            let open_dashboards = Some(vec![dashboard.id.clone()]);
             let mut registry = load_registry(data_dir).unwrap_or_default();
             registry.dashboards.push(dashboard);
             let persist = TerminalPersist {
                 active_dashboard: "Default".to_string(),
+                open_dashboards,
                 auto_save: true,
                 ..Default::default()
             };
@@ -636,8 +984,8 @@ mod tests {
         let registry = load_or_migrate_registry(&data_dir);
         assert!(registry.dashboards.is_empty());
         assert!(
-            !registry_path(&data_dir).exists(),
-            "a fresh install must not write dashboards.json"
+            !dashboards_dir(&data_dir).exists(),
+            "a fresh install must not write a dashboard registry"
         );
     }
 
@@ -658,9 +1006,14 @@ mod tests {
             "a single terminal's dashboards must migrate verbatim, no renames"
         );
 
-        assert!(registry_path(&data_dir).exists());
+        assert!(dashboards_dir(&data_dir).is_dir());
         let trimmed = load_terminal_for("terminal-main", &data_dir).unwrap();
         assert_eq!(trimmed.active_dashboard, "Trading");
+        assert_eq!(
+            trimmed.open_dashboards.map(|o| o.len()),
+            Some(2),
+            "a migrated Terminal keeps its own dashboards open"
+        );
     }
 
     #[test]
@@ -724,5 +1077,129 @@ mod tests {
         assert_eq!(loaded.dashboards.len(), 1);
         assert_eq!(loaded.dashboards[0].name, "Trading");
         assert_eq!(loaded.dashboards[0].id, registry.dashboards[0].id);
+    }
+
+    /// Drop this process's record of `data_dir`'s files, as if a different
+    /// process were about to touch them.
+    fn forget_known(data_dir: &Path) {
+        let dir = dashboards_dir(data_dir);
+        known_files()
+            .lock()
+            .unwrap()
+            .retain(|p, _| p.parent() != Some(dir.as_path()));
+    }
+
+    fn dashboard_file_count(data_dir: &Path) -> usize {
+        dashboard_files(&dashboards_dir(data_dir)).len()
+    }
+
+    #[test]
+    fn two_processes_saving_never_drop_each_others_dashboards() {
+        // Stand-in for two `one-terminal` processes: each has its own
+        // in-memory registry loaded at startup, and each saves its whole
+        // registry. The second save used to overwrite the shared file and
+        // erase the first process's new dashboard.
+        let data_dir = test_data_dir();
+        let a = PersistedDashboardRegistry {
+            dashboards: vec![PersistedDashboard::empty("From A".to_string())],
+        };
+        let b = PersistedDashboardRegistry {
+            dashboards: vec![PersistedDashboard::empty("From B".to_string())],
+        };
+        save_registry(&data_dir, &a).unwrap();
+        // Process B never saw A's file — its cache has no record of it.
+        forget_known(&data_dir);
+        save_registry(&data_dir, &b).unwrap();
+
+        let loaded = load_registry(&data_dir).unwrap();
+        let names: Vec<&str> = loaded.dashboards.iter().map(|d| d.name.as_str()).collect();
+        assert_eq!(names, vec!["From A", "From B"]);
+    }
+
+    #[test]
+    fn save_deletes_only_dashboards_removed_from_the_registry() {
+        let data_dir = test_data_dir();
+        let keep = PersistedDashboard::empty("Keep".to_string());
+        let drop = PersistedDashboard::empty("Drop".to_string());
+        let mut registry = PersistedDashboardRegistry {
+            dashboards: vec![keep, drop],
+        };
+        save_registry(&data_dir, &registry).unwrap();
+        assert_eq!(dashboard_file_count(&data_dir), 2);
+
+        registry.dashboards.retain(|d| d.name == "Keep");
+        save_registry(&data_dir, &registry).unwrap();
+        assert_eq!(dashboard_file_count(&data_dir), 1);
+    }
+
+    #[test]
+    fn scan_reports_dashboards_written_and_deleted_elsewhere() {
+        let data_dir = test_data_dir();
+        let mine = PersistedDashboard::empty("Mine".to_string());
+        save_registry(
+            &data_dir,
+            &PersistedDashboardRegistry {
+                dashboards: vec![mine.clone()],
+            },
+        )
+        .unwrap();
+        assert!(
+            scan_registry_changes(&data_dir).is_empty(),
+            "own writes are not changes"
+        );
+
+        // Another process adds a dashboard and deletes ours.
+        let theirs = PersistedDashboard::empty("Theirs".to_string());
+        let dir = dashboards_dir(&data_dir);
+        std::fs::write(
+            dashboard_path(&dir, &theirs.id),
+            serde_json::to_vec(&theirs).unwrap(),
+        )
+        .unwrap();
+        std::fs::remove_file(dashboard_path(&dir, &mine.id)).unwrap();
+
+        let changes = scan_registry_changes(&data_dir);
+        assert_eq!(changes.len(), 2);
+        assert!(changes
+            .iter()
+            .any(|c| matches!(c, RegistryChange::Upserted(d) if d.id == theirs.id)));
+        assert!(changes
+            .iter()
+            .any(|c| matches!(c, RegistryChange::Removed(id) if *id == mine.id)));
+        assert!(
+            scan_registry_changes(&data_dir).is_empty(),
+            "changes are reported once"
+        );
+    }
+
+    #[test]
+    fn single_file_registry_is_split_and_open_tabs_backfilled() {
+        let data_dir = test_data_dir();
+        let open = PersistedDashboard::empty("Open".to_string());
+        let mut closed = PersistedDashboard::empty("Closed".to_string());
+        closed.closed = true;
+        let legacy = PersistedDashboardRegistry {
+            dashboards: vec![open.clone(), closed],
+        };
+        std::fs::write(
+            legacy_registry_path(&data_dir),
+            serde_json::to_vec(&legacy).unwrap(),
+        )
+        .unwrap();
+        let dir = data_dir.join("terminals").join("main");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(
+            dir.join("dashboards.json"),
+            r#"{"name":"","activeDashboard":"Open","autoSave":true}"#,
+        )
+        .unwrap();
+
+        let registry = load_or_migrate_registry(&data_dir);
+        assert_eq!(registry.dashboards.len(), 2);
+        assert_eq!(dashboard_file_count(&data_dir), 2);
+        assert!(!legacy_registry_path(&data_dir).exists());
+
+        let main = load_terminal_for("terminal-main", &data_dir).unwrap();
+        assert_eq!(main.open_dashboards, Some(vec![open.id]));
     }
 }

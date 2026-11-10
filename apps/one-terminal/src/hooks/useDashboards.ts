@@ -10,8 +10,10 @@ interface DashboardsPayload {
   active: string;
   autoSave: boolean;
   dirty: boolean;
+  /** Dashboards open as tabs in this Terminal window, in tab order. */
   dashboards: string[];
-  /** Names of dashboards closed via `close()` — hidden but not deleted. */
+  /** Every other dashboard in the account — not open in this window (it
+   *  may be open in another), sorted by name. */
   closedDashboards: string[];
   /** Total panels across all dashboards parked off-screen (kept alive)
    *  instead of closed, because their owning dashboard isn't active. */
@@ -70,8 +72,10 @@ export interface DashboardInfo {
 
 export interface UseDashboardsResult {
   dashboards: DashboardInfo[];
-  /** Names of dashboards closed (hidden, not deleted) — see `close`/`reopen`. */
+  /** The account's other dashboards — not open as tabs in this window. See `openDashboard`. */
   closedDashboards: string[];
+  /** Dashboard name → the other Terminal window that has it active. */
+  lockedBy: Record<string, string>;
   autoSave: boolean;
   /** Total panels currently parked (kept alive) in background dashboards. */
   parkedCount: number;
@@ -90,10 +94,12 @@ export interface UseDashboardsResult {
   rename: (oldName: string, newName: string) => Promise<void>;
   /** Permanently delete `name` — irreversible. See `close` for the reopenable alternative. */
   remove: (name: string) => Promise<void>;
-  /** Hide `name` from the switcher/drawer and stop its background widgets, without deleting it. */
+  /** Close `name`'s tab in this window and stop its background widgets, without deleting it. */
   close: (name: string) => Promise<void>;
-  /** Bring a closed dashboard back into the switcher/drawer, unchanged. Does not switch to it. */
+  /** Open one of the account's dashboards as a tab in this window, unchanged. Does not switch to it. */
   reopen: (name: string) => Promise<void>;
+  /** Open `name` as a tab in this window and switch to it. */
+  openDashboard: (name: string) => Promise<void>;
   reorder: (names: string[]) => Promise<void>;
   setAutoSave: (enabled: boolean) => Promise<void>;
   /**
@@ -274,6 +280,14 @@ export function useDashboards(): UseDashboardsResult {
     await invoke("wm_reopen_dashboard", { name });
   }, []);
 
+  const openDashboard = useCallback(
+    async (name: string) => {
+      await reopen(name);
+      await switchTo(name);
+    },
+    [reopen, switchTo]
+  );
+
   const reorder = useCallback(async (names: string[]) => {
     await invoke("wm_reorder_dashboards", { order: names });
   }, []);
@@ -325,6 +339,8 @@ export function useDashboards(): UseDashboardsResult {
   // ── Command palette — dynamic switch commands per dashboard ───────────────
   const switchToRef = useRef(switchTo);
   switchToRef.current = switchTo;
+  const openDashboardRef = useRef(openDashboard);
+  openDashboardRef.current = openDashboard;
 
   useEffect(() => {
     if (!payload) return;
@@ -340,6 +356,17 @@ export function useDashboards(): UseDashboardsResult {
         keywords: ["switch", "dashboard", name.toLowerCase()],
         group: "navigation",
         action: () => switchToRef.current(name).catch(console.error),
+      });
+    }
+    for (const name of payload.closedDashboards) {
+      const id = `dashboard:open:${name}`;
+      ids.push(id);
+      registry.register({
+        id,
+        label: `Open dashboard "${name}"`,
+        keywords: ["open", "dashboard", name.toLowerCase()],
+        group: "navigation",
+        action: () => openDashboardRef.current(name).catch(console.error),
       });
     }
     return () => {
@@ -360,6 +387,7 @@ export function useDashboards(): UseDashboardsResult {
   return {
     dashboards,
     closedDashboards: payload?.closedDashboards ?? [],
+    lockedBy: payload?.lockedBy ?? {},
     autoSave: payload?.autoSave ?? true,
     parkedCount: payload?.parkedCount ?? 0,
     switchTo,
@@ -370,6 +398,7 @@ export function useDashboards(): UseDashboardsResult {
     remove,
     close,
     reopen,
+    openDashboard,
     reorder,
     setAutoSave,
     lockConflict,
