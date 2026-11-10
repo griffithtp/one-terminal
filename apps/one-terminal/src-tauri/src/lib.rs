@@ -1648,6 +1648,11 @@ pub fn run() {
     // the variable's old name.
     let new_terminal = std::env::var_os("OT_NEW_TERMINAL").is_some()
         || std::env::var_os("OT_FRESH_START").is_some();
+    // `tauri dev` (`npm run dev:terminal`) started this process directly —
+    // not the Desktop Agent, whose children are separate processes that
+    // must exit with their last window or they'd linger with none.
+    let keep_running_when_empty =
+        tauri::is_dev() && std::env::var_os("OT_SPAWNED_BY_AGENT").is_none();
 
     let cfg = TerminalConfig::load();
     let manager = TerminalManager::new();
@@ -2063,7 +2068,32 @@ pub fn run() {
         ])
         .build(tauri::generate_context!())
         .expect("error while building one-terminal")
-        .run(|app, event| {
+        .run(move |app, event| {
+            // Closing the last window normally ends the process (each
+            // Terminal the Desktop Agent opens is its own process). Under
+            // `npm run dev:terminal` that also stops `tauri dev` and its Vite
+            // server, so keep that process running with no windows; Ctrl+C
+            // still stops it. `code: None` is the "last window closed"
+            // request — an explicit `app.exit(code)` still exits.
+            if keep_running_when_empty {
+                if let tauri::RunEvent::ExitRequested {
+                    code: None, api, ..
+                } = &event
+                {
+                    api.prevent_exit();
+                    println!(
+                        "[wm] dev: last Terminal window closed; process kept running \
+                         (Ctrl+C to stop{})",
+                        if cfg!(target_os = "macos") {
+                            ", click the Dock icon for a new Terminal"
+                        } else {
+                            ""
+                        }
+                    );
+                    return;
+                }
+            }
+
             // Clicking the Dock icon only deminiaturises a window when the
             // app has none visible — so with a widget popped out, a
             // minimised Terminal could never be brought back. Restore every
@@ -2071,7 +2101,15 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             if let tauri::RunEvent::Reopen { .. } = event {
                 let manager = app.state::<TerminalManager>();
-                for terminal in manager.list() {
+                let terminals = manager.list();
+                // Only reachable in the dev case above: every window closed.
+                if terminals.is_empty() && keep_running_when_empty {
+                    if let Err(e) = open_new_window(&manager, app) {
+                        eprintln!("[wm] dev: open new Terminal: {e}");
+                    }
+                    return;
+                }
+                for terminal in terminals {
                     if let Some(w) = app.get_window(&terminal.id) {
                         if w.is_minimized().unwrap_or(false) {
                             let _ = w.unminimize();

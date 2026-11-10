@@ -522,11 +522,21 @@ impl TerminalRegistry {
     }
 }
 
+/// Command to run `one-terminal`. `OT_SPAWNED_BY_AGENT` tells a dev build
+/// it's one of this agent's per-Terminal processes, so it exits with its
+/// last window like a release build (rather than staying up the way
+/// `npm run dev:terminal` does).
+fn wm_command(bin: &std::path::Path) -> std::process::Command {
+    let mut cmd = std::process::Command::new(bin);
+    cmd.env("OT_SPAWNED_BY_AGENT", "1");
+    cmd
+}
+
 /// Spawn a Window Manager instance that restores every previously saved
 /// Terminal window in one process. Called once at Desktop Agent startup.
 fn spawn_wm_restore(registry: &TerminalRegistry) {
     match locate_wm_binary() {
-        Ok(bin) => match std::process::Command::new(&bin).spawn() {
+        Ok(bin) => match wm_command(&bin).spawn() {
             Ok(child) => registry.track(child),
             Err(e) => eprintln!("[cda/tray] Failed to spawn window-manager: {e}"),
         },
@@ -615,10 +625,7 @@ mod terminal_registry_tests {
 /// another Terminal has open.
 fn spawn_wm_new_terminal(registry: &TerminalRegistry) {
     match locate_wm_binary() {
-        Ok(bin) => match std::process::Command::new(&bin)
-            .env("OT_NEW_TERMINAL", "1")
-            .spawn()
-        {
+        Ok(bin) => match wm_command(&bin).env("OT_NEW_TERMINAL", "1").spawn() {
             Ok(child) => registry.track(child),
             Err(e) => eprintln!("[cda/tray] Failed to spawn new Terminal: {e}"),
         },
