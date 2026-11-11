@@ -41,7 +41,7 @@ export function buildContext(answers: {
     fdc3BusPort: answers.fdc3BusPort ?? 7891,
     appDirectoryPort: answers.appDirectoryPort ?? 3005,
     includeFdc3: answers.includeFdc3,
-    scaffoldVersion: "0.2.1",
+    scaffoldVersion: "0.2.2",
     scaffoldedAt: new Date().toISOString().slice(0, 10),
   };
 }
