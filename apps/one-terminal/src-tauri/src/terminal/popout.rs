@@ -398,6 +398,15 @@ pub fn open_popout(
     }
 
     manager.register_popout(&popout, &terminal.id, &panel);
+    // The owner closed while this was being built (e.g. the deferred
+    // startup restore): its close already swept its popouts, so nothing
+    // else would ever close this one — and it would keep the process alive.
+    // Registering first and checking after closes the race with
+    // `close_terminal_popouts`, which unregisters the Terminal first.
+    if manager.get(&terminal.id).is_none() {
+        close_popout_and_panel(app, manager, &popout, &panel);
+        return Err(format!("Terminal '{}' closed", terminal.id));
+    }
     install_listeners(app, &popout, &panel, &tree);
     show_when_ready(app, &popout);
     eprintln!(
@@ -637,6 +646,45 @@ pub fn close_popouts(app: &AppHandle, manager: &TerminalManager, terminal: &Term
     for (popout, _) in manager.popouts_of(&terminal.id) {
         destroy_popout(app, manager, &popout);
     }
+}
+
+/// Close every popped-out widget of a Terminal that is closing for good:
+/// each widget's webview, then its popout window. The Terminal must
+/// already be removed from `manager` (see `open_popout`'s check). Also
+/// destroys any of `owner`'s popout windows missing from the registry, so
+/// none can outlive the Terminal and keep the process running. The floating
+/// entries stay in the saved dashboard, so reopening it pops them out again.
+pub fn close_terminal_popouts(app: &AppHandle, manager: &TerminalManager, owner: &str) {
+    let mut closed = std::collections::HashSet::new();
+    for (popout, panel) in manager.popouts_of(owner) {
+        close_popout_and_panel(app, manager, &popout, &panel);
+        closed.insert(popout);
+    }
+    // Window destruction is asynchronous, so the ones just closed may still
+    // be listed here.
+    let prefix = format!("{owner}-popout-");
+    for (label, win) in app.windows() {
+        if !label.starts_with(&prefix) || closed.contains(&label) {
+            continue;
+        }
+        eprintln!("[popout] closing orphaned popout {label}");
+        for wv in win.webviews() {
+            let _ = wv.close();
+        }
+        destroy_popout(app, manager, &label);
+    }
+}
+
+/// Close the widget webview `panel` hosted by `popout` (explicitly, as
+/// `close_tab` does, rather than trusting the window teardown to take a
+/// reparented webview with it), then destroy the popout.
+fn close_popout_and_panel(app: &AppHandle, manager: &TerminalManager, popout: &str, panel: &str) {
+    if let Some(wv) = app.get_webview(panel) {
+        if wv.window().label() == popout {
+            let _ = wv.close();
+        }
+    }
+    destroy_popout(app, manager, popout);
 }
 
 /// Open a popout for every floating panel of `terminal`'s live layout that

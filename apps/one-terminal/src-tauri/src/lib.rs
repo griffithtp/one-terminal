@@ -1615,11 +1615,11 @@ fn wm_close_terminal(
     // window can switch to it immediately — the lock is in-memory only and
     // would otherwise linger, wrongly, past this window's lifetime.
     manager.release_dashboard_locks_for(&label);
-    // Popouts go with their Terminal; they're persisted with the dashboard.
-    if let Some(t) = manager.get(&label) {
-        terminal::popout::close_popouts(&app, &manager, &t);
-    }
+    // Unregister first: a popout still being opened for this Terminal
+    // checks for it after registering, and closes itself once it's gone.
     manager.remove(&label);
+    // Popouts go with their Terminal; they're persisted with the dashboard.
+    terminal::popout::close_terminal_popouts(&app, &manager, &label);
 
     if let Ok(data_dir) = app.path().app_data_dir() {
         if let Err(e) = layout_persist::delete_terminal_for(&label, &data_dir) {
