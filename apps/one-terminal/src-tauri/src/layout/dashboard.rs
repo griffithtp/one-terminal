@@ -9,8 +9,10 @@
 //! - [`DashboardRegistry`] — the dashboards themselves. Shared process-wide:
 //!   one instance, referenced by every Terminal window's `LayoutTree` via
 //!   `TerminalManager`.
-//! - [`DashboardSession`] — which dashboard a given window is displaying,
-//!   and whether its live layout has unsaved edits. Stays per-Terminal.
+//! - [`DashboardSession`] — which dashboards a given window has open as
+//!   tabs, which one it is displaying, and whether its live layout has
+//!   unsaved edits. Stays per-Terminal: a new Terminal starts with nothing
+//!   open, and opens dashboards from the shared registry as it likes.
 
 use std::collections::HashMap;
 
@@ -63,12 +65,10 @@ pub struct PersistedDashboard {
         deserialize_with = "super::persist::deserialize_channel_id"
     )]
     pub default_fdc3_channel: Option<String>,
-    /// When `true`, this dashboard is hidden from the switcher and Manage
-    /// drawer's main list — "closed" rather than deleted. Its layout, meta,
-    /// and default channel are untouched; `DashboardRegistry::reopen` clears
-    /// this flag to bring it back. Distinct from deletion
-    /// (`DashboardRegistry::delete`), which removes the entry entirely and
-    /// cannot be undone.
+    /// Legacy: before each Terminal window kept its own list of open
+    /// dashboards (`DashboardSession::open`), "closed" was this one flag
+    /// shared by every window. Now only read when migrating a Terminal
+    /// saved before that (`persist::backfill_open_dashboards`); never set.
     #[serde(default)]
     pub closed: bool,
     /// Panels popped out into their own window. See
@@ -136,10 +136,11 @@ pub struct DashboardsSnapshot {
     /// `true` when `auto_save` is off and the live layout differs from the
     /// persisted active dashboard.
     pub dirty: bool,
+    /// Names of the dashboards open as tabs in *this* window, in tab order.
     pub dashboards: Vec<String>,
-    /// Names of dashboards hidden via `DashboardRegistry::close` — not
-    /// deleted, just absent from `dashboards` above. Surfaced so the Manage
-    /// drawer can list them with a "Reopen" action.
+    /// Every other dashboard in the shared registry — not open in this
+    /// window (it may be open in another), sorted by name. Surfaced so the
+    /// Manage drawer and empty state can offer to open one.
     pub closed_dashboards: Vec<String>,
     /// Total count of panels across all Dashboards that are currently
     /// parked off-screen (kept alive) instead of closed, because their
@@ -207,12 +208,13 @@ impl From<String> for DashboardError {
 
 /// Shared, process-wide collection of dashboards. Every Terminal window's
 /// `LayoutTree` holds a clone of the same `Arc<RwLock<DashboardRegistry>>`
-/// (via `TerminalManager::dashboards`), so creating/renaming/closing/
-/// deleting/reordering a dashboard in one window is immediately visible to
-/// every other window that reads this registry.
+/// (via `TerminalManager::dashboards`), so creating/renaming/deleting a
+/// dashboard in one window is immediately visible to every other window
+/// that reads this registry. Which dashboards a window shows as tabs, and
+/// in what order, is per-window — see `DashboardSession::open`.
 ///
-/// An `IndexMap` is used so dashboards appear in insertion/user-defined order
-/// while still supporting O(1) name lookups. Lookups by `id` are O(n) linear
+/// An `IndexMap` keeps a stable order while still supporting O(1) name
+/// lookups. Lookups by `id` are O(n) linear
 /// scans over the map — dashboard counts are small (tens, not thousands) and
 /// identity mutations (create/rename/delete) are infrequent, so a redundant
 /// id→name index isn't worth the risk of it drifting out of sync with the map.
@@ -256,57 +258,29 @@ impl DashboardRegistry {
         self.dashboards.values().find(|d| d.id == id)
     }
 
-    /// Name of the first open (non-closed) dashboard in store order whose
-    /// id isn't in `locked_elsewhere`, if any. Used by callers reassigning a
-    /// session's `active` after the dashboard it pointed at closes or is
-    /// deleted — the fallback must skip anything already active in another
-    /// window (Issue 15-D), or auto-picking it would silently recreate the
-    /// exact two-windows-same-dashboard conflict the lock exists to
-    /// prevent. Pass an empty set if lock state isn't relevant (e.g. a
-    /// single-window context).
-    pub fn first_open_name_excluding(
-        &self,
-        locked_elsewhere: &std::collections::HashSet<String>,
-    ) -> Option<String> {
-        self.dashboards
+    /// Every dashboard name not in `open`, sorted case-insensitively —
+    /// the "other dashboards" a window can open.
+    fn names_not_in(&self, open: &[String]) -> Vec<String> {
+        let mut names: Vec<String> = self
+            .dashboards
             .iter()
-            .find(|(_, d)| !d.closed && !locked_elsewhere.contains(&d.id))
+            .filter(|(_, d)| !open.contains(&d.id))
             .map(|(k, _)| k.clone())
-    }
-
-    // ── Read methods ──────────────────────────────────────────────────────────
-
-    /// Open dashboard names in their current display order — what the
-    /// switcher and Manage drawer's main list show. Closed dashboards are
-    /// excluded; see `list_closed`.
-    pub fn list(&self) -> Vec<String> {
-        self.dashboards
-            .iter()
-            .filter(|(_, d)| !d.closed)
-            .map(|(k, _)| k.clone())
-            .collect()
-    }
-
-    /// Closed dashboard names, in store order. Surfaced so the Manage
-    /// drawer can offer a "Reopen" action for each.
-    pub fn list_closed(&self) -> Vec<String> {
-        self.dashboards
-            .iter()
-            .filter(|(_, d)| d.closed)
-            .map(|(k, _)| k.clone())
-            .collect()
+            .collect();
+        names.sort_by_key(|n| n.to_lowercase());
+        names
     }
 
     /// Build the `wm:dashboards` payload for a given window's session —
     /// registry content (shared) combined with that window's own session
-    /// state (active/dirty/autoSave, per-window).
+    /// state (open tabs/active/dirty/autoSave, per-window).
     pub fn snapshot(&self, session: &DashboardSession, parked_count: usize) -> DashboardsSnapshot {
         DashboardsSnapshot {
             active: self.name_of(&session.active).unwrap_or_default(),
             auto_save: session.auto_save,
             dirty: session.dirty,
-            dashboards: self.list(),
-            closed_dashboards: self.list_closed(),
+            dashboards: session.open_names(self),
+            closed_dashboards: self.names_not_in(&session.open),
             parked_count,
             // Lock ownership isn't known at this layer — `TerminalManager`
             // (the only thing that holds both the registry and the lock
@@ -391,27 +365,6 @@ impl DashboardRegistry {
         self.dashboards.shift_remove(name).is_some()
     }
 
-    /// Hide a dashboard from the switcher/Manage-drawer main list without
-    /// deleting it. No-op success if `name` is already closed. Returns
-    /// `false` if `name` doesn't exist.
-    pub fn close(&mut self, name: &str) -> bool {
-        let Some(dash) = self.dashboards.get_mut(name) else {
-            return false;
-        };
-        dash.closed = true;
-        true
-    }
-
-    /// Make a closed dashboard selectable again. Returns `false` if `name`
-    /// doesn't exist.
-    pub fn reopen(&mut self, name: &str) -> bool {
-        let Some(dash) = self.dashboards.get_mut(name) else {
-            return false;
-        };
-        dash.closed = false;
-        true
-    }
-
     /// Set (or clear) the default FDC3 channel for `name` and apply it to
     /// every widget currently persisted in that dashboard's `meta` map —
     /// active or not. When `name` is some window's active dashboard, that
@@ -443,23 +396,59 @@ impl DashboardRegistry {
         true
     }
 
-    /// Reorder dashboards to match `order` (the switcher/drawer only ever
-    /// reorders *open* dashboards). Names in `order` absent from the store
-    /// are ignored. Any dashboard not mentioned in `order` — i.e. every
-    /// closed dashboard, which the reordering UI never sees — is preserved,
-    /// appended after the reordered ones in its prior relative order, rather
-    /// than being dropped from the store.
-    pub fn reorder(&mut self, order: &[String]) {
-        let mut next: IndexMap<String, PersistedDashboard> = IndexMap::with_capacity(order.len());
-        for name in order {
-            if let Some(d) = self.dashboards.shift_remove(name) {
-                next.insert(name.clone(), d);
+    /// Insert `dashboard` keeping its id, renaming it `"<name> (2)"`,
+    /// `"<name> (3)"`, … if another dashboard already has its name. Names
+    /// are unique per process but not across processes: two Terminals can
+    /// each create a "Trading" before either sees the other's. Returns the
+    /// name it was stored under.
+    pub fn insert_unique(&mut self, mut dashboard: PersistedDashboard) -> String {
+        if self.dashboards.contains_key(&dashboard.name) {
+            let base = dashboard.name.clone();
+            let mut n = 2;
+            while self.dashboards.contains_key(&format!("{base} ({n})")) {
+                n += 1;
+            }
+            dashboard.name = format!("{base} ({n})");
+        }
+        let name = dashboard.name.clone();
+        self.dashboards.insert(name.clone(), dashboard);
+        name
+    }
+
+    /// Apply changes another process made on disk
+    /// (`persist::scan_registry_changes`). Dashboards in `live_ids` — active
+    /// in one of this process's windows — are skipped: the window's live
+    /// layout is the newer copy and will be saved over the file. Returns
+    /// `true` if anything changed.
+    pub fn apply_changes(
+        &mut self,
+        changes: Vec<super::persist::RegistryChange>,
+        live_ids: &std::collections::HashSet<String>,
+    ) -> bool {
+        use super::persist::RegistryChange;
+        let mut changed = false;
+        for change in changes {
+            match change {
+                RegistryChange::Upserted(d) => {
+                    if live_ids.contains(&d.id) {
+                        continue;
+                    }
+                    let id = d.id.clone();
+                    self.dashboards.retain(|_, existing| existing.id != id);
+                    self.insert_unique(*d);
+                    changed = true;
+                }
+                RegistryChange::Removed(id) => {
+                    if live_ids.contains(&id) {
+                        continue;
+                    }
+                    let before = self.dashboards.len();
+                    self.dashboards.retain(|_, existing| existing.id != id);
+                    changed |= self.dashboards.len() != before;
+                }
             }
         }
-        for (k, v) in self.dashboards.drain(..) {
-            next.insert(k, v);
-        }
-        self.dashboards = next;
+        changed
     }
 
     // ── Serialisation ─────────────────────────────────────────────────────────
@@ -478,6 +467,14 @@ impl DashboardRegistry {
     ) -> super::persist::TerminalPersist {
         super::persist::TerminalPersist {
             active_dashboard: self.name_of(&session.active).unwrap_or_default(),
+            open_dashboards: Some(
+                session
+                    .open
+                    .iter()
+                    .filter(|id| self.get_by_id(id).is_some())
+                    .cloned()
+                    .collect(),
+            ),
             auto_save: session.auto_save,
             ..Default::default()
         }
@@ -494,10 +491,10 @@ impl DashboardRegistry {
 
 // ── DashboardSession ──────────────────────────────────────────────────────────
 
-/// Per-Terminal-window session state: which dashboard this window is
-/// currently displaying, and whether its live layout has unsaved edits.
-/// The dashboards themselves live in the shared `DashboardRegistry`
-/// (process-wide); only this is per-window.
+/// Per-Terminal-window session state: which dashboards this window has
+/// open as tabs, which one it currently displays, and whether its live
+/// layout has unsaved edits. The dashboards themselves live in the shared
+/// `DashboardRegistry` (process-wide); only this is per-window.
 pub struct DashboardSession {
     /// Stable id (see `PersistedDashboard::id`) of the dashboard this
     /// window currently displays. Empty string = no active dashboard.
@@ -506,6 +503,11 @@ pub struct DashboardSession {
     /// under this session at any time (Issue 15-D) — an id reference
     /// survives that; a name reference would silently go stale.
     pub active: String,
+    /// Stable ids of the dashboards open as tabs in this window, in tab
+    /// order. Always contains `active` when that is non-empty. May hold ids
+    /// another window or process has since deleted — every reader skips
+    /// those (`open_names`), so deletes never need to reach into sessions.
+    pub open: Vec<String>,
     /// When `true`, every layout mutation is immediately written back to the
     /// active dashboard. When `false` the user must save explicitly.
     pub auto_save: bool,
@@ -516,44 +518,111 @@ pub struct DashboardSession {
 
 impl DashboardSession {
     /// Build a session from a `TerminalPersist` loaded from disk, resolving
-    /// the persisted `active_dashboard` (a name) to that dashboard's id via
-    /// `registry` — the registry must already contain this terminal's
-    /// dashboards (merged in by `LayoutTree::init`) by the time this runs.
-    /// Falls back to the first open dashboard in `registry`, or no active
-    /// dashboard, exactly as the pre-split `DashboardStore::from_persist` did.
+    /// the persisted open tabs and `active_dashboard` (a name) against
+    /// `registry`, which must already be loaded. A file from before
+    /// per-window open lists has every dashboard not flagged `closed` open,
+    /// as it did then. Falls back to the first open tab, or no active
+    /// dashboard, if the saved active one is gone.
     pub fn from_persist(
         persist: &super::persist::TerminalPersist,
         registry: &DashboardRegistry,
     ) -> Self {
+        let open: Vec<String> = match &persist.open_dashboards {
+            Some(ids) => ids
+                .iter()
+                .filter(|id| registry.get_by_id(id).is_some())
+                .cloned()
+                .collect(),
+            None => registry
+                .dashboards
+                .values()
+                .filter(|d| !d.closed)
+                .map(|d| d.id.clone())
+                .collect(),
+        };
         let active = registry
-            .dashboards
-            .get(&persist.active_dashboard)
-            .filter(|d| !d.closed)
-            .map(|d| d.id.clone())
-            .or_else(|| {
-                registry
-                    .dashboards
-                    .values()
-                    .find(|d| !d.closed)
-                    .map(|d| d.id.clone())
-            })
+            .id_of(&persist.active_dashboard)
+            .filter(|id| open.contains(id))
+            .or_else(|| open.first().cloned())
             .unwrap_or_default();
 
         Self {
             active,
+            open,
             auto_save: persist.auto_save,
             dirty: false,
         }
     }
 
-    /// Build an empty session with no active dashboard. Used for
+    /// Build an empty session with no open or active dashboard. Used for
     /// freshly-spawned Terminal windows so the user starts with a blank slate.
     pub fn with_empty() -> Self {
         Self {
             active: String::new(),
+            open: Vec::new(),
             auto_save: true,
             dirty: false,
         }
+    }
+
+    /// Names of this window's open tabs, in order, skipping any id no
+    /// longer in `registry`.
+    pub fn open_names(&self, registry: &DashboardRegistry) -> Vec<String> {
+        self.open
+            .iter()
+            .filter_map(|id| registry.name_of(id))
+            .collect()
+    }
+
+    pub fn is_open(&self, id: &str) -> bool {
+        self.open.iter().any(|o| o == id)
+    }
+
+    /// Add `id` as the last tab, if it isn't open already.
+    pub fn open_tab(&mut self, id: &str) {
+        if !id.is_empty() && !self.is_open(id) {
+            self.open.push(id.to_string());
+        }
+    }
+
+    /// Remove `id` from this window's tabs. Doesn't touch `active`.
+    pub fn close_tab(&mut self, id: &str) {
+        self.open.retain(|o| o != id);
+    }
+
+    /// Reorder tabs to match `order` (names). Tabs not mentioned keep their
+    /// relative order after the reordered ones; names that aren't open
+    /// here are ignored.
+    pub fn reorder(&mut self, order: &[String], registry: &DashboardRegistry) {
+        let mut next: Vec<String> = order
+            .iter()
+            .filter_map(|name| registry.id_of(name))
+            .filter(|id| self.is_open(id))
+            .collect();
+        next.dedup();
+        for id in &self.open {
+            if !next.contains(id) {
+                next.push(id.clone());
+            }
+        }
+        self.open = next;
+    }
+
+    /// First open tab that still exists and isn't in `locked_elsewhere` —
+    /// where this window falls back to when its active dashboard closes or
+    /// is deleted. Must skip anything already active in another window
+    /// (Issue 15-D), or auto-picking it would silently recreate the exact
+    /// two-windows-same-dashboard conflict the lock exists to prevent.
+    pub fn fallback_active(
+        &self,
+        registry: &DashboardRegistry,
+        locked_elsewhere: &std::collections::HashSet<String>,
+    ) -> String {
+        self.open
+            .iter()
+            .find(|id| registry.get_by_id(id).is_some() && !locked_elsewhere.contains(*id))
+            .cloned()
+            .unwrap_or_default()
     }
 }
 
@@ -647,9 +716,15 @@ mod tests {
 
         shared.write().unwrap().create("From Window A".to_string());
 
-        // "Window B" reads the same registry and sees it immediately.
-        let seen_by_b = shared.read().unwrap().list();
-        assert_eq!(seen_by_b, vec!["From Window A".to_string()]);
+        // "Window B" reads the same registry and sees it immediately — as
+        // a dashboard it can open, not as one of its own tabs.
+        let session_b = DashboardSession::with_empty();
+        let snapshot = shared.read().unwrap().snapshot(&session_b, 0);
+        assert!(snapshot.dashboards.is_empty());
+        assert_eq!(
+            snapshot.closed_dashboards,
+            vec!["From Window A".to_string()]
+        );
     }
 
     #[test]
@@ -673,5 +748,111 @@ mod tests {
             h.join().expect("worker thread should not panic");
         }
         assert_eq!(shared.read().unwrap().dashboards.len(), 8);
+    }
+
+    #[test]
+    fn open_tabs_are_per_session() {
+        let mut registry = DashboardRegistry::new();
+        registry.create("Trading".to_string());
+        registry.create("Research".to_string());
+        let trading = registry.id_of("Trading").unwrap();
+
+        let mut a = DashboardSession::with_empty();
+        a.open_tab(&trading);
+        let b = DashboardSession::with_empty();
+
+        let snap_a = registry.snapshot(&a, 0);
+        assert_eq!(snap_a.dashboards, vec!["Trading".to_string()]);
+        assert_eq!(snap_a.closed_dashboards, vec!["Research".to_string()]);
+
+        let snap_b = registry.snapshot(&b, 0);
+        assert!(
+            snap_b.dashboards.is_empty(),
+            "a new window starts with no tabs"
+        );
+        assert_eq!(
+            snap_b.closed_dashboards,
+            vec!["Research".to_string(), "Trading".to_string()]
+        );
+    }
+
+    #[test]
+    fn legacy_persist_opens_every_dashboard_not_flagged_closed() {
+        let mut registry = DashboardRegistry::new();
+        registry.create("Open".to_string());
+        registry.create("Hidden".to_string());
+        registry.dashboards.get_mut("Hidden").unwrap().closed = true;
+
+        let persist = super::super::persist::TerminalPersist {
+            active_dashboard: "Open".to_string(),
+            open_dashboards: None,
+            ..Default::default()
+        };
+        let session = DashboardSession::from_persist(&persist, &registry);
+        assert_eq!(session.open_names(&registry), vec!["Open".to_string()]);
+        assert_eq!(registry.name_of(&session.active).as_deref(), Some("Open"));
+    }
+
+    #[test]
+    fn active_must_be_an_open_tab() {
+        let mut registry = DashboardRegistry::new();
+        registry.create("A".to_string());
+        registry.create("B".to_string());
+        let b = registry.id_of("B").unwrap();
+        let persist = super::super::persist::TerminalPersist {
+            active_dashboard: "A".to_string(),
+            open_dashboards: Some(vec![b.clone()]),
+            ..Default::default()
+        };
+        let session = DashboardSession::from_persist(&persist, &registry);
+        assert_eq!(session.active, b);
+    }
+
+    #[test]
+    fn reorder_only_moves_this_sessions_tabs() {
+        let mut registry = DashboardRegistry::new();
+        for n in ["A", "B", "C"] {
+            registry.create(n.to_string());
+        }
+        let mut s = DashboardSession::with_empty();
+        for n in ["A", "B", "C"] {
+            s.open_tab(&registry.id_of(n).unwrap());
+        }
+        s.reorder(&["C".to_string(), "A".to_string()], &registry);
+        assert_eq!(s.open_names(&registry), vec!["C", "A", "B"]);
+    }
+
+    #[test]
+    fn insert_unique_disambiguates_a_name_from_another_process() {
+        let mut registry = DashboardRegistry::new();
+        registry.create("Trading".to_string());
+        let theirs = PersistedDashboard::empty("Trading".to_string());
+        assert_eq!(registry.insert_unique(theirs), "Trading (2)");
+        assert_eq!(registry.dashboards.len(), 2);
+    }
+
+    #[test]
+    fn apply_changes_keeps_dashboards_live_in_this_process() {
+        use super::super::persist::RegistryChange;
+        use std::collections::HashSet;
+
+        let mut registry = DashboardRegistry::new();
+        registry.create("Live".to_string());
+        registry.create("Idle".to_string());
+        let live = registry.id_of("Live").unwrap();
+        let idle = registry.id_of("Idle").unwrap();
+
+        let mut edited = registry.get_by_id(&live).unwrap().clone();
+        edited.name = "Renamed elsewhere".to_string();
+        let changed = registry.apply_changes(
+            vec![
+                RegistryChange::Upserted(Box::new(edited)),
+                RegistryChange::Removed(idle.clone()),
+            ],
+            &HashSet::from([live.clone()]),
+        );
+        assert!(changed);
+        assert_eq!(registry.name_of(&live).as_deref(), Some("Live"));
+        assert!(registry.get_by_id(&idle).is_none());
     }
 }

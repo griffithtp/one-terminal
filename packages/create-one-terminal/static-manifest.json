@@ -417,6 +417,10 @@
       "overlay": "shared"
     },
     {
+      "path": "apps/one-terminal/src/components/SavedDashboardPicker.tsx",
+      "overlay": "shared"
+    },
+    {
       "path": "apps/one-terminal/src/components/SplitterHandleLayer.tsx",
       "overlay": "shared"
     },

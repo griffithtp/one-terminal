@@ -32,6 +32,7 @@ export function DashboardsSection({ ds }: Props) {
   const {
     dashboards,
     closedDashboards,
+    lockedBy,
     autoSave,
     switchTo,
     create,
@@ -40,7 +41,7 @@ export function DashboardsSection({ ds }: Props) {
     rename,
     remove,
     close,
-    reopen,
+    openDashboard,
     reorder,
     setAutoSave,
   } = ds;
@@ -177,7 +178,9 @@ export function DashboardsSection({ ds }: Props) {
       <ul className="ot-dashboards__list">
         {dashboards.length === 0 ? (
           <li className="ot-dashboards__empty">
-            No dashboards yet. Create one above to get started.
+            {closedDashboards.length > 0
+              ? "No dashboards open in this Terminal. Open one below, or create one above."
+              : "No dashboards yet. Create one above to get started."}
           </li>
         ) : (
           dashboards.map((d, idx) => {
@@ -274,7 +277,7 @@ export function DashboardsSection({ ds }: Props) {
                         type="button"
                         className="ot-dashboards__btn ot-dashboards__btn--danger"
                         onClick={() => close(d.name).catch(console.error)}
-                        title="Hide from the switcher; reopen and delete from Closed below"
+                        title="Close in this Terminal; reopen or delete it from Other dashboards below"
                       >
                         Close
                       </button>
@@ -289,26 +292,36 @@ export function DashboardsSection({ ds }: Props) {
 
       {closedDashboards.length > 0 && (
         <section className="ot-dashboards__closed">
-          <h3 className="ot-dashboards__closed-title">Closed</h3>
+          <h3 className="ot-dashboards__closed-title">Other dashboards</h3>
           <ul className="ot-dashboards__list">
             {closedDashboards.map((name) => (
               <li key={name} className="ot-dashboards__item ot-dashboards__item--closed">
                 <span className="ot-dashboards__item-head">
+                  {lockedBy[name] && (
+                    <span
+                      className="ot-dashboards__item-lock"
+                      title={`Open in ${lockedBy[name]}`}
+                      aria-label={`Open in ${lockedBy[name]}`}
+                    >
+                      🔒
+                    </span>
+                  )}
                   <span className="ot-dashboards__closed-name">{name}</span>
                 </span>
                 <span className="ot-dashboards__item-actions">
                   <button
                     type="button"
                     className="ot-dashboards__btn ot-dashboards__btn--primary"
-                    onClick={() => reopen(name).catch(console.error)}
+                    onClick={() => openDashboard(name).catch(console.error)}
+                    title="Open in this Terminal"
                   >
-                    Reopen
+                    Open
                   </button>
                   <button
                     type="button"
                     className="ot-dashboards__btn ot-dashboards__btn--danger"
                     onClick={() => remove(name).catch(console.error)}
-                    title="Permanently delete — cannot be undone"
+                    title="Permanently delete for every Terminal — cannot be undone"
                   >
                     Delete
                   </button>
@@ -327,10 +340,11 @@ export function DashboardsSection({ ds }: Props) {
 // ── Cross-instance import ───────────────────────────────────────────────────
 //
 // Each Terminal window may belong to a completely separate OS process (see
-// `apps/one-terminal/src-tauri/src/terminal/instances.rs`) — there's no
-// shared registry across processes. This lets the user browse another
-// running instance's open dashboards and pull an independent copy of one
-// into *this* instance, without touching the source instance at all.
+// `apps/one-terminal/src-tauri/src/terminal/instances.rs`). Saved dashboards
+// are shared on disk and listed under "Other dashboards" above; this lets
+// the user browse another running instance's open dashboards and pull an
+// independent copy of one into *this*
+// instance, without touching the source instance at all.
 
 interface RemoteInstance {
   id: string;

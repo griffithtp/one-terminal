@@ -1,11 +1,13 @@
 //! Cross-process instance discovery.
 //!
-//! Every `one-terminal` process is fully independent — its own
-//! `TerminalManager`, its own in-memory `DashboardRegistry`, its own
-//! exclusivity locks. There is no shared state across processes (see
+//! Every `one-terminal` process is independent — its own
+//! `TerminalManager`, its own in-memory copy of the `DashboardRegistry`,
+//! its own exclusivity locks (see
 //! `docs/plans/15-shared-dashboards-across-terminals.md`'s Open Question 4
 //! and the follow-up decision to keep instances independent rather than
-//! reuse one process per launcher click).
+//! reuse one process per launcher click). The only state they share is the
+//! saved dashboards on disk (`layout::persist`'s per-dashboard files, which
+//! each process re-scans on window focus).
 //!
 //! This module is *not* a general RPC system — it exists for exactly one
 //! purpose: letting one running instance find another and pull a single

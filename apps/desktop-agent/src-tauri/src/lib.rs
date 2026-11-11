@@ -152,13 +152,13 @@ fn cda_raise_intent_from_dashboard(
 
 // ── App Directory commands ─────────────────────────────────────────────────────
 
-/// Open a Terminal (one-terminal) window, restoring the previously saved
-/// session. This is the launcher's "Open" action — Terminal no longer
-/// auto-launches at Desktop Agent startup, so this is the primary entry
-/// point users have to reach it.
+/// Open a new, blank Terminal window — the launcher's "Open" action. It
+/// starts with no dashboard tabs; the user's saved dashboards are listed
+/// there to open. Saved Terminal sessions are restored once, at Desktop
+/// Agent startup (`spawn_wm_restore`), not here.
 #[tauri::command]
 fn cda_open_terminal(registry: State<'_, TerminalRegistry>) {
-    spawn_wm_instance(&registry);
+    spawn_wm_new_terminal(&registry);
 }
 
 /// Quit the Desktop Agent, preserving all Terminal state on disk.
@@ -178,22 +178,43 @@ fn cda_quit(app: AppHandle, registry: State<'_, TerminalRegistry>) {
 fn cda_quit_discard(app: AppHandle, registry: State<'_, TerminalRegistry>) -> Result<(), String> {
     registry.kill_all(true);
 
-    // Derive one-terminal's data directory by stepping one level above the
-    // Desktop Agent's own app_data_dir, then descending into the Window Manager
-    // identifier.  Works on all platforms without hard-coding OS paths.
+    let wm_terminals = wm_terminals_dir(&app)?;
+    if wm_terminals.exists() {
+        std::fs::remove_dir_all(&wm_terminals)
+            .map_err(|e| format!("failed to clear terminal state: {e}"))?;
+    }
+    app.exit(0);
+    Ok(())
+}
+
+/// one-terminal's saved Terminal sessions directory. Derived by stepping one
+/// level above the Desktop Agent's own app_data_dir, then descending into
+/// the Window Manager identifier — works on all platforms without
+/// hard-coding OS paths.
+fn wm_terminals_dir(app: &AppHandle) -> Result<std::path::PathBuf, String> {
     let da_data = app
         .path()
         .app_data_dir()
         .map_err(|e| format!("cannot resolve data dir: {e}"))?;
-    if let Some(base) = da_data.parent() {
-        let wm_terminals = base.join("com.one-terminal.one-terminal").join("terminals");
-        if wm_terminals.exists() {
-            std::fs::remove_dir_all(&wm_terminals)
-                .map_err(|e| format!("failed to clear terminal state: {e}"))?;
-        }
-    }
-    app.exit(0);
-    Ok(())
+    let base = da_data
+        .parent()
+        .ok_or_else(|| "data dir has no parent".to_string())?;
+    Ok(base.join("com.one-terminal.one-terminal").join("terminals"))
+}
+
+/// `true` if any Terminal session was saved by a previous run — each lives
+/// in `terminals/<id>/dashboards.json` until its window is closed.
+fn has_saved_terminals(app: &AppHandle) -> bool {
+    let Ok(dir) = wm_terminals_dir(app) else {
+        return false;
+    };
+    std::fs::read_dir(dir)
+        .map(|entries| {
+            entries
+                .flatten()
+                .any(|e| e.path().join("dashboards.json").is_file())
+        })
+        .unwrap_or(false)
 }
 
 /// Return the configured App Directory URL (respects OT_APP_DIR_URL override).
@@ -501,11 +522,21 @@ impl TerminalRegistry {
     }
 }
 
-/// Spawn a Window Manager instance that restores previously saved terminals.
-/// Called from the launcher's "Open" action (`cda_open_terminal`).
-fn spawn_wm_instance(registry: &TerminalRegistry) {
+/// Command to run `one-terminal`. `OT_SPAWNED_BY_AGENT` tells a dev build
+/// it's one of this agent's per-Terminal processes, so it exits with its
+/// last window like a release build (rather than staying up the way
+/// `npm run dev:terminal` does).
+fn wm_command(bin: &std::path::Path) -> std::process::Command {
+    let mut cmd = std::process::Command::new(bin);
+    cmd.env("OT_SPAWNED_BY_AGENT", "1");
+    cmd
+}
+
+/// Spawn a Window Manager instance that restores every previously saved
+/// Terminal window in one process. Called once at Desktop Agent startup.
+fn spawn_wm_restore(registry: &TerminalRegistry) {
     match locate_wm_binary() {
-        Ok(bin) => match std::process::Command::new(&bin).spawn() {
+        Ok(bin) => match wm_command(&bin).spawn() {
             Ok(child) => registry.track(child),
             Err(e) => eprintln!("[cda/tray] Failed to spawn window-manager: {e}"),
         },
@@ -588,17 +619,15 @@ mod terminal_registry_tests {
     }
 }
 
-/// Spawn a Window Manager instance that starts fresh with zero dashboards.
-/// Called from the tray "Open New Terminal" action so the user always gets a
-/// clean slate rather than a restoration of a previous session.
-fn spawn_wm_instance_fresh(registry: &TerminalRegistry) {
+/// Spawn a Window Manager instance with one new, blank Terminal window (no
+/// dashboard tabs, no restored windows). Called from the launcher's "Open"
+/// and the tray's "Open New Terminal", so neither ever shows the dashboards
+/// another Terminal has open.
+fn spawn_wm_new_terminal(registry: &TerminalRegistry) {
     match locate_wm_binary() {
-        Ok(bin) => match std::process::Command::new(&bin)
-            .env("OT_FRESH_START", "1")
-            .spawn()
-        {
+        Ok(bin) => match wm_command(&bin).env("OT_NEW_TERMINAL", "1").spawn() {
             Ok(child) => registry.track(child),
-            Err(e) => eprintln!("[cda/tray] Failed to spawn fresh window-manager: {e}"),
+            Err(e) => eprintln!("[cda/tray] Failed to spawn new Terminal: {e}"),
         },
         Err(e) => eprintln!("[cda/tray] {e}"),
     }
@@ -829,9 +858,15 @@ pub fn run() {
                 }
             });
 
-            // Terminal is no longer auto-launched at startup — it opens only when
-            // the user clicks "Open" on the launcher's Terminal card (cda_open_terminal)
-            // or "Open New Terminal" in the tray menu, both below.
+            // Restore the Terminal windows that were open when the Desktop
+            // Agent last quit (each window's session is deleted when the user
+            // closes it, and "Quit and discard" deletes them all). With none
+            // saved, no Terminal opens until the user clicks "Open" on the
+            // launcher's Terminal card (cda_open_terminal) or "Open New
+            // Terminal" in the tray menu, both of which open a blank one.
+            if has_saved_terminals(app.handle()) {
+                spawn_wm_restore(app.state::<TerminalRegistry>().inner());
+            }
 
             // ── System tray ────────────────────────────────────────────────────
             // Initial menu: apps list is empty until the App Directory fetch completes.
@@ -866,7 +901,7 @@ pub fn run() {
                         }
                     }
                     "terminal" => {
-                        spawn_wm_instance_fresh(app.state::<TerminalRegistry>().inner());
+                        spawn_wm_new_terminal(app.state::<TerminalRegistry>().inner());
                     }
                     "exit" => {
                         // Show the dashboard window and ask the user whether to

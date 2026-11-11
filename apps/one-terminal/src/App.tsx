@@ -30,6 +30,7 @@ import { DropZoneLayer } from "./components/DropZoneLayer";
 import { PanelHeaderLayer } from "./components/PanelHeaderLayer";
 import { OverlayApp } from "./components/OverlayApp";
 import { EmptyDashboardPicker } from "./components/EmptyDashboardPicker";
+import { SavedDashboardPicker } from "./components/SavedDashboardPicker";
 import { popPark, pushPark } from "./lib/parkPanels";
 import { registerWidgetCommands, setActivePanelLabel } from "./commands/widgetCommands";
 import { initAppCommands } from "./commands/appCommands";
@@ -361,15 +362,24 @@ function ChromeApp() {
 
       <TerminalCloseDialog />
 
-      {/* Empty-state surfaces: no dashboards yet → CTA copy; empty
-          dashboard → inline app picker so the first widget can be added
-          without opening the drawer. */}
+      {/* Empty-state surfaces: no tabs open but saved dashboards exist (a
+          new Terminal) → pick one to open; no dashboards at all → CTA copy;
+          empty dashboard → inline app picker so the first widget can be
+          added without opening the drawer. */}
       {(!layout || layout.panels.length === 0) &&
         (!hostLayout || hostLayout.stacks.length === 0) &&
         (dashboards.dashboards.length === 0 ? (
-          <div className="wm-empty">
-            <p>Create a dashboard to get started.</p>
-          </div>
+          dashboards.closedDashboards.length > 0 ? (
+            <SavedDashboardPicker
+              names={dashboards.closedDashboards}
+              lockedBy={dashboards.lockedBy}
+              onOpen={(name) => dashboards.openDashboard(name).catch(console.error)}
+            />
+          ) : (
+            <div className="wm-empty">
+              <p>Create a dashboard to get started.</p>
+            </div>
+          )
         ) : (
           <EmptyDashboardPicker
             apps={launch.apps}

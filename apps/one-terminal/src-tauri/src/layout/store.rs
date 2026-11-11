@@ -1541,6 +1541,7 @@ impl LayoutTree {
                 registry.snapshot_current(&session.active, layout);
             }
             session.active = target_id.clone();
+            session.open_tab(&target_id);
             session.dirty = false;
             registry.get_by_id(&target_id).map(|d| d.as_layout())
         };
@@ -1583,12 +1584,12 @@ impl LayoutTree {
         Ok(())
     }
 
-    /// Switch this session away from its current active dashboard to a
-    /// fallback (the first open dashboard not in `locked_elsewhere`, or
-    /// none), without touching the registry entry itself — used by "Move
-    /// here" (Issue 15-G) when another window takes over this terminal's
-    /// active dashboard out from under it. No-op if this terminal has no
-    /// active dashboard.
+    /// Switch this session away from its current active dashboard — closing
+    /// its tab here — to a fallback (the first remaining open tab not in
+    /// `locked_elsewhere`, or none), without touching the registry entry
+    /// itself — used by "Move here" (Issue 15-G) when another window takes
+    /// over this terminal's active dashboard out from under it. No-op if
+    /// this terminal has no active dashboard.
     ///
     /// Mirrors `switch_dashboard`'s outgoing-dashboard handling (snapshot if
     /// `auto_save`, park `keep_alive` panels, destroy the rest) but picks
@@ -1637,10 +1638,9 @@ impl LayoutTree {
                 };
                 registry.snapshot_current(&outgoing_id, layout);
             }
-            let new_active_id = registry
-                .first_open_name_excluding(locked_elsewhere)
-                .and_then(|n| registry.id_of(&n))
-                .unwrap_or_default();
+            // The dashboard is moving to another window — its tab goes too.
+            session.close_tab(&outgoing_id);
+            let new_active_id = session.fallback_active(&registry, locked_elsewhere);
             session.active = new_active_id.clone();
             session.dirty = false;
             registry.get_by_id(&new_active_id).map(|d| d.as_layout())
@@ -1714,7 +1714,14 @@ impl LayoutTree {
             (is_active, labels)
         };
 
-        self.with_registry_mut(|r| r.delete(name));
+        let id = self.with_registry_mut(|r| {
+            let id = r.id_of(name);
+            r.delete(name);
+            id
+        });
+        if let Some(id) = id {
+            self.session.write().unwrap().close_tab(&id);
+        }
 
         // The deleted Dashboard may own panels parked off-screen (kept alive
         // while some other Dashboard was active) — there's no home for them
@@ -1726,14 +1733,11 @@ impl LayoutTree {
         }
 
         // Deleted the active dashboard — reassign this session's active to
-        // whatever's now the first open dashboard in the registry (or none).
+        // its next open tab (or none).
         let new_layout = {
             let registry = self.dashboards.read().unwrap();
             let mut session = self.session.write().unwrap();
-            let new_active_id = registry
-                .first_open_name_excluding(locked_elsewhere)
-                .and_then(|n| registry.id_of(&n))
-                .unwrap_or_default();
+            let new_active_id = session.fallback_active(&registry, locked_elsewhere);
             session.active = new_active_id.clone();
             registry.get_by_id(&new_active_id).map(|d| d.as_layout())
         };
@@ -1761,13 +1765,13 @@ impl LayoutTree {
         Ok(true)
     }
 
-    /// Hide a dashboard from the switcher without deleting it — its layout,
-    /// per-leaf metadata, and default channel all stay intact in the
-    /// `DashboardRegistry` so `reopen_dashboard` can bring it back exactly as
-    /// it was. Reconciles panel webviews the same way `delete_dashboard`
-    /// does when `name` is the active dashboard (switches to the next open
-    /// one, or empties the terminal if none remain open), and closes any of
-    /// `name`'s panels currently parked in the background — a closed
+    /// Close `name`'s tab in this window. The dashboard itself — layout,
+    /// per-leaf metadata, default channel — stays in the shared
+    /// `DashboardRegistry`, so this or any other window can open it again
+    /// exactly as it was. Reconciles panel webviews the same way
+    /// `delete_dashboard` does when `name` is the active dashboard (switches
+    /// to the next open tab, or empties the terminal if none remain), and
+    /// closes any of `name`'s panels parked in the background — a closed
     /// dashboard doesn't keep widgets running, same as a deleted one.
     /// Returns `false` if `name` doesn't exist.
     ///
@@ -1782,23 +1786,23 @@ impl LayoutTree {
         panel_init_script: &str,
     ) -> Result<bool, DashboardError> {
         // Check existence and whether this is the active dashboard.
-        let (is_active, current_labels) = {
+        let (id, is_active, current_labels) = {
             let registry = self.dashboards.read().unwrap();
             let session = self.session.read().unwrap();
-            if !registry.dashboards.contains_key(name) {
+            let Some(id) = registry.id_of(name) else {
                 return Ok(false);
-            }
-            let is_active = registry.id_of(name).as_deref() == Some(session.active.as_str());
+            };
+            let is_active = id == session.active;
             let labels = if is_active {
                 let g = self.inner.read().unwrap();
                 live_labels(&g)
             } else {
                 vec![]
             };
-            (is_active, labels)
+            (id, is_active, labels)
         };
 
-        self.with_registry_mut(|r| r.close(name));
+        self.session.write().unwrap().close_tab(&id);
 
         // The closed Dashboard may own panels parked off-screen (kept alive
         // while some other Dashboard was active) — it's no longer reachable
@@ -1809,16 +1813,21 @@ impl LayoutTree {
             return Ok(true);
         }
 
-        // Closed the active dashboard — reassign this session's active to
-        // whatever's now the first open dashboard in the registry (or none).
+        // Closed the active dashboard — snapshot it so the registry keeps
+        // its latest layout, then fall back to the next open tab (or none).
         let new_layout = {
-            let registry = self.dashboards.read().unwrap();
+            let mut registry = self.dashboards.write().unwrap();
             let mut session = self.session.write().unwrap();
-            let new_active_id = registry
-                .first_open_name_excluding(locked_elsewhere)
-                .and_then(|n| registry.id_of(&n))
-                .unwrap_or_default();
+            if session.auto_save {
+                let layout = {
+                    let g = self.inner.read().unwrap();
+                    snapshot_for_persist(&g)
+                };
+                registry.snapshot_current(&id, layout);
+            }
+            let new_active_id = session.fallback_active(&registry, locked_elsewhere);
             session.active = new_active_id.clone();
+            session.dirty = false;
             registry.get_by_id(&new_active_id).map(|d| d.as_layout())
         };
         let panels_to_create = self.apply_layout_to_inner(new_layout);
@@ -1845,16 +1854,30 @@ impl LayoutTree {
         Ok(true)
     }
 
-    /// Make a closed dashboard selectable in the switcher again, without
-    /// changing which dashboard is currently active — the user picks it
-    /// from the switcher (or Manage drawer) like any other pill. Returns
-    /// `false` if `name` doesn't exist.
+    /// Open `name` as a tab in this window (appended last), without
+    /// changing which dashboard is active — the user picks it from the
+    /// switcher like any other pill. Returns `false` if `name` doesn't exist.
     pub fn reopen_dashboard(&self, name: &str) -> bool {
-        let reopened = self.with_registry_mut(|r| r.reopen(name));
-        if reopened {
-            self.schedule_save(0);
-        }
-        reopened
+        let Some(id) = self.with_registry(|r| r.id_of(name)) else {
+            return false;
+        };
+        self.session.write().unwrap().open_tab(&id);
+        self.persist_dashboards();
+        true
+    }
+
+    /// `true` iff `name` is open as a tab in this window.
+    pub fn is_open_here(&self, name: &str) -> bool {
+        let Some(id) = self.with_registry(|r| r.id_of(name)) else {
+            return false;
+        };
+        self.session.read().unwrap().is_open(&id)
+    }
+
+    /// Reorder this window's tabs to match `order` (names).
+    pub fn reorder_tabs(&self, order: &[String]) {
+        let registry = self.dashboards.read().unwrap();
+        self.session.write().unwrap().reorder(order, &registry);
     }
 
     /// Load a `PersistedLayout` (or empty layout when `None`) into `Inner`.

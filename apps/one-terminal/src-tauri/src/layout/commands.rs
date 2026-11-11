@@ -458,6 +458,13 @@ pub fn wm_list_dashboards(
     window: Window,
     manager: State<'_, TerminalManager>,
 ) -> DashboardsSnapshot {
+    // Include dashboards other Terminal processes created since startup.
+    let app = window.app_handle();
+    if let Ok(data_dir) = app.path().app_data_dir() {
+        if manager.refresh_dashboards(&data_dir) {
+            manager.emit_dashboards_all(app);
+        }
+    }
     match manager.dashboards_snapshot_for(window.label()) {
         Some(snapshot) => snapshot,
         None => {
@@ -479,7 +486,8 @@ pub fn wm_list_dashboards(
 }
 
 /// Create a new empty dashboard with the given name. The new dashboard is
-/// appended to the end of the list and is not automatically made active.
+/// opened as the last tab in the calling window, and is not automatically
+/// made active.
 /// Returns `false` if a dashboard with that name already exists.
 #[tauri::command]
 pub fn wm_create_dashboard(
@@ -495,9 +503,9 @@ pub fn wm_create_dashboard(
     let terminal = get_terminal!(manager, window);
     let created = terminal
         .layout_tree
-        .with_registry_mut(|r| r.create(trimmed));
+        .with_registry_mut(|r| r.create(trimmed.clone()));
     if created {
-        terminal.layout_tree.persist_dashboards();
+        terminal.layout_tree.reopen_dashboard(&trimmed);
         manager.emit_dashboards_all(&app);
     }
     Ok(created)
@@ -550,16 +558,18 @@ pub fn wm_rename_dashboard(
     Ok(renamed)
 }
 
-/// Permanently delete a dashboard — its layout is gone for good. Only
-/// **closed** dashboards can be deleted (see `wm_close_dashboard`); an open
-/// dashboard — including the active one, which is always open — must be
-/// closed first. This is enforced here, not just hidden in the UI, since a
-/// closed dashboard is guaranteed to be neither dirty nor have anything
-/// parked in the background, which is what makes it safe to skip all the
-/// webview/active-dashboard reconciliation `close_dashboard` already did.
+/// Permanently delete a dashboard from the shared registry — its layout is
+/// gone for good, for every Terminal. Only dashboards **not open in the
+/// calling window** can be deleted (see `wm_close_dashboard`); an open tab
+/// — including the active one, which is always open — must be closed
+/// first. This is enforced here, not just hidden in the UI, since a
+/// dashboard not open here is guaranteed to be neither dirty nor have
+/// anything parked in this window, which is what makes it safe to skip all
+/// the webview/active-dashboard reconciliation `close_dashboard` already
+/// did. One active in another window is refused (`LockedElsewhere`).
 ///
 /// This is the drawer's "Delete" action (irreversible, only reachable from
-/// the Closed section). The dashboard tab's "Close dashboard" menu item
+/// the "Other dashboards" section). The dashboard tab's "Close dashboard" menu item
 /// uses `wm_close_dashboard` instead, which keeps the dashboard's data
 /// around for `wm_reopen_dashboard`.
 ///
@@ -593,17 +603,13 @@ pub async fn wm_delete_dashboard(
         }
     }
 
-    let is_closed = terminal
-        .layout_tree
-        .with_registry(|r| r.dashboards.get(&name).map(|d| d.closed));
-    match is_closed {
-        None => return Ok(false),
-        Some(false) => {
-            return Err(DashboardError::Other {
-                message: format!("'{name}' is open — close it before deleting"),
-            });
-        }
-        Some(true) => {}
+    if dashboard_id.is_none() {
+        return Ok(false);
+    }
+    if terminal.layout_tree.is_open_here(&name) {
+        return Err(DashboardError::Other {
+            message: format!("'{name}' is open — close it before deleting"),
+        });
     }
 
     if !force {
@@ -635,10 +641,10 @@ pub async fn wm_delete_dashboard(
     Ok(deleted)
 }
 
-/// Close a dashboard — hide it from the switcher and Manage drawer's main
-/// list, and stop any of its widgets currently running in the background,
-/// but keep its layout intact so `wm_reopen_dashboard` can bring it back
-/// exactly as it was. Closing the active dashboard switches to the next
+/// Close a dashboard's tab in the calling window, and stop any of its
+/// widgets running in the background there, but keep the dashboard in the
+/// shared registry so `wm_reopen_dashboard` (from this or any window) can
+/// bring it back exactly as it was. Closing the active dashboard switches to the next
 /// open one, or leaves the terminal empty if none remain open. Returns
 /// `false` if `name` doesn't exist.
 ///
@@ -700,9 +706,9 @@ pub async fn wm_close_dashboard(
     Ok(closed)
 }
 
-/// Reopen a dashboard previously hidden via `wm_close_dashboard` — it
-/// reappears in the switcher and Manage drawer's main list, unchanged from
-/// when it was closed. Does not switch to it. Returns `false` if `name`
+/// Open a dashboard from the shared registry as a tab in the calling
+/// window — one this window closed, or any other dashboard in the account.
+/// Does not switch to it. Returns `false` if `name`
 /// doesn't exist.
 #[tauri::command]
 pub fn wm_reopen_dashboard(
@@ -719,9 +725,9 @@ pub fn wm_reopen_dashboard(
     Ok(reopened)
 }
 
-/// Reorder the dashboard list to match `order`. Names not present in the
-/// current store are ignored; names present but missing from `order` are
-/// dropped.
+/// Reorder the calling window's dashboard tabs to match `order`. Names not
+/// open in this window are ignored; open tabs missing from `order` keep
+/// their relative order after the rest.
 #[tauri::command]
 pub fn wm_reorder_dashboards(
     order: Vec<String>,
@@ -736,9 +742,7 @@ pub fn wm_reorder_dashboards(
         );
         return;
     };
-    terminal
-        .layout_tree
-        .with_registry_mut(|r| r.reorder(&order));
+    terminal.layout_tree.reorder_tabs(&order);
     terminal.layout_tree.persist_dashboards();
     manager.emit_dashboards_all(&app);
 }
@@ -837,7 +841,8 @@ pub fn wm_set_dashboard_keep_alive_all(
 /// not be the active dashboard — duplicating a background dashboard reads
 /// its persisted snapshot directly and never touches the live layout tree.
 /// The new name is derived from `name` by appending " (copy)", " (copy 2)",
-/// etc. until an unused name is found. Returns the final chosen name.
+/// etc. until an unused name is found. The copy opens as a tab in this
+/// window. Returns the final chosen name.
 #[tauri::command]
 pub fn wm_duplicate_dashboard(
     name: String,
@@ -850,13 +855,9 @@ pub fn wm_duplicate_dashboard(
     let snapshot = terminal
         .layout_tree
         .with_registry(|r| r.dashboards.get(&name).cloned());
-    let Some(mut dashboard) = snapshot else {
+    let Some(dashboard) = snapshot else {
         return Err(format!("dashboard '{name}' not found"));
     };
-    // The duplicate is always open, regardless of whether the source is
-    // closed — duplicating a closed dashboard should produce a usable copy,
-    // not another hidden one.
-    dashboard.closed = false;
 
     let new_name = terminal.layout_tree.with_registry_mut(|r| {
         let mut candidate = format!("{name} (copy)");
@@ -869,7 +870,7 @@ pub fn wm_duplicate_dashboard(
         candidate
     });
 
-    terminal.layout_tree.persist_dashboards();
+    terminal.layout_tree.reopen_dashboard(&new_name);
     manager.emit_dashboards_all(&app);
     Ok(new_name)
 }
