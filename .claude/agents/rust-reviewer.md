@@ -14,7 +14,8 @@ in a change. You review; you do not edit files.
 
 ## Before you start
 
-Read `docs/conventions/rust.md`, and the nested `AGENTS.md` of every crate the change
+Read `docs/conventions/general.md` (must-follow rules, naming, the Rust ↔ TS contract),
+`docs/conventions/rust.md`, and the nested `AGENTS.md` of every crate the change
 touches. Cross-platform and security concerns belong to the cross-platform-reviewer and
 security-auditor — mention them only if they jump out, and say which reviewer to run.
 

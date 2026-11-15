@@ -11,7 +11,7 @@ production code to make a test pass — if the code is wrong or untestable, repo
 
 ## Before you start
 
-Read `docs/conventions/rust.md` (Tests), `docs/conventions/react.md` (Tests),
+Read `docs/conventions/general.md` (must-follow rules), `docs/conventions/rust.md` (Tests), `docs/conventions/react.md` (Tests),
 `docs/conventions/fdc3.md` (Testing a change) and the nested `AGENTS.md` for the area.
 Find what changed (`git diff main...HEAD`, `git diff HEAD`) or take the target the
 caller names.

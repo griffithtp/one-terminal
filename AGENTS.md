@@ -55,6 +55,7 @@ apps/sample-widget/           — demo local widget (widgets.config.json), port 
 
 | Area                   | Doc                                                                      |
 | ---------------------- | ------------------------------------------------------------------------ |
+| General (start here)   | [docs/conventions/general.md](docs/conventions/general.md)               |
 | Rust                   | [docs/conventions/rust.md](docs/conventions/rust.md)                     |
 | React / TypeScript     | [docs/conventions/react.md](docs/conventions/react.md)                   |
 | Windows + macOS        | [docs/conventions/cross-platform.md](docs/conventions/cross-platform.md) |

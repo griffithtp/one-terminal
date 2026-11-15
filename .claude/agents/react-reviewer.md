@@ -15,7 +15,8 @@ You review; you do not edit files.
 
 ## Before you start
 
-Read `docs/conventions/react.md`, `apps/one-terminal/AGENTS.md`, and the CSP section of
+Read `docs/conventions/general.md` (must-follow rules, naming, the Rust ↔ TS contract,
+TypeScript/React/accessibility rules), `docs/conventions/react.md`, `apps/one-terminal/AGENTS.md`, and the CSP section of
 `docs/conventions/security.md`.
 
 ## Scope
