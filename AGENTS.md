@@ -61,19 +61,25 @@ apps/sample-widget/           — demo local widget (widgets.config.json), port 
 | FDC3                   | [docs/conventions/fdc3.md](docs/conventions/fdc3.md)                     |
 | Scaffolder / templates | [docs/conventions/scaffolder.md](docs/conventions/scaffolder.md)         |
 
-## Review agents
+## Agents and workflows
 
-Specialist reviewer roles live in [.ai/agents/](.ai/agents/). Tools with native agent
-support get generated copies (Claude Code subagents, Copilot custom agents); any other
-assistant can follow the role file directly. Run the matching reviewer before you call a
-change done:
+Specialist roles live in [.ai/agents/](.ai/agents/) and step-by-step workflows in
+[.ai/skills/](.ai/skills/). Tools with native support get generated copies (Claude Code
+subagents and skills, Copilot custom agents and skills); any other assistant can follow
+the file directly. Run the matching agent before you call a change done:
 
-| Change touches                                                                     | Reviewer                                                         |
+| Change touches                                                                     | Agent                                                            |
 | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
 | `src-tauri/`, `ot-core`, engine hosts, window management, keybindings, scripts, CI | [cross-platform-reviewer](.ai/agents/cross-platform-reviewer.md) |
 | `broker/`, `fdc3_bus/`, `app_dir/`, `packages/fdc3-plugin/src`, user channels      | [fdc3-conformance](.ai/agents/fdc3-conformance.md)               |
+| Anything in `apps/` or `packages/ot-*` that ships to scaffolded workspaces         | [scaffolder-steward](.ai/agents/scaffolder-steward.md)           |
 
-Reviewers report findings; they don't edit files.
+Reviewers report findings and don't edit files; the scaffolder steward drafts and (when
+asked) applies migrations.
+
+| Workflow                                                   | Use when                                                        |
+| ---------------------------------------------------------- | --------------------------------------------------------------- |
+| [framework-upgrade](.ai/skills/framework-upgrade/SKILL.md) | A framework change is done and must reach scaffolded workspaces |
 
 ## Generated files — never edit by hand
 
@@ -83,6 +89,7 @@ Reviewers report findings; they don't edit files.
 | `packages/fdc3-plugin/fdc3-plugin.js`                                                | `npm run build:fdc3-plugin`                                 |
 | `CLAUDE.md` (every one), `.github/copilot-instructions.md`, `.github/instructions/*` | `npm run sync:ai`                                           |
 | `.claude/agents/*`, `.github/agents/*`                                               | `npm run sync:ai` (from `.ai/agents/`)                      |
+| `.claude/skills/*`, `.github/skills/*`                                               | `npm run sync:ai` (from `.ai/skills/`)                      |
 
 CI fails if any of these drift from their source.
 
@@ -90,8 +97,10 @@ CI fails if any of these drift from their source.
 
 Most of `apps/` and `packages/ot-*` is extracted into the scaffolder's templates. After
 changing those, templates drift and CI's template-drift check fails until you run
-`npm run create-migration`. See [packages/create-one-terminal/AGENTS.md](packages/create-one-terminal/AGENTS.md)
-and [docs/conventions/scaffolder.md](docs/conventions/scaffolder.md).
+`npm run create-migration` (interactive, or `--plan` / `--spec` for agents). Follow the
+[framework-upgrade](.ai/skills/framework-upgrade/SKILL.md) workflow. See
+[packages/create-one-terminal/AGENTS.md](packages/create-one-terminal/AGENTS.md) and
+[docs/conventions/scaffolder.md](docs/conventions/scaffolder.md).
 
 ## Key port defaults (all overridable via env vars)
 

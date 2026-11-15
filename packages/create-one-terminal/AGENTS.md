@@ -38,9 +38,18 @@ node packages/create-one-terminal/dist/index.js            # scaffold a new work
 node packages/create-one-terminal/dist/index.js upgrade    # run upgrade against current directory
 ```
 
-`create-migration` is fully interactive (`@clack/prompts`); an agent cannot drive it
-unattended. Draft the migration answers for a human, or run `extract-templates` when no
-migration is needed.
+`create-migration` is interactive by default. Agents and CI answer it from a file instead:
+
+```sh
+npm run create-migration -- --plan target/migration-plan.json          # detect; write plan + spec skeleton
+npm run create-migration -- --spec target/migration-plan.json          # validate + dry run
+npm run create-migration -- --spec target/migration-plan.json --yes    # apply
+```
+
+The spec format and decision rules are in
+[docs/conventions/scaffolder.md](../../docs/conventions/scaffolder.md#non-interactive-migrations);
+the end-to-end steps are the [framework-upgrade](../../.ai/skills/framework-upgrade/SKILL.md)
+workflow. `upgrade` itself is still interactive (confirmation and conflict prompts).
 
 ## Upgrading the framework (developer workflow)
 

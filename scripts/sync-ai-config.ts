@@ -7,6 +7,7 @@
  *   <dir>/AGENTS.md  →  .github/instructions/<dir>.instructions.md     (GitHub Copilot, `applyTo: <dir>/**`)
  *   .ai/agents/<n>.md → .claude/agents/<n>.md                          (Claude Code subagent)
  *                     → .github/agents/<n>.agent.md                    (GitHub Copilot custom agent)
+ *   .ai/skills/<n>/SKILL.md → .claude/skills/<n>/SKILL.md, .github/skills/<n>/SKILL.md (Agent Skills)
  *
  * Generated files carry GENERATED_MARKER; a marked file with no source is stale and removed.
  * Output is formatted with the repo's Prettier config so `format:check` stays green.
@@ -16,7 +17,7 @@
  *   npx tsx scripts/sync-ai-config.ts --check   # CI: exit 1 if anything would change
  */
 
-import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, rmdir, writeFile } from "node:fs/promises";
 import { dirname, join, posix, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import * as prettier from "prettier";
@@ -30,6 +31,9 @@ const INSTRUCTIONS_DIR = ".github/instructions";
 const AGENT_SOURCES_DIR = ".ai/agents";
 const CLAUDE_AGENTS_DIR = ".claude/agents";
 const COPILOT_AGENTS_DIR = ".github/agents";
+const SKILL_SOURCES_DIR = ".ai/skills";
+const CLAUDE_SKILLS_DIR = ".claude/skills";
+const COPILOT_SKILLS_DIR = ".github/skills";
 
 // `mode` in an agent's frontmatter → each tool's tool list. Reviewers are `read-run`:
 // they read code and run checks (git diff, tests) but are told never to edit.
@@ -131,7 +135,7 @@ async function render(source: string): Promise<Map<string, string>> {
  * Parses the flat `key: value` frontmatter of an agent source. Kept deliberately simple
  * (no nesting, no lists) so the source format is readable by any tool or person.
  */
-function parseAgent(source: string, text: string) {
+function parseFrontmatter(source: string, text: string, expectedName: string) {
   const match = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/.exec(text);
   if (!match) throw new Error(`${source}: missing --- frontmatter ---`);
   const meta: Record<string, string> = {};
@@ -141,15 +145,42 @@ function parseAgent(source: string, text: string) {
     if (!kv) throw new Error(`${source}: can't parse frontmatter line "${line}"`);
     meta[kv[1]] = kv[2].replace(/^"(.*)"$/, "$1");
   }
-  const expectedName = posix.basename(source, ".md");
   if (meta.name !== expectedName) {
-    throw new Error(`${source}: name must match the file name ("${expectedName}")`);
+    throw new Error(`${source}: name must be "${expectedName}" to match its file or folder`);
   }
   if (!meta.description) throw new Error(`${source}: description is required`);
+  return { meta, body: match[2].trimStart() };
+}
+
+function parseAgent(source: string, text: string) {
+  const { meta, body } = parseFrontmatter(source, text, posix.basename(source, ".md"));
   if (!(meta.mode in AGENT_TOOLS)) {
     throw new Error(`${source}: mode must be one of ${Object.keys(AGENT_TOOLS).join(", ")}`);
   }
-  return { meta: meta as Record<string, string> & { mode: Mode }, body: match[2].trimStart() };
+  return { meta: meta as Record<string, string> & { mode: Mode }, body };
+}
+
+/**
+ * Skills use the Agent Skills format (`<name>/SKILL.md` with `name` + `description`), which
+ * Claude Code and Copilot both read, so the adapters are the same file in two places.
+ */
+async function renderSkill(source: string): Promise<Map<string, string>> {
+  const dir = posix.dirname(source);
+  const name = posix.basename(dir);
+  const extra = (await listDir(dir)).filter((p) => p !== source);
+  if (extra.length > 0) {
+    throw new Error(`${dir}: only SKILL.md is supported (found ${extra.join(", ")})`);
+  }
+  const { meta, body } = parseFrontmatter(source, (await readText(source)) ?? "", name);
+  const out = new Map<string, string>();
+  for (const outDir of [CLAUDE_SKILLS_DIR, COPILOT_SKILLS_DIR]) {
+    const frontmatter = `name: ${meta.name}\ndescription: ${JSON.stringify(meta.description)}`;
+    out.set(
+      `${outDir}/${name}/SKILL.md`,
+      `---\n${frontmatter}\n---\n\n${marker(source)}\n\n${rebaseLinks(body, dir, `${outDir}/${name}`)}`
+    );
+  }
+  return out;
 }
 
 async function renderAgent(source: string): Promise<Map<string, string>> {
@@ -198,6 +229,12 @@ await walk(ROOT, found);
 found.sources.sort();
 
 const agentSources = (await listDir(AGENT_SOURCES_DIR)).filter((p) => p.endsWith(".md")).sort();
+const skillSources = (await listDir(SKILL_SOURCES_DIR)).map((dir) => `${dir}/SKILL.md`).sort();
+
+/** `<skillsDir>/<name>/SKILL.md` for every skill folder in a generated skills dir. */
+async function listSkills(skillsDir: string): Promise<string[]> {
+  return (await listDir(skillsDir)).map((dir) => `${dir}/SKILL.md`);
+}
 
 const expected = new Map<string, string>();
 for (const source of found.sources) {
@@ -210,7 +247,12 @@ for (const source of agentSources) {
     expected.set(path, await format(path, content));
   }
 }
-const allSources = [...found.sources, ...agentSources];
+for (const source of skillSources) {
+  for (const [path, content] of await renderSkill(source)) {
+    expected.set(path, await format(path, content));
+  }
+}
+const allSources = [...found.sources, ...agentSources, ...skillSources];
 
 // Previously generated files whose source has gone away.
 const candidates = [
@@ -219,6 +261,8 @@ const candidates = [
   ...(await listDir(INSTRUCTIONS_DIR)),
   ...(await listDir(CLAUDE_AGENTS_DIR)),
   ...(await listDir(COPILOT_AGENTS_DIR)),
+  ...(await listSkills(CLAUDE_SKILLS_DIR)),
+  ...(await listSkills(COPILOT_SKILLS_DIR)),
 ];
 const stale: string[] = [];
 for (const path of candidates) {
@@ -233,7 +277,7 @@ for (const [path, content] of expected) {
   if (current !== null && !current.includes(GENERATED_MARKER) && !CHECK) {
     console.error(
       `✗ ${path} exists and was not generated by this script. Move its content into the ` +
-        `matching ${SOURCE_NAME} or ${AGENT_SOURCES_DIR}/ file, delete it, and re-run.`
+        `matching ${SOURCE_NAME}, ${AGENT_SOURCES_DIR}/ or ${SKILL_SOURCES_DIR}/ file, delete it, and re-run.`
     );
     process.exit(1);
   }
@@ -245,7 +289,13 @@ for (const [path, content] of expected) {
 }
 
 if (!CHECK) {
-  for (const path of stale) await rm(join(ROOT, path));
+  for (const path of stale) {
+    await rm(join(ROOT, path));
+    // A generated skill lives in its own folder; drop the folder once it's empty.
+    if (path.endsWith("/SKILL.md")) {
+      await rmdir(dirname(join(ROOT, path))).catch(() => {});
+    }
+  }
 }
 
 const sourcesList = allSources.map((s) => `  ${s}`).join("\n");

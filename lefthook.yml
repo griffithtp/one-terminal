@@ -15,6 +15,7 @@ pre-commit:
       glob:
         - "*AGENTS.md"
         - ".ai/agents/*.md"
+        - ".ai/skills/*"
       run: npm run check:ai-drift
       fail_text: "AI config sources changed — run: npm run sync:ai, then stage the regenerated files"
 

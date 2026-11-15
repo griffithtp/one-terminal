@@ -180,6 +180,11 @@ git add packages/create-one-terminal/src/create/context.ts
 git commit -m "feat: <describe change>"
 ```
 
+> **Non-interactive (CI, AI agents):** `npm run create-migration -- --plan target/migration-plan.json`
+> writes the detected changes and a spec skeleton; fill it in, check it with
+> `-- --spec target/migration-plan.json` (dry run), then apply with `--yes`. The spec
+> format is documented in [docs/conventions/scaffolder.md](docs/conventions/scaffolder.md#non-interactive-migrations).
+
 > **When no migration is needed** (pure internal refactor with no user-visible surface): decline all migration prompts in the wizard, or run `npm run extract-templates` directly and skip `create-migration`. In that case, manually bump `scaffoldVersion` in `context.ts` only if scaffolded projects need to be made aware of the change.
 
 ### Step 3 — Build and test

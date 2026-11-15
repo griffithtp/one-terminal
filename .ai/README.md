@@ -7,23 +7,25 @@ not by any one assistant.
 
 ## Sources (edit these)
 
-| Source                              | Purpose                                                                                        |
-| ----------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `AGENTS.md` (root)                  | Repo-wide context: identity, layout, commands, generated files                                 |
-| `<dir>/AGENTS.md` (nested)          | Context for one area, next to its code                                                         |
-| `docs/conventions/*.md`             | Long-form rules (Rust, React, cross-platform, security, FDC3, scaffolder) — linked, not copied |
-| `.ai/agents/*.md`                   | Role definitions for reviewer / specialist agents (format below)                               |
-| `.ai/skills/*/SKILL.md` _(planned)_ | Repeatable workflows in the Agent Skills format                                                |
+| Source                       | Purpose                                                                                        |
+| ---------------------------- | ---------------------------------------------------------------------------------------------- |
+| `AGENTS.md` (root)           | Repo-wide context: identity, layout, commands, generated files                                 |
+| `<dir>/AGENTS.md` (nested)   | Context for one area, next to its code                                                         |
+| `docs/conventions/*.md`      | Long-form rules (Rust, React, cross-platform, security, FDC3, scaffolder) — linked, not copied |
+| `.ai/agents/*.md`            | Role definitions for reviewer / specialist agents (format below)                               |
+| `.ai/skills/<name>/SKILL.md` | Step-by-step workflows in the Agent Skills format (format below)                               |
 
 ## Generated adapters (never edit)
 
-| Generated file                               | From                   | Read by                              |
-| -------------------------------------------- | ---------------------- | ------------------------------------ |
-| `<dir>/CLAUDE.md`                            | `<dir>/AGENTS.md`      | Claude Code (`@AGENTS.md` import)    |
-| `.github/copilot-instructions.md`            | root `AGENTS.md`       | GitHub Copilot (repo-wide)           |
-| `.github/instructions/<dir>.instructions.md` | nested `AGENTS.md`     | GitHub Copilot (`applyTo: <dir>/**`) |
-| `.claude/agents/<name>.md`                   | `.ai/agents/<name>.md` | Claude Code subagent                 |
-| `.github/agents/<name>.agent.md`             | `.ai/agents/<name>.md` | GitHub Copilot custom agent          |
+| Generated file                               | From                         | Read by                              |
+| -------------------------------------------- | ---------------------------- | ------------------------------------ |
+| `<dir>/CLAUDE.md`                            | `<dir>/AGENTS.md`            | Claude Code (`@AGENTS.md` import)    |
+| `.github/copilot-instructions.md`            | root `AGENTS.md`             | GitHub Copilot (repo-wide)           |
+| `.github/instructions/<dir>.instructions.md` | nested `AGENTS.md`           | GitHub Copilot (`applyTo: <dir>/**`) |
+| `.claude/agents/<name>.md`                   | `.ai/agents/<name>.md`       | Claude Code subagent                 |
+| `.github/agents/<name>.agent.md`             | `.ai/agents/<name>.md`       | GitHub Copilot custom agent          |
+| `.claude/skills/<name>/SKILL.md`             | `.ai/skills/<name>/SKILL.md` | Claude Code skill                    |
+| `.github/skills/<name>/SKILL.md`             | `.ai/skills/<name>/SKILL.md` | GitHub Copilot skill                 |
 
 Devin, Codex and Cursor read `AGENTS.md` files directly; the root `AGENTS.md` lists the
 review agents so they can follow `.ai/agents/<name>.md` as a role. For Devin, mirror the
@@ -35,7 +37,7 @@ copies, not symlinks, because Git for Windows checks symlinks out as plain files
 ## Workflow
 
 ```sh
-# edit AGENTS.md (root or nested), add a new <dir>/AGENTS.md, or edit .ai/agents/*.md
+# edit AGENTS.md (root or nested), .ai/agents/*.md or .ai/skills/*/SKILL.md
 npm run sync:ai          # regenerate adapters (formats them with Prettier)
 npm run check:ai-drift   # what CI runs — exit 1 if adapters are stale
 ```
@@ -44,10 +46,11 @@ Commit the source and the regenerated adapters together.
 
 ## Agents
 
-| Agent                                                        | Role                                                      |
-| ------------------------------------------------------------ | --------------------------------------------------------- |
-| [cross-platform-reviewer](agents/cross-platform-reviewer.md) | Windows (WebView2) + macOS (WKWebView) correctness review |
-| [fdc3-conformance](agents/fdc3-conformance.md)               | FDC3 3.0 / DACP conformance review of broker, bus, plugin |
+| Agent                                                        | Role                                                                   |
+| ------------------------------------------------------------ | ---------------------------------------------------------------------- |
+| [cross-platform-reviewer](agents/cross-platform-reviewer.md) | Windows (WebView2) + macOS (WKWebView) correctness review              |
+| [fdc3-conformance](agents/fdc3-conformance.md)               | FDC3 3.0 / DACP conformance review of broker, bus, plugin              |
+| [scaffolder-steward](agents/scaffolder-steward.md)           | Template impact, migration decisions and create-migration answer files |
 
 ### Source format
 
@@ -83,6 +86,27 @@ may change.
 - **GitHub Copilot:** pick the agent in the agent picker (VS Code chat, or the coding
   agent on github.com).
 - **Devin, Codex, Cursor, others:** "Follow `.ai/agents/<name>.md` and review this branch."
+
+## Skills (workflows)
+
+| Skill                                                  | Use when                                            |
+| ------------------------------------------------------ | --------------------------------------------------- |
+| [framework-upgrade](skills/framework-upgrade/SKILL.md) | A framework change must reach scaffolded workspaces |
+
+A skill is a folder with one `SKILL.md` in the [Agent Skills](https://agentskills.io) format:
+
+```markdown
+---
+name: my-skill # must match the folder name
+description: What the workflow does and when to use it — tools use this to pick it.
+---
+
+Numbered steps with the exact commands, what to check, and where to stop for a person.
+```
+
+Only `SKILL.md` is supported for now (no extra files in the folder). Claude Code and Copilot
+read the same format, so both adapters are the same file. Other assistants: "Follow
+`.ai/skills/<name>/SKILL.md`."
 
 ## Writing guidance
 

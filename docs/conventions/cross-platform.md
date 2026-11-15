@@ -77,7 +77,7 @@ isn't lost:
 
 Not yet fixed — don't copy these patterns, and remove a row when it's fixed:
 
-| OS      | Where                                                                              | Issue                                                                                                      |
-| ------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
-| Windows | root `package.json`: `dev:terminal:pin`, `dev:desktop-agent:pin`, `dev:*:electron` | POSIX `VAR=value cmd` and `$INIT_CWD` syntax; fails from cmd/PowerShell (use `cross-env` or a Node script) |
-| Windows | `scripts/check-template-drift.ts`, `scripts/create-migration.ts`                   | Shell out to Unix `diff` (and `tail`/`head`); work only under Git Bash or WSL                              |
+| OS      | Where                                                                                         | Issue                                                                                                                                    |
+| ------- | --------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Windows | root `package.json`: `dev:terminal:pin`, `dev:desktop-agent:pin`, `dev:*:electron`            | POSIX `VAR=value cmd` and `$INIT_CWD` syntax; fails from cmd/PowerShell (use `cross-env` or a Node script)                               |
+| Windows | `scripts/check-template-drift.ts`, `scripts/test-scaffold.ts`, interactive `create-migration` | Shell out to Unix `diff` / `find` / `wc` / `tail` / `head`; work only under Git Bash or WSL (`create-migration --plan` / `--spec` don't) |
