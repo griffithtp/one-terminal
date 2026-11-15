@@ -16,6 +16,7 @@
     "create-widget": "node scripts/new-widget.mjs",
     "build": "npm run build:terminal",
     "typecheck": "npm run typecheck --workspaces --if-present",
+    "test:terminal": "npm -w @<%= orgScope %>/one-terminal test",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",

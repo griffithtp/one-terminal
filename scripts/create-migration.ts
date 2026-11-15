@@ -28,7 +28,7 @@
 import * as p from "@clack/prompts";
 import pc from "picocolors";
 import { execSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { cp, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { basename, extname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
@@ -40,6 +40,7 @@ const ROOT = join(fileURLToPath(import.meta.url), "../..");
 const TEMPLATES = join(ROOT, "packages/create-one-terminal/templates");
 const VERSIONS_JSON = join(ROOT, "packages/create-one-terminal/versions.json");
 const CONTEXT_TS = join(ROOT, "packages/create-one-terminal/src/create/context.ts");
+const STATIC_MANIFEST = join(ROOT, "packages/create-one-terminal/static-manifest.json");
 
 const { values: args } = parseArgs({
   options: {
@@ -170,9 +171,14 @@ p.intro(pc.bgCyan(pc.black(" OneTerminal — Migration Wizard ")));
 const spin = p.spinner();
 spin.start("Extracting templates from source apps…");
 const tmpDir = mkdtempSync(join(tmpdir(), "ot-migrate-"));
+// Extracted beside (not inside) tmpDir, which is copied over templates/ wholesale. Without
+// --manifest the extractor would overwrite the committed static-manifest.json even on a
+// --plan or dry run; it's installed only when changes are applied (Step 9).
+const tmpManifest = `${tmpDir}-static-manifest.json`;
 
 try {
-  execSync(`npx tsx ${join(ROOT, "scripts/extract-templates.ts")} --output ${tmpDir}`, {
+  const extractor = join(ROOT, "scripts/extract-templates.ts");
+  execSync(`npx tsx "${extractor}" --output "${tmpDir}" --manifest "${tmpManifest}"`, {
     cwd: ROOT,
     stdio: "pipe",
   });
@@ -200,7 +206,12 @@ const branchVersion = detectBranchMigration(manifest);
 // --plan: report what an answer file must cover, write nothing else
 if (args.plan) {
   const planPath = cliPath(args.plan);
-  const plan = buildPlan(changes, await detectRemovals(tmpDir), currentVersion, branchVersion);
+  const plan = {
+    ...buildPlan(changes, await detectRemovals(tmpDir), currentVersion, branchVersion),
+    // Static (verbatim-copied) files added or removed. No migration needed — applying any
+    // spec, or running with no dynamic changes, refreshes static-manifest.json.
+    staticManifestChanged: await staticManifestChanged(),
+  };
   await writeFile(planPath, JSON.stringify(plan, null, 2) + "\n", "utf8");
   cleanup();
   p.outro(
@@ -213,8 +224,15 @@ if (args.plan) {
 }
 
 if (changes.length === 0) {
+  // Only static files changed (or nothing): refresh the manifest, no migration or version.
+  const refreshed = await staticManifestChanged();
+  if (refreshed && !args.spec) installStaticManifest();
   cleanup();
-  p.outro("No template changes detected — nothing to migrate.");
+  p.outro(
+    refreshed && !args.spec
+      ? "No dynamic template changes — static-manifest.json refreshed, no migration needed."
+      : "No template changes detected — nothing to migrate."
+  );
   process.exit(0);
 }
 
@@ -246,6 +264,8 @@ if (args.spec) {
   );
   for (const m of migrations) p.log.step(`${pc.bold(m.id)}  ${pc.dim(`${m.type} → ${m.target}`)}`);
   for (const file of resolved.skipped) p.log.info(`skipped  ${pc.dim(file)}`);
+
+  if (await staticManifestChanged()) p.log.info("static-manifest.json will be refreshed");
 
   if (!args.yes) {
     p.log.message(JSON.stringify(migrations, null, 2));
@@ -383,6 +403,7 @@ if (mode === "new") {
 
 // Step 9: Copy new templates to committed location
 await cp(tmpDir, TEMPLATES, { recursive: true, force: true });
+installStaticManifest();
 cleanup();
 p.log.success("Committed templates updated.");
 
@@ -1174,8 +1195,21 @@ function slugify(s: string): string {
     .replace(/^-|-$/g, "");
 }
 
+async function staticManifestChanged(): Promise<boolean> {
+  const [next, current] = await Promise.all([
+    readFile(tmpManifest, "utf8").catch(() => null),
+    readFile(STATIC_MANIFEST, "utf8").catch(() => null),
+  ]);
+  return next !== null && next !== current;
+}
+
+function installStaticManifest(): void {
+  copyFileSync(tmpManifest, STATIC_MANIFEST);
+}
+
 function cleanup(): void {
   rmSync(tmpDir, { recursive: true, force: true });
+  rmSync(tmpManifest, { force: true });
 }
 
 function cancel(): never {

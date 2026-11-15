@@ -52,6 +52,9 @@ Commit the source and the regenerated adapters together.
 | [fdc3-conformance](agents/fdc3-conformance.md)               | FDC3 3.0 / DACP conformance review of broker, bus, plugin              |
 | [scaffolder-steward](agents/scaffolder-steward.md)           | Template impact, migration decisions and create-migration answer files |
 | [security-auditor](agents/security-auditor.md)               | Trust-boundary review of changes, or a full-repo audit                 |
+| [rust-reviewer](agents/rust-reviewer.md)                     | Rust correctness and conventions review                                |
+| [react-reviewer](agents/react-reviewer.md)                   | React/TypeScript UI review (state, IPC, render cost, CSP, a11y)        |
+| [test-author](agents/test-author.md)                         | Writes Rust, Vitest/RTL and FDC3 contract tests                        |
 
 ### Source format
 

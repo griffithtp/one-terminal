@@ -75,6 +75,22 @@ during drag and resize.
 
 ## Tests
 
-There are currently no frontend unit tests. Vitest + React Testing Library are planned;
-until then, put logic that needs testing in plain functions under `src/lib/` or
-`src/commands/` so it can be unit tested without rendering.
+The Terminal has Vitest + React Testing Library tests (`npm run test:terminal`, also run
+in CI). Tests sit next to the code as `<name>.test.ts(x)` and run in jsdom with Tauri IPC
+mocked; nothing needs the Rust side.
+
+- Put logic in plain functions under `src/lib/` or `src/commands/` and unit-test it
+  directly; test components through what the user sees — query by role and accessible
+  name, interact with `user-event`.
+- Mock IPC with `mockIPC` from `@tauri-apps/api/mocks` and assert the exact
+  `[command, args]` the UI sends.
+- `src/test/setup.ts` resets the DOM, IPC mocks and `localStorage` after each test, and
+  registers the jest-dom matchers on this package's Vitest (don't import
+  `@testing-library/jest-dom/vitest` — it binds to the repo-root Vitest used by
+  fdc3-plugin; types live in `src/test/jest-dom.d.ts`).
+- Module singletons (the command `registry`, context-menu registry) must be cleaned up
+  per test; module-level state needs `vi.resetModules()` + dynamic `import()`.
+
+The [test-author](../../.ai/agents/test-author.md) role has the full patterns. The Desktop
+Agent dashboard and App Directory UI have no tests yet — add the same setup there when
+they gain logic worth testing.

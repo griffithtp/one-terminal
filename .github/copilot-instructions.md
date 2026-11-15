@@ -76,6 +76,9 @@ the file directly. Run the matching agent before you call a change done:
 | `broker/`, `fdc3_bus/`, `app_dir/`, `packages/fdc3-plugin/src`, user channels                         | [fdc3-conformance](../.ai/agents/fdc3-conformance.md)               |
 | Anything in `apps/` or `packages/ot-*` that ships to scaffolded workspaces                            | [scaffolder-steward](../.ai/agents/scaffolder-steward.md)           |
 | Capabilities, CSP, Tauri commands, custom schemes, FDC3 bus, App Directory, spawning, downloads, deps | [security-auditor](../.ai/agents/security-auditor.md)               |
+| Any Rust (`*.rs`, `Cargo.toml`)                                                                       | [rust-reviewer](../.ai/agents/rust-reviewer.md)                     |
+| Any React / TypeScript UI (`apps/*/src`, `apps/app-directory/ui`)                                     | [react-reviewer](../.ai/agents/react-reviewer.md)                   |
+| Missing or failing tests, or a bug needing a regression test                                          | [test-author](../.ai/agents/test-author.md)                         |
 
 Reviewers report findings and don't edit files; the scaffolder steward drafts and (when
 asked) applies migrations.
@@ -156,6 +159,7 @@ npm run format                    # Prettier
 npm run typecheck
 npm run build:fdc3-plugin        # regenerates packages/fdc3-plugin/fdc3-plugin.js after editing src/
 npm run test:fdc3-plugin         # contract tests: the official proxy against the real Rust bus
+npm run test:terminal            # Terminal UI unit/component tests (Vitest + RTL, jsdom)
 npm run build:app-directory      # rebuilds apps/app-directory/dist
 npm run build:samples            # production builds of sample-ticker + sample-chart (after Epic 07)
 npm run build:all                # all Tauri apps
@@ -170,7 +174,7 @@ npm audit --omit=dev             # npm advisories in production dependencies
 1. `cargo fmt --all` and `npm run format` — lefthook's pre-push and CI reject unformatted code.
 2. `cargo clippy --workspace -- -D warnings` and `npm run lint` are clean.
 3. `npm run typecheck` passes if you touched TypeScript.
-4. Tests for the area you touched pass (`cargo test -p <crate>`, `npm run test:fdc3-plugin` for FDC3).
+4. Tests for the area you touched pass (`cargo test -p <crate>`, `npm run test:fdc3-plugin` for FDC3, `npm run test:terminal` for the Terminal UI) — and changed behaviour has a test.
 5. Code behind `#[cfg(target_os = …)]` has a branch (or explicit no-op) for both Windows and macOS — see [cross-platform.md](../docs/conventions/cross-platform.md).
 6. Generated files above are regenerated, not hand-edited.
 

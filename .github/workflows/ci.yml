@@ -93,6 +93,9 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
+      - name: Terminal unit tests
+        run: npm run test:terminal
+
       - name: fdc3-plugin bundle is up to date
         run: npm -w @one-terminal/fdc3-plugin run check:bundle
 

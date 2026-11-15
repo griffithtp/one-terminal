@@ -106,6 +106,16 @@ registerCtxMenuItems("my-app-id", [
 
 **Epic 08 note:** this registry will be superseded by `window.OT.plugins.get("contextMenu")` once the dynamic plugin system lands. Static entries will continue to work unchanged.
 
+## Tests
+
+```sh
+npm run test:terminal                              # vitest run (jsdom, Tauri IPC mocked)
+npm -w @one-terminal/one-terminal run test:watch
+```
+
+Tests live next to the code (`src/**/<name>.test.ts(x)`); setup in `src/test/`. Patterns:
+[docs/conventions/react.md](../../docs/conventions/react.md#tests).
+
 ## Ships to scaffolded workspaces
 
 This whole app is extracted into the scaffolder's `shared` overlay. Changes here drift the
