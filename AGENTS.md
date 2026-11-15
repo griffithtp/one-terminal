@@ -1,8 +1,9 @@
 # OneTerminal — AI agent context
 
 This is the canonical context file for every AI coding assistant (Claude Code, GitHub
-Copilot, Devin, Codex, Cursor, …). `CLAUDE.md` and `.github/copilot-instructions.md` are
-generated from it — edit this file, then run `npm run sync:ai`. See [.ai/README.md](.ai/README.md).
+Copilot, Devin, Codex, Cursor, …). GitHub Copilot and the others read it directly; the
+`CLAUDE.md` files are generated `@AGENTS.md` imports for Claude Code — edit this file, then
+run `npm run sync:ai`. See [.ai/README.md](.ai/README.md).
 
 Area-specific context lives in nested `AGENTS.md` files next to the code they describe;
 long-form rules live in [docs/conventions/](docs/conventions/). Read the conventions doc
@@ -64,9 +65,9 @@ apps/sample-widget/           — demo local widget (widgets.config.json), port 
 ## Agents and workflows
 
 Specialist roles live in [.ai/agents/](.ai/agents/) and step-by-step workflows in
-[.ai/skills/](.ai/skills/). Tools with native support get generated copies (Claude Code
-subagents and skills, Copilot custom agents and skills); any other assistant can follow
-the file directly. Run the matching agent before you call a change done:
+[.ai/skills/](.ai/skills/). They are generated into `.claude/agents/` and `.claude/skills/`,
+which both Claude Code and GitHub Copilot in VS Code read; any other assistant can follow
+the `.ai/` file directly. Run the matching agent before you call a change done:
 
 | Change touches                                                                                        | Agent                                                                                             |
 | ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
@@ -94,13 +95,13 @@ Cloud agents (Copilot coding agent, Devin, Codex, Cursor): machine setup is
 
 ## Generated files — never edit by hand
 
-| File(s)                                                                              | Regenerate with                                             |
-| ------------------------------------------------------------------------------------ | ----------------------------------------------------------- |
-| `packages/create-one-terminal/templates/**`, `static-manifest.json`                  | `npm run create-migration` (or `npm run extract-templates`) |
-| `packages/fdc3-plugin/fdc3-plugin.js`                                                | `npm run build:fdc3-plugin`                                 |
-| `CLAUDE.md` (every one), `.github/copilot-instructions.md`, `.github/instructions/*` | `npm run sync:ai`                                           |
-| `.claude/agents/*`, `.github/agents/*`                                               | `npm run sync:ai` (from `.ai/agents/`)                      |
-| `.claude/skills/*`, `.github/skills/*`                                               | `npm run sync:ai` (from `.ai/skills/`)                      |
+| File(s)                                                             | Regenerate with                                             |
+| ------------------------------------------------------------------- | ----------------------------------------------------------- |
+| `packages/create-one-terminal/templates/**`, `static-manifest.json` | `npm run create-migration` (or `npm run extract-templates`) |
+| `packages/fdc3-plugin/fdc3-plugin.js`                               | `npm run build:fdc3-plugin`                                 |
+| `CLAUDE.md` (every one)                                             | `npm run sync:ai`                                           |
+| `.claude/agents/*`                                                  | `npm run sync:ai` (from `.ai/agents/`)                      |
+| `.claude/skills/*`                                                  | `npm run sync:ai` (from `.ai/skills/`)                      |
 
 CI fails if any of these drift from their source.
 

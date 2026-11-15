@@ -18,12 +18,12 @@ bash scripts/agent-setup.sh     # Tauri system packages, Rust + rustfmt/clippy, 
 Node.js 22+ must already be installed (the script checks). Set `OT_SETUP_SKIP_WARM=1` to
 skip the ~several-minute cache warm when the tool has a short setup timeout.
 
-| Tool                    | Where the setup goes                                                                  |
-| ----------------------- | ------------------------------------------------------------------------------------- |
-| GitHub Copilot          | `.github/workflows/copilot-setup-steps.yml` (already in the repo; runs the script)    |
-| Devin                   | Repository setup → run `bash scripts/agent-setup.sh`; set Node 22 as the default Node |
-| Codex (cloud)           | Environment → setup script: `bash scripts/agent-setup.sh`                             |
-| Cursor background agent | Environment install command: `bash scripts/agent-setup.sh`                            |
+| Tool                    | Where the setup goes                                                                                                                                     |
+| ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GitHub Copilot          | `.github/workflows/copilot-setup-steps.yml` (runs the script). Only used by the cloud agent on github.com — delete it if you only use Copilot in the IDE |
+| Devin                   | Repository setup → run `bash scripts/agent-setup.sh`; set Node 22 as the default Node                                                                    |
+| Codex (cloud)           | Environment → setup script: `bash scripts/agent-setup.sh`                                                                                                |
+| Cursor background agent | Environment install command: `bash scripts/agent-setup.sh`                                                                                               |
 
 Linux can build, lint and run every test, but can't exercise Windows- or macOS-only
 behaviour. Agents must say so in their PR and leave per-OS manual checks for a person
@@ -31,11 +31,11 @@ behaviour. Agents must say so in their PR and leave per-OS manual checks for a p
 
 ## Instructions, roles and workflows
 
-| Tool          | Context                                                                             | Roles (`.ai/agents/`)                   | Workflows (`.ai/skills/`)                                  |
-| ------------- | ----------------------------------------------------------------------------------- | --------------------------------------- | ---------------------------------------------------------- |
-| Copilot       | `AGENTS.md`, `.github/copilot-instructions.md`, `.github/instructions/` (generated) | `.github/agents/*.agent.md` (generated) | `.github/skills/` (generated)                              |
-| Devin         | `AGENTS.md`                                                                         | follow the role file                    | a playbook that says "follow `.ai/skills/<name>/SKILL.md`" |
-| Codex, Cursor | `AGENTS.md` (nested ones too)                                                       | follow the role file                    | follow the skill file                                      |
+| Tool          | Context                       | Roles (`.ai/agents/`)       | Workflows (`.ai/skills/`)                                  |
+| ------------- | ----------------------------- | --------------------------- | ---------------------------------------------------------- |
+| Copilot       | `AGENTS.md` (root and nested) | `.claude/agents/` (VS Code) | `.claude/skills/`                                          |
+| Devin         | `AGENTS.md`                   | follow the role file        | a playbook that says "follow `.ai/skills/<name>/SKILL.md`" |
+| Codex, Cursor | `AGENTS.md` (nested ones too) | follow the role file        | follow the skill file                                      |
 
 ### Devin specifics
 

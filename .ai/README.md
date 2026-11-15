@@ -17,17 +17,16 @@ not by any one assistant.
 
 ## Generated adapters (never edit)
 
-| Generated file                               | From                         | Read by                              |
-| -------------------------------------------- | ---------------------------- | ------------------------------------ |
-| `<dir>/CLAUDE.md`                            | `<dir>/AGENTS.md`            | Claude Code (`@AGENTS.md` import)    |
-| `.github/copilot-instructions.md`            | root `AGENTS.md`             | GitHub Copilot (repo-wide)           |
-| `.github/instructions/<dir>.instructions.md` | nested `AGENTS.md`           | GitHub Copilot (`applyTo: <dir>/**`) |
-| `.claude/agents/<name>.md`                   | `.ai/agents/<name>.md`       | Claude Code subagent                 |
-| `.github/agents/<name>.agent.md`             | `.ai/agents/<name>.md`       | GitHub Copilot custom agent          |
-| `.claude/skills/<name>/SKILL.md`             | `.ai/skills/<name>/SKILL.md` | Claude Code skill                    |
-| `.github/skills/<name>/SKILL.md`             | `.ai/skills/<name>/SKILL.md` | GitHub Copilot skill                 |
+| Generated file                   | From                         | Read by                                                     |
+| -------------------------------- | ---------------------------- | ----------------------------------------------------------- |
+| `<dir>/CLAUDE.md`                | `<dir>/AGENTS.md`            | Claude Code (`@AGENTS.md` import)                           |
+| `.claude/agents/<name>.md`       | `.ai/agents/<name>.md`       | Claude Code subagent; GitHub Copilot custom agent (VS Code) |
+| `.claude/skills/<name>/SKILL.md` | `.ai/skills/<name>/SKILL.md` | Claude Code and GitHub Copilot skill                        |
 
-Devin, Codex and Cursor read `AGENTS.md` files directly; the root `AGENTS.md` lists the
+GitHub Copilot in VS Code reads root and nested `AGENTS.md` directly (enabled by the
+settings committed in `.vscode/settings.json`), plus `.claude/agents/` and
+`.claude/skills/` — so nothing is generated under `.github/`. Devin, Codex and Cursor read
+`AGENTS.md` files directly too; the root `AGENTS.md` lists the
 review agents so they can follow `.ai/agents/<name>.md` as a role. For Devin, mirror the
 most important rules into its Knowledge entries and link them back to the source file.
 
@@ -74,24 +73,23 @@ procedure, and the exact report format.
 ```
 
 Frontmatter is flat `key: value` lines (no nesting or lists). `mode` maps to each tool's
-tool list:
+Claude Code `tools` list (VS Code Copilot maps those names to its own tools):
 
-| `mode`      | Claude Code `tools`                   | Copilot `tools`                         |
-| ----------- | ------------------------------------- | --------------------------------------- |
-| `read-only` | `Read, Grep, Glob`                    | `["read", "search"]`                    |
-| `read-run`  | `Read, Grep, Glob, Bash`              | `["read", "search", "execute"]`         |
-| `write`     | `Read, Grep, Glob, Bash, Edit, Write` | `["read", "search", "edit", "execute"]` |
+| `mode`      | `tools`                               |
+| ----------- | ------------------------------------- |
+| `read-only` | `Read, Grep, Glob`                    |
+| `read-run`  | `Read, Grep, Glob, Bash`              |
+| `write`     | `Read, Grep, Glob, Bash, Edit, Write` |
 
 Reviewers are `read-run`: they need a shell for `git diff` and tests, and their prompt
-forbids edits. Check the Copilot custom-agent docs when adding a mode — its tool aliases
-may change.
+forbids edits.
 
 ### Using an agent
 
 - **Claude Code:** ask for it by name ("run the fdc3-conformance agent on this branch"),
   or let Claude pick it from the description. New agent files load at session start.
-- **GitHub Copilot:** pick the agent in the agent picker (VS Code chat, or the coding
-  agent on github.com).
+- **GitHub Copilot (VS Code):** pick the agent in the chat agent picker; it's read from
+  `.claude/agents/`.
 - **Devin, Codex, Cursor, others:** "Follow `.ai/agents/<name>.md` and review this branch."
 
 ## Skills (workflows)
@@ -114,7 +112,7 @@ Numbered steps with the exact commands, what to check, and where to stop for a p
 ```
 
 Only `SKILL.md` is supported for now (no extra files in the folder). Claude Code and Copilot
-read the same format, so both adapters are the same file. Other assistants: "Follow
+both read `.claude/skills/`, so there is a single generated copy. Other assistants: "Follow
 `.ai/skills/<name>/SKILL.md`."
 
 ## Cloud agents
