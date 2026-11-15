@@ -56,15 +56,16 @@ const gzKb = (path: string) => kb(gzipSync(readFileSync(path), { level: 9 }).len
 function parseHtml(html: string) {
   const attr = (tag: string, name: string) =>
     new RegExp(`\\b${name}\\s*=\\s*"([^"]+)"`).exec(tag)?.[1];
-  const tags = html.match(/<(script|link)\b[^>]*>/g) ?? [];
+  const tags = html.match(/<(script|link)\b[^>]*>/gi) ?? [];
   const entry: string[] = [];
   const preload: string[] = [];
   const css: string[] = [];
   for (const tag of tags) {
-    if (tag.startsWith("<script") && /type\s*=\s*"module"/.test(tag)) {
+    const tagLower = tag.toLowerCase();
+    if (tagLower.startsWith("<script") && /type\s*=\s*"module"/.test(tagLower)) {
       const src = attr(tag, "src");
       if (src) entry.push(src);
-    } else if (tag.startsWith("<link")) {
+    } else if (tagLower.startsWith("<link")) {
       const rel = attr(tag, "rel");
       const href = attr(tag, "href");
       if (!href) continue;
