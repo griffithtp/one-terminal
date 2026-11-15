@@ -20,7 +20,10 @@ listen<ThemeChangedPayload>(THEME_CHANGED_EVENT, (e) => {
   syncWindowBackground();
 }).catch(console.error);
 
-ReactDOM.createRoot(document.getElementById("root")!).render(
+const rootElement = document.getElementById("root");
+if (!rootElement) throw new Error("index.html is missing the #root element");
+
+ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
     <PopoutApp />
   </React.StrictMode>

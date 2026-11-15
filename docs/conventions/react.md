@@ -5,14 +5,27 @@ Applies to `apps/one-terminal/src`, `apps/desktop-agent/src` and `apps/app-direc
 
 ## Tooling (enforced)
 
-| Check  | Command             | Notes                                                                                                   |
-| ------ | ------------------- | ------------------------------------------------------------------------------------------------------- |
-| Format | `npm run format`    | Prettier: 2 spaces, double quotes, semicolons, `trailingComma: es5`, width 100                          |
-| Lint   | `npm run lint`      | ESLint flat config (`eslint.config.js`): typescript-eslint recommended, react + react-hooks recommended |
-| Types  | `npm run typecheck` | `strict`, `noUnusedLocals`, `noUnusedParameters`, `noFallthroughCasesInSwitch`                          |
+| Check  | Command             | Notes                                                                                                                                               |
+| ------ | ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Format | `npm run format`    | Prettier: 2 spaces, double quotes, semicolons, `trailingComma: es5`, width 100                                                                      |
+| Lint   | `npm run lint`      | ESLint flat config (`eslint.config.js`): typescript-eslint recommended, react + react-hooks recommended, jsx-a11y recommended, plus the rules below |
+| Types  | `npm run typecheck` | `strict`, `noUnusedLocals`, `noUnusedParameters`, `noFallthroughCasesInSwitch`                                                                      |
 
-Unused variables are errors unless prefixed with `_`. `any` is a warning — treat it as an
-error in new code; use `unknown` and narrow.
+Unused variables are errors unless prefixed with `_`. Also errors:
+
+| Rule                                       | Scope             | In practice                                                                             |
+| ------------------------------------------ | ----------------- | --------------------------------------------------------------------------------------- |
+| `no-explicit-any`                          | all TS            | Use `unknown` and narrow                                                                |
+| `no-non-null-assertion`                    | all TS            | No `!` — check and throw, or narrow (`if (!root) throw …`)                              |
+| `consistent-type-imports`                  | all TS            | `import type { … }` for type-only imports                                               |
+| `no-floating-promises` (type-aware)        | the three UIs     | Await, return, `.catch(console.error)`, or `void` a promise that handles its own errors |
+| `switch-exhaustiveness-check` (type-aware) | the three UIs     | Name every union member; don't rely on `default`                                        |
+| `jsx-a11y` recommended                     | `.tsx` in the UIs | Labels tied to controls, keyboard-operable interactions, complete ARIA roles            |
+
+`jsx-a11y/no-autofocus` is off: dialogs, the palette and rename fields move focus into
+themselves on open (the WAI-ARIA dialog pattern). Type-aware rules use each app's
+`tsconfig.json` through `projectService`, so a file outside every tsconfig's `include`
+fails to lint — add it to one.
 
 The React Compiler rules `react-hooks/refs`, `set-state-in-effect` and `static-components`
 are **off** because the codebase does not use the React Compiler. Don't rely on
@@ -35,13 +48,14 @@ compiler auto-memoisation.
 
 - `invoke` promises must be handled: `.catch(console.error)` at minimum, or surface the
   error in UI. Don't add bare `.catch(() => {})` — say why if swallowing is intended.
-- `listen()` returns a `Promise<UnlistenFn>`. Clean up in the effect's return:
+- `listen()` returns a `Promise<UnlistenFn>`. Clean up in the effect's return, catching a
+  rejected `listen()` so it can't become an unhandled rejection:
 
   ```ts
   useEffect(() => {
     const unlisten = listen<T>("wm:layout", (e) => setState(e.payload));
     return () => {
-      unlisten.then((fn) => fn());
+      unlisten.then((fn) => fn()).catch(console.error);
     };
   }, []);
   ```

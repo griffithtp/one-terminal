@@ -19,7 +19,7 @@ export function QuitConfirmModal() {
       setError(null);
     });
     return () => {
-      unlisten.then((fn) => fn());
+      unlisten.then((fn) => fn()).catch(console.error);
     };
   }, []);
 

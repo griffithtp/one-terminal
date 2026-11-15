@@ -357,7 +357,7 @@ fn extract_zip(archive: &Path, dest: &Path) -> Result<(), String> {
     for i in 0..zip.len() {
         let mut entry = zip.by_index(i).map_err(|e| e.to_string())?;
         let rel = match entry.enclosed_name() {
-            Some(p) => p.to_path_buf(),
+            Some(p) => p.clone(),
             None => continue,
         };
         let target = dest.join(&rel);

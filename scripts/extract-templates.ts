@@ -9,7 +9,7 @@
  */
 
 import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { extname, join, dirname, relative } from "node:path";
+import { basename, extname, join, dirname, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readdir, stat } from "node:fs/promises";
 
@@ -374,7 +374,7 @@ async function walkAndProcess(srcDir: string, destDir: string, overlay: Overlay)
 
 async function processFile(src: string, destWithoutEjs: string, overlay: Overlay): Promise<void> {
   const ext = extname(src);
-  const base = src.split("/").pop()!;
+  const base = basename(src);
 
   if (BINARY_EXTENSIONS.has(ext)) {
     await mkdir(dirname(destWithoutEjs), { recursive: true });

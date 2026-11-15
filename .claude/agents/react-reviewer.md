@@ -39,7 +39,7 @@ git diff HEAD -- '*.ts' '*.tsx' '*.css' '*.html'
    them.
 3. **IPC and events** — every `invoke` is handled (`.catch(console.error)` or UI); no
    silent `.catch(() => {})` without a reason; `listen()` cleanup is
-   `unlisten.then((fn) => fn())` in the effect's return; an initial snapshot can't
+   `unlisten.then((fn) => fn()).catch(console.error)` in the effect's return; an initial snapshot can't
    overwrite a newer event (subscribe first, ignore a late snapshot); cross-webview events
    don't echo-loop; `invoke<T>` / `listen<T>` types match the Rust `serde` structs
    (camelCase).

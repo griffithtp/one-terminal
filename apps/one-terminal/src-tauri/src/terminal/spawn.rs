@@ -33,9 +33,8 @@ pub const MIN_H: f64 = 400.0;
 /// monitor by more than a threshold (we use 50×50 px), so the user still has a
 /// grab-handle to drag the window to a reachable position.
 pub fn is_rect_on_any_monitor(app: &AppHandle, x: f64, y: f64, w: f64, h: f64) -> bool {
-    let monitors = match app.available_monitors() {
-        Ok(m) => m,
-        Err(_) => return false,
+    let Ok(monitors) = app.available_monitors() else {
+        return false;
     };
     for monitor in monitors {
         let mp = monitor.position();

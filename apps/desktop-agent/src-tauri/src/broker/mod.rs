@@ -422,10 +422,10 @@ impl Broker {
             "createPrivateChannelRequest" => channels::create_private(&mut st, &req),
             "privateChannelDisconnectRequest" => channels::private_disconnect(&mut st, &req),
             "privateChannelAddEventListenerRequest" => {
-                channels::add_private_event_listener(&mut st, &req)
+                channels::add_private_event_listener(&mut st, &req);
             }
             "privateChannelUnsubscribeEventListenerRequest" => {
-                channels::remove_private_event_listener(&mut st, &req)
+                channels::remove_private_event_listener(&mut st, &req);
             }
             "broadcastRequest" => channels::broadcast(&mut st, &req, events),
             "getCurrentContextRequest" => channels::get_current_context(&st, &req),

@@ -154,7 +154,8 @@ Everything crossing IPC is a typed contract; both sides change in the same commi
 
 - **Branches:** work on `feature/<name>` or `fix/<name>`; never commit to `main` directly.
 - **Commit messages:** [Conventional Commits](https://www.conventionalcommits.org/) with a
-  scope, as used on `main`:
+  scope, as used on `main` — checked by commitlint in lefthook's `commit-msg` hook
+  (`commitlint.config.js`; an unknown scope warns, a malformed message is rejected):
 
   ```
   <type>(<scope>): <imperative summary, lower case, no period>
@@ -196,7 +197,8 @@ In addition to [rust.md](rust.md):
 
 ### TypeScript
 
-In addition to [react.md](react.md):
+In addition to [react.md](react.md). ESLint enforces the `any`, `!`, `import type`,
+floating-promise and exhaustive-switch rules below — see react.md → Tooling:
 
 - `strict` everywhere; no `any` in new code (use `unknown` and narrow); no non-null `!` —
   narrow or handle the `null`.
@@ -232,7 +234,8 @@ In addition to [react.md](react.md):
 
 ### Accessibility
 
-Accessibility is a requirement, not polish:
+Accessibility is a requirement, not polish (`eslint-plugin-jsx-a11y` enforces the
+mechanical parts):
 
 - Interactive elements are `<button>`, `<a>` or form controls — never a clickable `<div>`.
 - Menus use `role="menu"` / `menuitem` / `menuitemradio` / `menuitemcheckbox` with the

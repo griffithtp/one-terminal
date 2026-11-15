@@ -43,7 +43,7 @@ For each issue in dependency order:
 
    ```sh
    cargo fmt --all && npm run format
-   cargo clippy --workspace -- -D warnings && npm run lint
+   cargo clippy --workspace --all-targets -- -D warnings && npm run lint
    npm run typecheck
    cargo test -p <crate> ; npm run test:terminal ; npm run test:fdc3-plugin   # as touched
    ```

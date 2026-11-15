@@ -52,7 +52,7 @@ jobs:
 
       # Clippy type-checks the whole workspace, so no separate `cargo check` step.
       - name: Clippy
-        run: cargo clippy --workspace -- -D warnings
+        run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: Tests
         run: cargo test --workspace

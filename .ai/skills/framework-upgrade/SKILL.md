@@ -12,7 +12,7 @@ Background: `docs/conventions/scaffolder.md`.
 ## 1. The change itself is green
 
 ```sh
-cargo clippy --workspace -- -D warnings
+cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 npm run lint && npm run typecheck
 ```

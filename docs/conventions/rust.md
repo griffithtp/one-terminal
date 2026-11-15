@@ -8,11 +8,33 @@ Applies to every crate in the Cargo workspace. Cross-platform rules are in
 | Check  | Command                                                             | Where enforced        |
 | ------ | ------------------------------------------------------------------- | --------------------- |
 | Format | `cargo fmt --all` (`rustfmt.toml`: edition 2021, `max_width = 100`) | lefthook pre-push, CI |
-| Lint   | `cargo clippy --workspace -- -D warnings`                           | lefthook pre-push, CI |
+| Lint   | `cargo clippy --workspace --all-targets -- -D warnings`             | lefthook pre-push, CI |
 | Tests  | `cargo test --workspace`                                            | CI                    |
 
+Lints are configured once in the root `Cargo.toml` (`[workspace.lints]`) and inherited by
+every member with `[lints] workspace = true` — a new crate must add that too. Clippy runs
+on `--all-targets`, so tests, examples and build scripts are linted as well.
+
+| Lint                                                                                                              | Level           | Why                                                                                  |
+| ----------------------------------------------------------------------------------------------------------------- | --------------- | ------------------------------------------------------------------------------------ |
+| `unsafe_code`                                                                                                     | **forbid**      | There is no `unsafe` in the workspace; keep it that way                              |
+| `dbg_macro`, `todo`, `unimplemented`, `undocumented_unsafe_blocks`                                                | warn (CI: deny) | No debugging leftovers or placeholders                                               |
+| `clone_on_ref_ptr`, `implicit_clone`, `manual_let_else`, `semicolon_if_nothing_returned`, `uninlined_format_args` | warn (CI: deny) | Clarity: `Arc::clone(&x)` makes shared ownership visible, let-else for early returns |
+
+Deliberately **not** enabled (measured 2026-11-15):
+
+| Lint                       | Hits | Why it stays off                                                                                   |
+| -------------------------- | ---- | -------------------------------------------------------------------------------------------------- |
+| `unwrap_used`              | 362  | Includes the accepted `Mutex::lock().unwrap()` idiom; the rule below covers external input instead |
+| `needless_pass_by_value`   | 184  | Tauri commands must take `State<…>`, `AppHandle` and `Window` by value                             |
+| `expect_used`              | 21   | Build scripts, startup and stated invariants (`"about:blank is a valid URL"`)                      |
+| `cast_possible_truncation` | 11   | Pixel geometry (`f64 → i32/u32`, saturating) and millisecond timestamps                            |
+| `redundant_clone`          | 11   | A nursery lint with known false positives                                                          |
+| `panic`                    | 7    | Almost all in tests                                                                                |
+
 Never silence a Clippy lint crate-wide to get green. A targeted `#[allow(clippy::…)]` on
-one item needs a comment saying why.
+one item needs a comment saying why. Turning one of the "not enabled" lints on is welcome
+once its count is driven down — update this table when you do.
 
 ## Workspace
 

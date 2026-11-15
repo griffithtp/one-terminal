@@ -67,7 +67,7 @@ export function OverlayCreateDashboard() {
 
   const handleKeyDown = useCallback(
     (e: ReactKeyboardEvent<HTMLInputElement>) => {
-      if (e.key === "Enter") handleConfirm();
+      if (e.key === "Enter") void handleConfirm();
       if (e.key === "Escape") dismiss();
     },
     [handleConfirm, dismiss]
@@ -78,9 +78,23 @@ export function OverlayCreateDashboard() {
   const canSubmit = name.trim().length > 0;
 
   return (
-    <div className="wm-ds-dialog__backdrop" role="dialog" aria-modal="true" onClick={dismiss}>
-      <div className="wm-ds-dialog" onClick={(e) => e.stopPropagation()}>
-        <div className="wm-ds-dialog__title">New Dashboard</div>
+    <div
+      className="wm-ds-dialog__backdrop"
+      role="presentation"
+      onClick={(e) => {
+        // Only a click on the backdrop itself dismisses; Escape is handled by the input.
+        if (e.target === e.currentTarget) dismiss();
+      }}
+    >
+      <div
+        className="wm-ds-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="create-dashboard-title"
+      >
+        <div id="create-dashboard-title" className="wm-ds-dialog__title">
+          New Dashboard
+        </div>
         <input
           ref={inputRef}
           className="wm-ds-dialog__input"

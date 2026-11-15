@@ -387,7 +387,7 @@ fn merge(base: &mut Value, overlay: Value, prefix: &str, source: &str, sources: 
         match base.get_mut(&key) {
             None => eprintln!("[desktop-agent] config: unknown key '{path}' in {source} — ignored"),
             Some(slot @ Value::Object(_)) if value.is_object() => {
-                merge(slot, value, &path, source, sources)
+                merge(slot, value, &path, source, sources);
             }
             Some(slot) => {
                 *slot = value;

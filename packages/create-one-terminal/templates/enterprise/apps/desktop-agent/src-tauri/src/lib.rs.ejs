@@ -478,8 +478,8 @@ impl TerminalRegistry {
         let pid = child.id();
         self.pids.lock().unwrap().insert(pid);
 
-        let pids = self.pids.clone();
-        let quitting = self.quitting.clone();
+        let pids = Arc::clone(&self.pids);
+        let quitting = Arc::clone(&self.quitting);
         std::thread::spawn(move || {
             let status = child.wait();
             pids.lock().unwrap().remove(&pid);

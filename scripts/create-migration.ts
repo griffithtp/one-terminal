@@ -369,7 +369,8 @@ if (mode === "amend" && amendEntry) {
       amendEntry.migrations.push(spec);
     }
   }
-  const entryIdx = manifest.versions.findIndex((v) => v.version === amendEntry!.version);
+  const amendVersion = amendEntry.version;
+  const entryIdx = manifest.versions.findIndex((v) => v.version === amendVersion);
   if (entryIdx >= 0) manifest.versions[entryIdx] = amendEntry;
   await writeManifest(manifest);
   p.log.success(

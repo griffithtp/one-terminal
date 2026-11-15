@@ -31,25 +31,25 @@ export function useCdaEvents() {
   }, []);
 
   useEffect(() => {
-    refresh();
+    refresh().catch(console.error);
 
     const unlistenAll = Promise.all([
       listen<CdaConnectedEvent>("cda:connected", (e) => {
-        refresh();
+        refresh().catch(console.error);
         log(`connected  ${e.payload.appId} (${e.payload.instanceId.slice(0, 8)}…)`);
       }),
       listen<CdaDisconnectedEvent>("cda:disconnected", (e) => {
-        refresh();
+        refresh().catch(console.error);
         log(`disconnected  ${e.payload.appId} (${e.payload.instanceId.slice(0, 8)}…)`);
       }),
       listen<CdaChannelChangedEvent>("cda:channel_changed", (e) => {
-        refresh();
+        refresh().catch(console.error);
         log(
           `channel  ${e.payload.appId} (${e.payload.instanceId.slice(0, 8)}…) → ${e.payload.channelId ?? "none"}`
         );
       }),
       listen<CdaContextEvent>("cda:context", (e) => {
-        refresh();
+        refresh().catch(console.error);
         const { channelId, sourceAppId, recipientCount } = e.payload;
         const payloadContext = JSON.stringify(e.payload.context);
         log(
@@ -65,14 +65,14 @@ export function useCdaEvents() {
     ]);
 
     return () => {
-      unlistenAll.then((fns) => fns.forEach((fn) => fn()));
+      unlistenAll.then((fns) => fns.forEach((fn) => fn())).catch(console.error);
     };
   }, [refresh, log]);
 
   const disconnectSpoke = useCallback(
     async (instanceId: string) => {
       await invoke("cda_disconnect_spoke", { instanceId });
-      refresh();
+      refresh().catch(console.error);
     },
     [refresh]
   );

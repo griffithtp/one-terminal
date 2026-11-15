@@ -115,7 +115,7 @@ export function OverlayDashboardTabMenu() {
     pendingUnlisten.current?.();
     pendingUnlisten.current = null;
 
-    (async () => {
+    void (async () => {
       try {
         const snap = await invoke<DashboardsPayload>("wm_list_dashboards");
         if (snap.active === name) {
@@ -333,7 +333,7 @@ export function OverlayDashboardTabMenu() {
             <div className="wm-tab-ctx-menu__submenu" role="menu">
               <button
                 type="button"
-                role="menuitemradio"
+                role="menuitem"
                 className="wm-tab-ctx-menu__item wm-tab-ctx-menu__item--channel"
                 onClick={() => selectDefaultChannel(menu.name, null)}
               >
@@ -347,7 +347,7 @@ export function OverlayDashboardTabMenu() {
                 <button
                   key={ch.id}
                   type="button"
-                  role="menuitemradio"
+                  role="menuitem"
                   className="wm-tab-ctx-menu__item wm-tab-ctx-menu__item--channel"
                   onClick={() => selectDefaultChannel(menu.name, ch.id)}
                 >
@@ -447,7 +447,7 @@ export function OverlayDashboardTabMenu() {
                     const labels = floating.map((t) => t.label);
                     dismiss();
                     // Sequentially: each dock re-raises the overlay.
-                    (async () => {
+                    void (async () => {
                       for (const label of labels) {
                         await invoke("wm_dock_panel", { label }).catch(console.error);
                       }

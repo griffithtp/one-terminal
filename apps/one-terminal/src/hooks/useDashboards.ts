@@ -139,7 +139,7 @@ export function useDashboards(): UseDashboardsResult {
       setPayload(e.payload);
     });
     return () => {
-      unlisten.then((fn) => fn());
+      unlisten.then((fn) => fn()).catch(console.error);
     };
   }, []);
 

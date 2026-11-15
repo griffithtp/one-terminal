@@ -53,7 +53,7 @@ export function useHostLayout(): UseHostLayoutResult {
       restoreZoom(e.payload);
     });
     return () => {
-      unlisten.then((fn) => fn());
+      unlisten.then((fn) => fn()).catch(console.error);
     };
   }, []);
 

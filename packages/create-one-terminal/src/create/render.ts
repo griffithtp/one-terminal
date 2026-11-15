@@ -55,8 +55,10 @@ export async function renderWorkspace(ctx: ScaffoldContext, outputDir: string): 
     await mkdir(dirname(w.dest), { recursive: true });
     if (w.content !== null) {
       await writeFile(w.dest, w.content, "utf8");
+    } else if (w.srcBinary) {
+      await copyFile(w.srcBinary, w.dest);
     } else {
-      await copyFile(w.srcBinary!, w.dest);
+      throw new Error(`nothing to write for ${w.dest}: no content and no source file`);
     }
   }
 }

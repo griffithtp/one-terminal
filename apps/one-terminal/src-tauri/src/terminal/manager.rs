@@ -639,7 +639,7 @@ mod tests {
 
         // Window A never sees a lock badge on its own active dashboard.
         let snap_a = manager.dashboards_snapshot_for("terminal-a").unwrap();
-        assert!(snap_a.locked_by.get("Trading").is_none());
+        assert!(!snap_a.locked_by.contains_key("Trading"));
     }
 
     #[test]

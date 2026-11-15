@@ -16,7 +16,7 @@ export function useLayout() {
       setLayout(e.payload);
     });
     return () => {
-      unlisten.then((fn) => fn());
+      unlisten.then((fn) => fn()).catch(console.error);
     };
   }, []);
 

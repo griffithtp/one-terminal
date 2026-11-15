@@ -157,7 +157,7 @@ Widgets run `@finos/fdc3-agent-proxy` (bundled in `fdc3-plugin.js`) over one Web
 ```sh
 cargo check --workspace
 cargo test --workspace
-cargo clippy --workspace -- -D warnings
+cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all
 cargo test -p desktop-agent engines::router
 cargo test -p desktop-agent broker
@@ -180,7 +180,7 @@ npm audit --omit=dev             # npm advisories in production dependencies
 ## Before you call a change done
 
 1. `cargo fmt --all` and `npm run format` — lefthook's pre-push and CI reject unformatted code.
-2. `cargo clippy --workspace -- -D warnings` and `npm run lint` are clean.
+2. `cargo clippy --workspace --all-targets -- -D warnings` and `npm run lint` are clean.
 3. `npm run typecheck` passes if you touched TypeScript.
 4. Tests for the area you touched pass (`cargo test -p <crate>`, `npm run test:fdc3-plugin` for FDC3, `npm run test:terminal` for the Terminal UI) — and changed behaviour has a test.
 5. Code behind `#[cfg(target_os = …)]` has a branch (or explicit no-op) for both Windows and macOS — see [cross-platform.md](docs/conventions/cross-platform.md).

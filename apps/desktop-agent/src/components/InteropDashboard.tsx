@@ -148,7 +148,9 @@ export function InteropDashboard({ channels }: Props) {
         {/* ── Context JSON editor (shared) ─────────────────────────────────── */}
         <div className="id__section">
           <div className="id__row id__row--wrap">
-            <label className="id__label">FDC3 Context</label>
+            <label htmlFor="interop-fdc3-context" className="id__label">
+              FDC3 Context
+            </label>
             <div className="id__templates">
               {Object.keys(TEMPLATES).map((t) => (
                 <button
@@ -162,6 +164,7 @@ export function InteropDashboard({ channels }: Props) {
             </div>
           </div>
           <textarea
+            id="interop-fdc3-context"
             className={`id__editor ${jsonError ? "id__editor--error" : ""}`}
             value={contextJson}
             onChange={(e) => setContextJson(e.target.value)}

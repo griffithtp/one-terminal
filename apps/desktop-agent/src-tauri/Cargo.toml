@@ -30,3 +30,6 @@ hex                 = { workspace = true }
 zip                 = { workspace = true }
 ot-core             = { workspace = true }
 ot-appdirectory     = { workspace = true }
+
+[lints]
+workspace = true

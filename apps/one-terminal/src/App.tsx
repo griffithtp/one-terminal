@@ -55,7 +55,7 @@ function TerminalCloseDialog() {
       setVisible(true);
     });
     return () => {
-      unlisten.then((fn) => fn());
+      unlisten.then((fn) => fn()).catch(console.error);
     };
   }, []);
 
@@ -144,7 +144,7 @@ function ChromeApp() {
   useEffect(() => {
     const unlisten = listen("wm:menu-closed", () => setMenuOpen(false));
     return () => {
-      unlisten.then((fn) => fn());
+      unlisten.then((fn) => fn()).catch(console.error);
     };
   }, []);
 
@@ -181,7 +181,7 @@ function ChromeApp() {
       registry.execute(e.payload).catch(console.error);
     });
     return () => {
-      unlisten.then((fn) => fn());
+      unlisten.then((fn) => fn()).catch(console.error);
     };
   }, []);
 
@@ -212,9 +212,9 @@ function ChromeApp() {
     });
     return () => {
       clearTimeout(errorTimer);
-      unlistenInstalling.then((fn) => fn());
-      unlistenReady.then((fn) => fn());
-      unlistenFailed.then((fn) => fn());
+      unlistenInstalling.then((fn) => fn()).catch(console.error);
+      unlistenReady.then((fn) => fn()).catch(console.error);
+      unlistenFailed.then((fn) => fn()).catch(console.error);
     };
   }, []);
 
@@ -315,8 +315,8 @@ function ChromeApp() {
       }
     );
     return () => {
-      unlistenLaunch.then((fn) => fn());
-      unlistenDuplicate.then((fn) => fn());
+      unlistenLaunch.then((fn) => fn()).catch(console.error);
+      unlistenDuplicate.then((fn) => fn()).catch(console.error);
     };
   }, []);
 

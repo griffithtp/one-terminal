@@ -52,4 +52,4 @@ if [ "${OT_SETUP_SKIP_WARM:-0}" != "1" ]; then
   cargo test --workspace --no-run
 fi
 
-step "Ready. Read AGENTS.md first; checks: cargo clippy --workspace -- -D warnings, cargo test --workspace, npm run lint, npm run typecheck, npm run test:terminal"
+step "Ready. Read AGENTS.md first; checks: cargo clippy --workspace --all-targets -- -D warnings, cargo test --workspace, npm run lint, npm run typecheck, npm run test:terminal"

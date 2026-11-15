@@ -68,7 +68,7 @@ callers and invariants.
 For each touched crate, run and report:
 
 ```sh
-cargo clippy -p <crate> -- -D warnings
+cargo clippy -p <crate> --all-targets -- -D warnings
 cargo test -p <crate>
 ```
 

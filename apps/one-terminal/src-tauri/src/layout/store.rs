@@ -2873,7 +2873,7 @@ mod floating_tests {
         let t = tree();
         let a = add(&t, "a", None, None);
         let b = add(&t, "b", Some(&a), None); // S[a,b]
-        let c = add(&t, "c", Some(&b), Some(SplitDir::Horizontal));
+        let _c = add(&t, "c", Some(&b), Some(SplitDir::Horizontal));
 
         t.detach(&b).unwrap();
         assert!(t.remove_panel(&a)); // dissolves b's Stack and its sibling

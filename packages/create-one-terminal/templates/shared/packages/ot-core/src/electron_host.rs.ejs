@@ -110,7 +110,7 @@ fn electron_binary_in_node_modules(shell_dir: &Path) -> Option<PathBuf> {
         }
         {
             let parent = dir.parent()?;
-            dir = parent
+            dir = parent;
         }
     }
 }
