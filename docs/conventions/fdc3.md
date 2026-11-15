@@ -3,7 +3,16 @@
 OneTerminal implements an **FDC3 3.0 Desktop Agent**. Widgets use the official
 `@finos/fdc3-agent-proxy` (bundled in `packages/fdc3-plugin`) over a WebSocket speaking
 the Desktop Agent Communication Protocol (DACP). User-facing setup:
-[docs/fdc3.md](../fdc3.md). Spec: <https://fdc3.finos.org/docs/next/api/spec>.
+[docs/fdc3.md](../fdc3.md). Spec: <https://fdc3.finos.org/docs/api/spec>.
+
+Authoritative definitions are installed locally (FDC3 3.0.0) — prefer them to memory:
+
+- DACP/WCP message schemas: `node_modules/@finos/fdc3-schema/dist/schemas/api/<type>.schema.json`
+- Context schemas: `node_modules/@finos/fdc3-context/dist/schemas/context/`
+- API types and error enums: `node_modules/@finos/fdc3-standard/dist/src/api/` (`Errors.d.ts`, …)
+
+The contract tests validate every message against these schemas
+(`packages/fdc3-plugin/test/schemas.ts`).
 
 ## Where code goes
 

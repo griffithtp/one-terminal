@@ -12,9 +12,11 @@ pre-commit:
       run: rustfmt --edition 2021 {staged_files}
       stage_fixed: true
     ai-drift:
-      glob: "*AGENTS.md"
+      glob:
+        - "*AGENTS.md"
+        - ".ai/agents/*.md"
       run: npm run check:ai-drift
-      fail_text: "AGENTS.md changed — run: npm run sync:ai, then stage the regenerated files"
+      fail_text: "AI config sources changed — run: npm run sync:ai, then stage the regenerated files"
 
 pre-push:
   parallel: true

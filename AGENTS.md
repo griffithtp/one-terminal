@@ -61,6 +61,20 @@ apps/sample-widget/           — demo local widget (widgets.config.json), port 
 | FDC3                   | [docs/conventions/fdc3.md](docs/conventions/fdc3.md)                     |
 | Scaffolder / templates | [docs/conventions/scaffolder.md](docs/conventions/scaffolder.md)         |
 
+## Review agents
+
+Specialist reviewer roles live in [.ai/agents/](.ai/agents/). Tools with native agent
+support get generated copies (Claude Code subagents, Copilot custom agents); any other
+assistant can follow the role file directly. Run the matching reviewer before you call a
+change done:
+
+| Change touches                                                                     | Reviewer                                                         |
+| ---------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `src-tauri/`, `ot-core`, engine hosts, window management, keybindings, scripts, CI | [cross-platform-reviewer](.ai/agents/cross-platform-reviewer.md) |
+| `broker/`, `fdc3_bus/`, `app_dir/`, `packages/fdc3-plugin/src`, user channels      | [fdc3-conformance](.ai/agents/fdc3-conformance.md)               |
+
+Reviewers report findings; they don't edit files.
+
 ## Generated files — never edit by hand
 
 | File(s)                                                                              | Regenerate with                                             |
@@ -68,6 +82,7 @@ apps/sample-widget/           — demo local widget (widgets.config.json), port 
 | `packages/create-one-terminal/templates/**`, `static-manifest.json`                  | `npm run create-migration` (or `npm run extract-templates`) |
 | `packages/fdc3-plugin/fdc3-plugin.js`                                                | `npm run build:fdc3-plugin`                                 |
 | `CLAUDE.md` (every one), `.github/copilot-instructions.md`, `.github/instructions/*` | `npm run sync:ai`                                           |
+| `.claude/agents/*`, `.github/agents/*`                                               | `npm run sync:ai` (from `.ai/agents/`)                      |
 
 CI fails if any of these drift from their source.
 

@@ -62,7 +62,8 @@ try {
 } catch {
   // new file — nothing generated to protect
 }
-if (current && AI_MARKER.test(current.slice(0, 500))) {
+// Agent adapters put the marker after a frontmatter block, so look past it.
+if (current && AI_MARKER.test(current.slice(0, 4000))) {
   const source = rel.endsWith("CLAUDE.md")
     ? rel.replace(/CLAUDE\.md$/, "AGENTS.md")
     : "the AGENTS.md it names in its header";
