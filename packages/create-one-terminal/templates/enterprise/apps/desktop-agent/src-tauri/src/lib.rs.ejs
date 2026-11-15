@@ -558,6 +558,20 @@ mod terminal_registry_tests {
             .unwrap_or(false)
     }
 
+    /// Polls `condition` until it holds or `timeout` passes. These tests wait on other
+    /// processes and the watcher thread, so a fixed sleep is flaky on a loaded CI runner
+    /// (tests run in parallel); polling passes as soon as the state is reached.
+    fn wait_until(timeout: Duration, mut condition: impl FnMut() -> bool) -> bool {
+        let deadline = std::time::Instant::now() + timeout;
+        while std::time::Instant::now() < deadline {
+            if condition() {
+                return true;
+            }
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        condition()
+    }
+
     /// Regression test for the bug `TerminalRegistry` replaced: a bare
     /// `killall one-terminal` / `taskkill /IM one-terminal.exe` kills every
     /// process with that name on the machine, including an unrelated,
@@ -578,15 +592,14 @@ mod terminal_registry_tests {
         let mut unrelated_child = Command::new("sleep").arg("30").spawn().unwrap();
         let unrelated_pid = unrelated_child.id();
 
-        std::thread::sleep(Duration::from_millis(100));
         assert!(is_alive(tracked_pid), "tracked child should be running");
         assert!(is_alive(unrelated_pid), "unrelated child should be running");
 
         registry.kill_all(true);
-        std::thread::sleep(Duration::from_millis(300));
 
+        // The watcher thread reaps the killed child, so `kill -0` stops seeing it.
         assert!(
-            !is_alive(tracked_pid),
+            wait_until(Duration::from_secs(10), || !is_alive(tracked_pid)),
             "tracked child should have been killed"
         );
         assert!(
@@ -610,10 +623,12 @@ mod terminal_registry_tests {
 
         assert!(registry.pids.lock().unwrap().contains(&pid));
 
-        std::thread::sleep(Duration::from_millis(600));
-
         assert!(
-            !registry.pids.lock().unwrap().contains(&pid),
+            wait_until(Duration::from_secs(10), || !registry
+                .pids
+                .lock()
+                .unwrap()
+                .contains(&pid)),
             "watcher thread should have pruned the PID after natural exit"
         );
     }
