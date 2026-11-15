@@ -7,12 +7,22 @@ on:
 
 jobs:
   rust:
-    name: Rust check & test
-    runs-on: ubuntu-latest
+    # Windows (WebView2) and macOS (WKWebView) are the shipping platforms; Linux
+    # must compile. OS-specific `#[cfg]` branches are only checked on their own OS.
+    name: Rust check & test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
 
       - name: Install Tauri system dependencies
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -37,13 +47,12 @@ jobs:
         # folder to exist at compile time; see build.rs for why).
 
       - name: Check formatting
+        if: runner.os == 'Linux'
         run: cargo fmt --check --all
 
+      # Clippy type-checks the whole workspace, so no separate `cargo check` step.
       - name: Clippy
         run: cargo clippy --workspace -- -D warnings
-
-      - name: Build check
-        run: cargo check --workspace
 
       - name: Tests
         run: cargo test --workspace

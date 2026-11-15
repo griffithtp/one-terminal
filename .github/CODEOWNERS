@@ -1,0 +1,23 @@
+# Generated or contract-critical paths: changes here are requested for review
+# from the owner automatically, including PRs opened by AI coding agents.
+# Enforced only when branch protection requires code-owner review.
+
+# Generated — must come from their generator, never hand edits
+/packages/create-one-terminal/templates/      @griffithtp
+/packages/create-one-terminal/static-manifest.json @griffithtp
+/packages/fdc3-plugin/fdc3-plugin.js          @griffithtp
+/.github/copilot-instructions.md              @griffithtp
+/.github/instructions/                        @griffithtp
+
+# AI assistant sources and enforcement
+/AGENTS.md                                    @griffithtp
+/.ai/                                         @griffithtp
+/.claude/                                     @griffithtp
+/docs/conventions/                            @griffithtp
+
+# Security-sensitive surfaces
+/apps/*/src-tauri/capabilities/               @griffithtp
+/apps/*/src-tauri/tauri.conf.json             @griffithtp
+/apps/desktop-agent/src-tauri/src/broker/     @griffithtp
+/apps/desktop-agent/src-tauri/src/fdc3_bus/   @griffithtp
+/.github/workflows/                           @griffithtp

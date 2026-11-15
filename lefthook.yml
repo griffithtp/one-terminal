@@ -1,3 +1,21 @@
+# Formats staged files and re-stages them, so commits from any editor or AI
+# assistant are formatted. Ignored paths (.prettierignore) are left untouched.
+pre-commit:
+  parallel: true
+  commands:
+    prettier:
+      glob: "*.{ts,tsx,js,jsx,mjs,cjs,json,css,md,yml,yaml,html}"
+      run: npx prettier --write --ignore-unknown --no-error-on-unmatched-pattern {staged_files}
+      stage_fixed: true
+    rustfmt:
+      glob: "*.rs"
+      run: rustfmt --edition 2021 {staged_files}
+      stage_fixed: true
+    ai-drift:
+      glob: "*AGENTS.md"
+      run: npm run check:ai-drift
+      fail_text: "AGENTS.md changed — run: npm run sync:ai, then stage the regenerated files"
+
 pre-push:
   parallel: true
   commands:
