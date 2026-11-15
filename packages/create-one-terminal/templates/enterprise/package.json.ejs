@@ -21,6 +21,7 @@
     "dev:sample-ticker": "npm -w @<%= orgScope %>/sample-ticker run dev",
     "dev:sample-chart": "npm -w @<%= orgScope %>/sample-chart run dev",
     "dev:app-directory": "npm -w @<%= orgScope %>/app-directory run dev",
+    "test:terminal": "npm -w @<%= orgScope %>/one-terminal test",
     "build:app-directory": "npm -w @<%= orgScope %>/app-directory run build",
     "build:tauri-webview-host": "cargo build -p tauri-webview-host",
     "setup:electron-host": "npm install -w @<%= orgScope %>/electron-host",
@@ -38,8 +39,11 @@
     "prepare": "lefthook install"
   },
   "devDependencies": {
+    "@commitlint/cli": "^21.2.4",
+    "@commitlint/config-conventional": "^21.2.4",
     "eslint": "^9.39.4",
     "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-jsx-a11y": "^6.10.2",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.1.1",
     "lefthook": "^2.1.6",

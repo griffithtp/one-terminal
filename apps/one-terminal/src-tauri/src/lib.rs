@@ -386,12 +386,12 @@ async fn wm_open(
             if using_pool {
                 let wv = app_for_main
                     .get_webview(&panel_id_for_main)
-                    .ok_or_else(|| format!("pool webview '{}' not found", panel_id_for_main))?;
+                    .ok_or_else(|| format!("pool webview '{panel_id_for_main}' not found"))?;
                 wv.navigate(parsed_url).map_err(|e| e.to_string())?;
             } else {
                 let win = app_for_main
                     .get_window(&terminal_id_for_main)
-                    .ok_or_else(|| format!("window '{}' not found", terminal_id_for_main))?;
+                    .ok_or_else(|| format!("window '{terminal_id_for_main}' not found"))?;
                 // Placeholder bounds — `tree.reflow` below positions the webview
                 // correctly once it's created.
                 win.add_child(
@@ -608,7 +608,7 @@ pub(crate) async fn overlay_prewarm(
                 }
                 let win = app_for_main
                     .get_window(&win_label_main)
-                    .ok_or_else(|| format!("window '{}' not found", win_label_main))?;
+                    .ok_or_else(|| format!("window '{win_label_main}' not found"))?;
                 let sf = win.scale_factor().unwrap_or(1.0);
                 let sz = win.inner_size().unwrap_or(tauri::PhysicalSize {
                     width: 1600,
@@ -693,7 +693,7 @@ async fn overlay_raise(
     // webview back into hit-testing on macOS.
     let win = app
         .get_window(&win_label)
-        .ok_or_else(|| format!("window '{}' not found", win_label))?;
+        .ok_or_else(|| format!("window '{win_label}' not found"))?;
     let sf = win.scale_factor().unwrap_or(1.0);
     let sz = win.inner_size().unwrap_or(tauri::PhysicalSize {
         width: 1600,
@@ -701,7 +701,7 @@ async fn overlay_raise(
     });
     let (w, h) = (sz.width as f64 / sf, sz.height as f64 / sf);
     app.get_webview(&overlay_label)
-        .ok_or_else(|| format!("overlay webview '{}' not found", overlay_label))?
+        .ok_or_else(|| format!("overlay webview '{overlay_label}' not found"))?
         .set_bounds(tauri::Rect {
             position: tauri::Position::Logical(LogicalPosition::new(0.0, 0.0)),
             size: tauri::Size::Logical(LogicalSize::new(w, h)),
@@ -1943,7 +1943,7 @@ pub fn run() {
                     id: WIN.to_string(),
                     name: std::sync::RwLock::new(cfg.title.clone()),
                     layout_tree: tree.clone(),
-                    overlay: overlay_state.clone(),
+                    overlay: Arc::clone(&overlay_state),
                     pool: pool.clone(),
                     window_config: Arc::clone(&main_window_config),
                 });

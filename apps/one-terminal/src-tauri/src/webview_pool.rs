@@ -90,7 +90,7 @@ impl WebviewPool {
                     let result = (|| -> Result<(), String> {
                         let win = app_main
                             .get_window(&terminal_id_main)
-                            .ok_or_else(|| format!("window '{}' not found", terminal_id_main))?;
+                            .ok_or_else(|| format!("window '{terminal_id_main}' not found"))?;
                         let sf = win.scale_factor().unwrap_or(1.0);
                         let sz = win.inner_size().unwrap_or(tauri::PhysicalSize {
                             width: 1600,

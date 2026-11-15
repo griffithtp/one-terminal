@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "Minimal Tauri host that opens one external-URL webview — spawned by the CDA engine router when a pinned WebView2 runtime is needed"
 authors = ["one-terminal"]
 edition = "2021"
+publish = false
 
 [[bin]]
 name = "tauri-webview-host"
@@ -16,3 +17,6 @@ tauri-build = { version = "2", features = [] }
 tauri      = { workspace = true }
 serde      = { workspace = true }
 serde_json = { workspace = true }
+
+[lints]
+workspace = true

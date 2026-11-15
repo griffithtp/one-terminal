@@ -219,7 +219,7 @@ export default function AppForm({ existingApp, onSave, onCancel }: Props) {
   const isEdit = existingApp !== null;
 
   const [form, setForm] = useState<FormState>(() =>
-    isEdit ? appDToForm(existingApp!) : { ...BLANK_FORM }
+    existingApp ? appDToForm(existingApp) : { ...BLANK_FORM }
   );
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const [submitting, setSubmitting] = useState(false);
@@ -383,7 +383,7 @@ export default function AppForm({ existingApp, onSave, onCancel }: Props) {
     try {
       const body = formToAppD(form);
       const method = isEdit ? "PUT" : "POST";
-      const url = isEdit ? `/v2/apps/${existingApp!.appId}` : "/v2/apps";
+      const url = existingApp ? `/v2/apps/${existingApp.appId}` : "/v2/apps";
 
       const res = await fetch(url, {
         method,
@@ -413,7 +413,7 @@ export default function AppForm({ existingApp, onSave, onCancel }: Props) {
   return (
     <div className="app-form">
       <div className="form-header">
-        <h2>{isEdit ? `Edit: ${existingApp!.title}` : "Register New Application"}</h2>
+        <h2>{existingApp ? `Edit: ${existingApp.title}` : "Register New Application"}</h2>
         <button className="btn btn-secondary" onClick={onCancel}>
           Cancel
         </button>
@@ -425,10 +425,11 @@ export default function AppForm({ existingApp, onSave, onCancel }: Props) {
           <div className="section-title">Identity — FDC3 Required Fields</div>
           <div className="form-grid-3">
             <div className="field">
-              <label>
+              <label htmlFor="appform-app-id">
                 App ID<span className="req">*</span>
               </label>
               <input
+                id="appform-app-id"
                 type="text"
                 value={form.appId}
                 onChange={(e) => set("appId", e.target.value)}
@@ -439,10 +440,11 @@ export default function AppForm({ existingApp, onSave, onCancel }: Props) {
               {errors.appId && <span className="field-error">{errors.appId}</span>}
             </div>
             <div className="field">
-              <label>
+              <label htmlFor="appform-title">
                 Title<span className="req">*</span>
               </label>
               <input
+                id="appform-title"
                 type="text"
                 value={form.title}
                 onChange={(e) => set("title", e.target.value)}
@@ -452,10 +454,14 @@ export default function AppForm({ existingApp, onSave, onCancel }: Props) {
               {errors.title && <span className="field-error">{errors.title}</span>}
             </div>
             <div className="field">
-              <label>
+              <label htmlFor="appform-type">
                 Type<span className="req">*</span>
               </label>
-              <select value={form.type} onChange={(e) => set("type", e.target.value as AppType)}>
+              <select
+                id="appform-type"
+                value={form.type}
+                onChange={(e) => set("type", e.target.value as AppType)}
+              >
                 <option value="web">web</option>
                 <option value="native">native</option>
                 <option value="citrix">citrix</option>
@@ -466,11 +472,12 @@ export default function AppForm({ existingApp, onSave, onCancel }: Props) {
           </div>
           <div className="form-grid-1" style={{ marginTop: 12 }}>
             <div className="field">
-              <label>
+              <label htmlFor="appform-launch-url">
                 Launch URL<span className="req">*</span>
                 <span className="hint">(details.url)</span>
               </label>
               <input
+                id="appform-launch-url"
                 type="url"
                 value={form.url}
                 onChange={(e) => set("url", e.target.value)}
@@ -487,8 +494,9 @@ export default function AppForm({ existingApp, onSave, onCancel }: Props) {
           <div className="section-title">Metadata — Optional</div>
           <div className="form-grid">
             <div className="field">
-              <label>FDC3 version</label>
+              <label htmlFor="appform-fdc3-version">FDC3 version</label>
               <input
+                id="appform-fdc3-version"
                 type="text"
                 value={form.fdc3Version}
                 onChange={(e) => set("fdc3Version", e.target.value)}
@@ -496,8 +504,9 @@ export default function AppForm({ existingApp, onSave, onCancel }: Props) {
               />
             </div>
             <div className="field">
-              <label>Version</label>
+              <label htmlFor="appform-version">Version</label>
               <input
+                id="appform-version"
                 type="text"
                 value={form.version}
                 onChange={(e) => set("version", e.target.value)}
@@ -505,8 +514,9 @@ export default function AppForm({ existingApp, onSave, onCancel }: Props) {
               />
             </div>
             <div className="field col-span-2">
-              <label>Description</label>
+              <label htmlFor="appform-description">Description</label>
               <textarea
+                id="appform-description"
                 value={form.description}
                 onChange={(e) => set("description", e.target.value)}
                 rows={3}
@@ -514,8 +524,9 @@ export default function AppForm({ existingApp, onSave, onCancel }: Props) {
               />
             </div>
             <div className="field">
-              <label>Tooltip</label>
+              <label htmlFor="appform-tooltip">Tooltip</label>
               <input
+                id="appform-tooltip"
                 type="text"
                 value={form.tooltip}
                 onChange={(e) => set("tooltip", e.target.value)}
@@ -523,8 +534,9 @@ export default function AppForm({ existingApp, onSave, onCancel }: Props) {
               />
             </div>
             <div className="field">
-              <label>Language</label>
+              <label htmlFor="appform-language">Language</label>
               <input
+                id="appform-language"
                 type="text"
                 value={form.lang}
                 onChange={(e) => set("lang", e.target.value)}
@@ -532,8 +544,9 @@ export default function AppForm({ existingApp, onSave, onCancel }: Props) {
               />
             </div>
             <div className="field">
-              <label>Publisher</label>
+              <label htmlFor="appform-publisher">Publisher</label>
               <input
+                id="appform-publisher"
                 type="text"
                 value={form.publisher}
                 onChange={(e) => set("publisher", e.target.value)}
@@ -541,8 +554,9 @@ export default function AppForm({ existingApp, onSave, onCancel }: Props) {
               />
             </div>
             <div className="field">
-              <label>More Info URL</label>
+              <label htmlFor="appform-more-info-url">More Info URL</label>
               <input
+                id="appform-more-info-url"
                 type="text"
                 value={form.moreInfo}
                 onChange={(e) => set("moreInfo", e.target.value)}
@@ -550,8 +564,9 @@ export default function AppForm({ existingApp, onSave, onCancel }: Props) {
               />
             </div>
             <div className="field">
-              <label>Contact Email</label>
+              <label htmlFor="appform-contact-email">Contact Email</label>
               <input
+                id="appform-contact-email"
                 type="email"
                 value={form.contactEmail}
                 onChange={(e) => set("contactEmail", e.target.value)}
@@ -559,8 +574,9 @@ export default function AppForm({ existingApp, onSave, onCancel }: Props) {
               />
             </div>
             <div className="field">
-              <label>Support Email</label>
+              <label htmlFor="appform-support-email">Support Email</label>
               <input
+                id="appform-support-email"
                 type="email"
                 value={form.supportEmail}
                 onChange={(e) => set("supportEmail", e.target.value)}
@@ -568,11 +584,12 @@ export default function AppForm({ existingApp, onSave, onCancel }: Props) {
               />
             </div>
             <div className="field col-span-2">
-              <label>
+              <label htmlFor="appform-categories">
                 Categories
                 <span className="hint">(comma-separated)</span>
               </label>
               <input
+                id="appform-categories"
                 type="text"
                 value={form.categories}
                 onChange={(e) => set("categories", e.target.value)}
@@ -696,11 +713,12 @@ export default function AppForm({ existingApp, onSave, onCancel }: Props) {
           </div>
           <div className="form-grid">
             <div className="field">
-              <label>
+              <label htmlFor="appform-broadcasts">
                 Broadcasts
                 <span className="hint">(context types, comma-sep)</span>
               </label>
               <input
+                id="appform-broadcasts"
                 type="text"
                 value={form.channelBroadcasts}
                 onChange={(e) => set("channelBroadcasts", e.target.value)}
@@ -708,11 +726,12 @@ export default function AppForm({ existingApp, onSave, onCancel }: Props) {
               />
             </div>
             <div className="field">
-              <label>
+              <label htmlFor="appform-listens-for">
                 Listens For
                 <span className="hint">(context types, comma-sep)</span>
               </label>
               <input
+                id="appform-listens-for"
                 type="text"
                 value={form.channelListensFor}
                 onChange={(e) => set("channelListensFor", e.target.value)}

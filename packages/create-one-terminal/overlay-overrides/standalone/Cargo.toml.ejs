@@ -30,7 +30,27 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 # Engine runtime cache (download/verify/extract)
 sha2 = "0.10"
 hex  = "0.4"
-zip  = { version = "0.6", default-features = false, features = ["deflate"] }
+zip  = { version = "9.6", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 
 # Internal crates
 ot-core = { path = "packages/ot-core" }
+
+# ── Lints ─────────────────────────────────────────────────────────────────────
+# Inherited by every member with `[lints] workspace = true`. CI runs Clippy with
+# `-D warnings`, so "warn" fails CI while still letting local drafts compile.
+# Rationale and the lints deliberately left off: docs/conventions/rust.md (Tooling).
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+# Never ship debugging leftovers or placeholders.
+dbg_macro = "warn"
+todo = "warn"
+unimplemented = "warn"
+undocumented_unsafe_blocks = "warn"
+# Clarity: explicit `Arc::clone(&x)`, no hidden clones, let-else for early returns.
+clone_on_ref_ptr = "warn"
+implicit_clone = "warn"
+manual_let_else = "warn"
+semicolon_if_nothing_returned = "warn"
+uninlined_format_args = "warn"

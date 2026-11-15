@@ -111,8 +111,15 @@ export function CommandPalette({ isOpen, onClose, onHighlight }: Props) {
   if (!isOpen) return null;
 
   return (
-    <div className="palette-backdrop" onClick={onClose}>
-      <div className="palette-panel" onClick={(e) => e.stopPropagation()}>
+    <div
+      className="palette-backdrop"
+      role="presentation"
+      onClick={(e) => {
+        // Only a click on the backdrop itself dismisses; Escape is handled by the input.
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="palette-panel" role="dialog" aria-modal="true" aria-label="Command palette">
         <input
           ref={inputRef}
           className="palette-input"
@@ -127,15 +134,20 @@ export function CommandPalette({ isOpen, onClose, onHighlight }: Props) {
           aria-label="Command palette search"
           role="combobox"
           aria-expanded={results.length > 0}
+          aria-controls="palette-list"
+          aria-activedescendant={results.length > 0 ? `palette-option-${selectedIdx}` : undefined}
           aria-autocomplete="list"
         />
         {results.length === 0 ? (
           <div className="palette-empty">No commands match</div>
         ) : (
-          <ul className="palette-list" role="listbox">
+          <ul id="palette-list" className="palette-list" role="listbox">
             {results.map((cmd, i) => (
+              // Keyboard selection is driven by the combobox input (arrows + Enter).
+              // eslint-disable-next-line jsx-a11y/click-events-have-key-events
               <li
                 key={cmd.id}
+                id={`palette-option-${i}`}
                 className={`palette-item${i === selectedIdx ? " palette-item--selected" : ""}`}
                 role="option"
                 aria-selected={i === selectedIdx}

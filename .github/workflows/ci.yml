@@ -7,12 +7,22 @@ on:
 
 jobs:
   rust:
-    name: Rust check & test
-    runs-on: ubuntu-latest
+    # Windows (WebView2) and macOS (WKWebView) are the shipping platforms; Linux
+    # must compile. OS-specific `#[cfg]` branches are only checked on their own OS.
+    name: Rust check & test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install Tauri system dependencies
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -37,18 +47,17 @@ jobs:
         # folder to exist at compile time; see build.rs for why).
 
       - name: Check formatting
+        if: runner.os == 'Linux'
         run: cargo fmt --check --all
 
+      # Clippy type-checks the whole workspace, so no separate `cargo check` step.
       - name: Clippy
-        run: cargo clippy --workspace -- -D warnings
-
-      - name: Build check
-        run: cargo check --workspace
+        run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: Tests
         run: cargo test --workspace
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: "npm"
@@ -62,9 +71,9 @@ jobs:
     name: TypeScript lint, format & build
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
           cache: "npm"
@@ -78,14 +87,29 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: AI assistant config is in sync with AGENTS.md
+        run: npm run check:ai-drift
+
       - name: Typecheck
         run: npm run typecheck
+
+      - name: Terminal unit tests
+        run: npm run test:terminal
 
       - name: fdc3-plugin bundle is up to date
         run: npm -w @one-terminal/fdc3-plugin run check:bundle
 
       - name: Build app-directory
         run: npm run build:app-directory
+
+      # Vite builds only: the Desktop Agent's `build` script also compiles the Terminal sidecar.
+      - name: Build Terminal and Desktop Agent UIs
+        run: |
+          npm -w @one-terminal/one-terminal run build
+          npm -w @one-terminal/desktop-agent exec -- vite build
+
+      - name: Bundle budgets
+        run: npm run check:bundle-size
 
       - name: Build scaffolder
         run: npm run build:scaffolder

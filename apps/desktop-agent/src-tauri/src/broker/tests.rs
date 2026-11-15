@@ -80,7 +80,7 @@ fn directory_app(app_id: &str, intents: &[(&str, &[&str])]) -> AppRecord {
 
 fn harness(directory: Vec<AppRecord>) -> Harness {
     let events = Arc::new(RecordedEvents::default());
-    let broker = Broker::new(events.clone());
+    let broker = Broker::new(Arc::<RecordedEvents>::clone(&events));
     broker.add_user_channel("Red", "Red", "#f00");
     broker.add_user_channel("Blue", "Blue", "#00f");
     Harness {

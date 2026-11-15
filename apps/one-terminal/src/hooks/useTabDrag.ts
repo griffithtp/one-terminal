@@ -360,7 +360,7 @@ function edgeRect(s: StackHeader, zone: DropZone) {
       return { x: s.x, y: s.y, width: s.width, height: s.height / 2 };
     case "bottom":
       return { x: s.x, y: s.y + s.height / 2, width: s.width, height: s.height / 2 };
-    default:
+    case "center":
       return { x: s.x, y: s.y, width: s.width, height: s.height };
   }
 }

@@ -95,7 +95,7 @@ function TabStrip({ stack, onTabPointerDown }: TabStripProps) {
       setEditing({ label: tab.label, draft: tab.displayName ?? tab.title });
     });
     return () => {
-      unlisten.then((fn) => fn());
+      unlisten.then((fn) => fn()).catch(console.error);
     };
   }, [stack.tabs]);
 

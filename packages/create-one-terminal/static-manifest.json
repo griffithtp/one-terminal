@@ -297,6 +297,10 @@
       "overlay": "shared"
     },
     {
+      "path": "apps/one-terminal/src/commands/keybindingStore.test.ts",
+      "overlay": "shared"
+    },
+    {
       "path": "apps/one-terminal/src/commands/keybindingStore.ts",
       "overlay": "shared"
     },
@@ -305,7 +309,15 @@
       "overlay": "shared"
     },
     {
+      "path": "apps/one-terminal/src/commands/keyboardListener.test.ts",
+      "overlay": "shared"
+    },
+    {
       "path": "apps/one-terminal/src/commands/keyboardListener.ts",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/commands/registry.test.ts",
       "overlay": "shared"
     },
     {
@@ -430,6 +442,10 @@
     },
     {
       "path": "apps/one-terminal/src/components/WidgetCatalog.tsx",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/components/WidgetMenuItems.test.tsx",
       "overlay": "shared"
     },
     {
@@ -573,6 +589,14 @@
       "overlay": "shared"
     },
     {
+      "path": "apps/one-terminal/src/test/jest-dom.d.ts",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/test/setup.ts",
+      "overlay": "shared"
+    },
+    {
       "path": "apps/one-terminal/src/theme/themeStore.ts",
       "overlay": "shared"
     },
@@ -586,6 +610,10 @@
     },
     {
       "path": "apps/one-terminal/tsconfig.json",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/vitest.config.ts",
       "overlay": "shared"
     },
     {

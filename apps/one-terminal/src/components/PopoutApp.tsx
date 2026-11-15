@@ -326,6 +326,7 @@ function PopoutMenu({
       <div
         className={`wm-tab-ctx-menu${flipSubmenuLeft ? " wm-tab-ctx-menu--submenu-left" : ""}`}
         role="menu"
+        tabIndex={-1}
         style={{ position: "fixed", left, right, top: anchor.y }}
         onPointerDown={(e) => e.stopPropagation()}
         onContextMenu={(e) => e.preventDefault()}

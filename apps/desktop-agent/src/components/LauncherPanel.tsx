@@ -194,7 +194,7 @@ export function LauncherPanel() {
 
   // Load on first mount
   useEffect(() => {
-    load();
+    void load();
   }, [load]);
 
   return (

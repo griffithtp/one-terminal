@@ -212,7 +212,7 @@ export function OverlayApp() {
       }
       unlisteners = [unCtxMenu, unPalette, unLayout, unHostLayout, unOverflow, unEnginePicker];
       invoke("wm_overlay_ready").catch(console.error);
-    })();
+    })().catch(console.error);
 
     return () => {
       cancelled = true;
@@ -421,15 +421,24 @@ export function OverlayApp() {
               aria-label="Command palette search"
               role="combobox"
               aria-expanded={paletteResults.length > 0}
+              aria-controls="overlay-palette-list"
+              aria-activedescendant={
+                paletteResults.length > 0
+                  ? `overlay-palette-option-${paletteSelectedIdx}`
+                  : undefined
+              }
               aria-autocomplete="list"
             />
             {paletteResults.length === 0 ? (
               <div className="palette-empty">No commands match</div>
             ) : (
-              <ul className="palette-list" role="listbox">
+              <ul id="overlay-palette-list" className="palette-list" role="listbox">
                 {paletteResults.map((cmd, i) => (
+                  // Keyboard selection is driven by the combobox input (arrows + Enter).
+                  // eslint-disable-next-line jsx-a11y/click-events-have-key-events
                   <li
                     key={cmd.id}
+                    id={`overlay-palette-option-${i}`}
                     className={`palette-item${i === paletteSelectedIdx ? " palette-item--selected" : ""}`}
                     role="option"
                     aria-selected={i === paletteSelectedIdx}
@@ -566,6 +575,7 @@ export function OverlayApp() {
               <div
                 className={`wm-tab-ctx-menu${flipSubmenuLeft ? " wm-tab-ctx-menu--submenu-left" : ""}`}
                 role="menu"
+                tabIndex={-1}
                 style={{ position: "fixed", left, right, top }}
                 onPointerDown={(e) => e.stopPropagation()}
                 onContextMenu={(e) => e.preventDefault()}

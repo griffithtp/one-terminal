@@ -163,7 +163,7 @@ async fn handle_connection(socket: WebSocket, app_id: String, state: BusState) {
 fn perform(effects: Vec<Effect>, state: &BusState) {
     for effect in effects {
         let broker = state.broker.clone();
-        let host = state.host.clone();
+        let host = Arc::clone(&state.host);
         match effect {
             Effect::Launch { pending_id, app } => {
                 tokio::spawn(async move {

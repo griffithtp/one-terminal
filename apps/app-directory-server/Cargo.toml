@@ -3,6 +3,7 @@ name = "app-directory-server"
 version = "0.1.0"
 description = "Standalone App Directory server — hosted/Docker deployment. Thin binary wrapping ot-appdirectory; no Tauri deps."
 edition = "2021"
+publish = false
 
 [[bin]]
 name = "app-directory-server"
@@ -13,3 +14,6 @@ tokio           = { workspace = true }
 axum            = { workspace = true }
 tower-http      = { workspace = true }
 ot-appdirectory = { workspace = true }
+
+[lints]
+workspace = true

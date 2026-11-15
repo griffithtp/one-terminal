@@ -1,0 +1,27 @@
+{
+  "$comment": "Gzipped KB loaded at first paint, checked by scripts/check-bundle-size.ts in CI. entryKb is the AGENTS.md rule (< 60 KB). initialJsKb / initialCssKb are ratchets: measured size + ~10% (2026-11-15). Raising one needs a reason in the PR; lower them when a change shrinks the bundle.",
+  "apps": {
+    "terminal": {
+      "dist": "apps/one-terminal/dist",
+      "build": "npm -w @one-terminal/one-terminal run build",
+      "entries": {
+        "index.html": { "entryKb": 60, "initialJsKb": 100, "initialCssKb": 10 },
+        "popout.html": { "entryKb": 60, "initialJsKb": 76, "initialCssKb": 5 }
+      }
+    },
+    "desktop-agent": {
+      "dist": "apps/desktop-agent/dist",
+      "build": "npm -w @one-terminal/desktop-agent exec -- vite build",
+      "entries": {
+        "index.html": { "entryKb": 60, "initialJsKb": 70, "initialCssKb": 3 }
+      }
+    },
+    "app-directory": {
+      "dist": "apps/app-directory/ui/dist",
+      "build": "npm run build:app-directory",
+      "entries": {
+        "index.html": { "entryKb": 60, "initialJsKb": 55, "initialCssKb": 2.5 }
+      }
+    }
+  }
+}

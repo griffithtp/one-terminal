@@ -1,0 +1,36 @@
+# `fdc3-plugin` — agent context
+
+Browser FDC3 3.0 client for widgets. It runs the official `@finos/fdc3-agent-proxy` over a
+WebSocket to the Desktop Agent (DACP). Usage: [README.md](README.md). Rules:
+[docs/conventions/fdc3.md](../../docs/conventions/fdc3.md).
+
+## Layout
+
+| Path                     | Contents                                                              |
+| ------------------------ | --------------------------------------------------------------------- |
+| `src/index.ts`           | Entry: bus URL resolution, `getAgent()`, sets `window.fdc3`, `fdc3Ready` |
+| `src/agent.ts`           | WCP4/WCP5 identity handshake; builds the `DesktopAgentProxy`          |
+| `src/WsMessaging.ts`     | WebSocket transport (`AbstractMessaging` implementation)              |
+| `src/resolver.ts`        | Intent resolver UI (`chooseIntent`)                                   |
+| `test/contract.test.ts`  | Contract tests: the official proxy against the **real Rust bus**     |
+| `fdc3-plugin.js`         | **Generated, committed** bundle of `src/` — never edit                |
+
+## Rules
+
+- After editing `src/`, run `npm run build:fdc3-plugin` and commit the regenerated
+  `fdc3-plugin.js`. CI runs `check:bundle` and fails on a stale bundle.
+- `npm run test:fdc3-plugin` must pass — it builds and starts the Rust bus.
+- Prefer behaviour from the official proxy over local reimplementation; local code is
+  transport, handshake, URL resolution and intent resolver UI only.
+- Workspaces receive only the built `fdc3-plugin.js` (the extractor skips `src/`, `test/`,
+  `build.mjs`, `tsconfig.json`, `vitest.config.ts`).
+- The package is excluded from the root ESLint and Prettier configs.
+
+## FDC3 Bus URL
+
+Resolved in order:
+
+1. `<meta name="ot-fdc3-bus-url">` content attribute
+2. `window.OT_FDC3_AGENT_URL` (injected by the Terminal)
+3. `window.OT_FDC3_BUS_URL`
+4. Fallback: `ws://localhost:7891/fdc3`

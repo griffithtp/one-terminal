@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the CDA dashboard window",
+  "description": "Desktop Agent dashboard webview: IPC to its own commands and events only. Windows and webviews are created from Rust.",
   "windows": ["desktop-agent-dashboard"],
-  "permissions": ["core:webview:allow-create-webview", "core:default", "opener:default"]
+  "permissions": ["core:default"]
 }

@@ -39,7 +39,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    fetchApps();
+    void fetchApps();
   }, [fetchApps]);
 
   const handleEdit = (app: AppD) => {
@@ -52,7 +52,7 @@ export default function App() {
       const res = await fetch(`/v2/apps/${appId}`, { method: "DELETE" });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       showToast("Application removed.");
-      fetchApps();
+      void fetchApps();
     } catch (e: unknown) {
       showToast(e instanceof Error ? e.message : "Delete failed", true);
     }
@@ -60,7 +60,7 @@ export default function App() {
 
   const handleSave = (message: string) => {
     showToast(message);
-    fetchApps();
+    void fetchApps();
     setView("list");
     setEditTarget(null);
   };

@@ -9,7 +9,7 @@
  */
 
 import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { extname, join, dirname, relative } from "node:path";
+import { basename, extname, join, dirname, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readdir, stat } from "node:fs/promises";
 
@@ -40,6 +40,11 @@ const STATIC_FILENAMES = new Set(["build.rs", "vite-env.d.ts"]);
 // the extractor would read the compiled one-terminal binary as a UTF-8 text template
 // and EJS-process it, producing a corrupted, single-platform binary.ejs file.
 const SKIP_DIRS = new Set(["node_modules", "target", "dist", "gen", ".git", "binaries"]);
+
+// ── Files to skip entirely ────────────────────────────────────────────────────
+// AI-assistant context (AGENTS.md and its generated CLAUDE.md stub) documents the
+// framework repo, not a scaffolded workspace. Matched against the basename.
+const SKIP_FILENAMES = new Set(["AGENTS.md", "CLAUDE.md"]);
 
 // ── Framework-only paths ──────────────────────────────────────────────────────
 // Workspaces receive the built fdc3-plugin.js, not its sources, build or contract
@@ -148,6 +153,9 @@ const ROOT_PACKAGE_SCRIPTS_OMIT = new Set([
   "build:scaffolder",
   "scaffold",
   "test:scaffold",
+  "sync:ai",
+  "check:ai-drift",
+  "check:bundle-size",
   "build:fdc3-plugin",
   "test:fdc3-plugin",
   // sample-widget is standalone-only; its dev script lives in the
@@ -336,6 +344,7 @@ async function walkAndProcess(srcDir: string, destDir: string, overlay: Overlay)
 
   for (const item of items) {
     if (SKIP_PATHS.has(join(srcDir, item))) continue;
+    if (SKIP_FILENAMES.has(item)) continue;
     if (SKIP_DIRS.has(item)) {
       // Carve-out: a `dist/` directory containing only an `index.html` stub
       // is the frontendDist placeholder for tauri-webview-host (and any other
@@ -365,7 +374,7 @@ async function walkAndProcess(srcDir: string, destDir: string, overlay: Overlay)
 
 async function processFile(src: string, destWithoutEjs: string, overlay: Overlay): Promise<void> {
   const ext = extname(src);
-  const base = src.split("/").pop()!;
+  const base = basename(src);
 
   if (BINARY_EXTENSIONS.has(ext)) {
     await mkdir(dirname(destWithoutEjs), { recursive: true });

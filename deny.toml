@@ -1,0 +1,54 @@
+# cargo-deny policy — run by the "Dependency audit" job in .github/workflows/ci.yml.
+# Docs: https://embarkstudios.github.io/cargo-deny/
+#
+# Every `ignore` entry needs a reason saying why the advisory doesn't apply to us, and
+# should be removed as soon as the dependency can be upgraded.
+
+[graph]
+all-features = false
+
+[advisories]
+# Vulnerabilities always fail. Unmaintained/unsound notices fail only for crates we depend
+# on directly — transitive ones (mostly via Tauri / zbus) are reviewed, not blocking.
+unmaintained = "workspace"
+unsound = "workspace"
+yanked = "deny"
+ignore = [
+  { id = "RUSTSEC-2026-0097", reason = "rand 0.8: unsound only with a custom logger via rand::rng(); we use no log integration. Remove when moving to rand >= 0.9." },
+]
+
+[licenses]
+# Permissive licenses found in the current dependency graph. OR-expressions pass if any
+# alternative is allowed. Add a license here only after checking it's compatible with MIT.
+allow = [
+  "MIT",
+  "MIT-0",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "BSL-1.0",
+  "ISC",
+  "Zlib",
+  "0BSD",
+  "CC0-1.0",
+  "Unlicense",
+  "Unicode-3.0",
+  "MPL-2.0",
+  "CDLA-Permissive-2.0",
+]
+confidence-threshold = 0.9
+
+[licenses.private]
+# Workspace crates aren't published, so they carry no license field.
+ignore = true
+
+[bans]
+# Tauri's graph has many duplicate versions; tracked by `cargo tree -d`, not enforced.
+multiple-versions = "allow"
+wildcards = "deny"
+allow-wildcard-paths = true
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

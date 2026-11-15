@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "OneTerminal — dynamic tiling container with multi-browser-engine support"
 authors = ["one-terminal"]
 edition = "2021"
+publish = false
 
 [lib]
 name = "<%= snakeWorkspaceName %>_terminal_lib"
@@ -28,3 +29,6 @@ ot-core                    = { workspace = true }
 tauri-plugin-global-shortcut = "2"
 indexmap = { workspace = true }
 rust-embed = { version = "8", features = ["mime-guess", "include-exclude"] }
+
+[lints]
+workspace = true

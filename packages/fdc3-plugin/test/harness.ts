@@ -29,7 +29,8 @@ export default async function setup(project: TestProject) {
   if (build.status !== 0) throw new Error("Could not build fdc3_bus_harness");
 
   const port = await freePort();
-  const binary = join(repoRoot, "target/debug/examples/fdc3_bus_harness");
+  const exe = process.platform === "win32" ? ".exe" : "";
+  const binary = join(repoRoot, "target", "debug", "examples", `fdc3_bus_harness${exe}`);
   child = spawn(binary, [String(port)], { stdio: ["ignore", "pipe", "inherit"] });
   await new Promise<void>((resolve, reject) => {
     child!.once("error", reject);

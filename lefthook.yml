@@ -1,3 +1,31 @@
+# Formats staged files and re-stages them, so commits from any editor or AI
+# assistant are formatted. Ignored paths (.prettierignore) are left untouched.
+pre-commit:
+  parallel: true
+  commands:
+    prettier:
+      glob: "*.{ts,tsx,js,jsx,mjs,cjs,json,css,md,yml,yaml,html}"
+      run: npx prettier --write --ignore-unknown --no-error-on-unmatched-pattern {staged_files}
+      stage_fixed: true
+    rustfmt:
+      glob: "*.rs"
+      run: rustfmt --edition 2021 {staged_files}
+      stage_fixed: true
+    ai-drift:
+      glob:
+        - "*AGENTS.md"
+        - ".ai/agents/*.md"
+        - ".ai/skills/*"
+      run: npm run check:ai-drift
+      fail_text: "AI config sources changed — run: npm run sync:ai, then stage the regenerated files"
+
+# Conventional Commits (docs/conventions/general.md → Git and pull requests).
+commit-msg:
+  commands:
+    commitlint:
+      run: npx commitlint --edit {1}
+      fail_text: "Use <type>(<scope>): <summary>, e.g. fix(fdc3): reject unknown channel ids"
+
 pre-push:
   parallel: true
   commands:
@@ -11,5 +39,5 @@ pre-push:
       run: npm run lint
       fail_text: "To fix, run: npm run lint:fix"
     rust-clippy:
-      run: cargo clippy --workspace -- -D warnings
-      fail_text: "To fix, run: cargo clippy --workspace --fix -- -D warnings"
+      run: cargo clippy --workspace --all-targets -- -D warnings
+      fail_text: "To fix, run: cargo clippy --workspace --all-targets --fix --allow-dirty -- -D warnings"

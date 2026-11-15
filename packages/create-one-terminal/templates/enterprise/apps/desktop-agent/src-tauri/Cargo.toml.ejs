@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "<%= displayName %> Desktop Agent — FDC3 3.0 centralised hub for all apps"
 authors = ["one-terminal"]
 edition = "2021"
+publish = false
 
 [lib]
 name = "<%= snakeWorkspaceName %>_agent_lib"
@@ -29,3 +30,6 @@ hex                 = { workspace = true }
 zip                 = { workspace = true }
 ot-core             = { workspace = true }
 ot-appdirectory     = { workspace = true }
+
+[lints]
+workspace = true
