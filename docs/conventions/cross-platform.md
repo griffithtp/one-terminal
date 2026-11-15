@@ -69,9 +69,10 @@ macOS needs signing + notarisation and Windows needs code signing for release bu
 Add a row here whenever you fix an OS-specific bug, with the PR number, so the knowledge
 isn't lost:
 
-| PR  | OS    | Quirk                                                                                                     |
-| --- | ----- | --------------------------------------------------------------------------------------------------------- |
-| #71 | macOS | Minimised Terminal couldn't be restored from the Dock with a popout open; first click didn't start a drag |
+| PR  | OS      | Quirk                                                                                                                                                                                                                                             |
+| --- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #71 | macOS   | Minimised Terminal couldn't be restored from the Dock with a popout open; first click didn't start a drag                                                                                                                                         |
+| —   | Windows | `cargo test` executables exited with `STATUS_ENTRYPOINT_NOT_FOUND` (0xc0000139): tauri-build embeds the Common-Controls v6 manifest in binaries only. The Tauri apps' `build.rs` now embed it with `/MANIFEST:EMBED` linker args for every target |
 
 ## Known open issues
 
