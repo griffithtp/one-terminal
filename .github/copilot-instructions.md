@@ -80,6 +80,7 @@ the file directly. Run the matching agent before you call a change done:
 | Any Rust (`*.rs`, `Cargo.toml`)                                                                       | [rust-reviewer](../.ai/agents/rust-reviewer.md)                                                         |
 | Any React / TypeScript UI (`apps/*/src`, `apps/app-directory/ui`)                                     | [react-reviewer](../.ai/agents/react-reviewer.md)                                                       |
 | Missing or failing tests, or a bug needing a regression test                                          | [test-author](../.ai/agents/test-author.md)                                                             |
+| Bundle size, startup, layout/drag render cost, popouts, FDC3 frame handling, or a failing budget      | [performance-analyst](../.ai/agents/performance-analyst.md)                                             |
 
 The requirements analyst writes only `docs/plans/`; the architect and reviewers report and don't edit files; the scaffolder steward drafts and (when
 asked) applies migrations.
@@ -88,6 +89,7 @@ asked) applies migrations.
 | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
 | [feature](../.ai/skills/feature/SKILL.md)                     | Any non-trivial feature: plan → design → implement → test → review → handover, with approval gates |
 | [framework-upgrade](../.ai/skills/framework-upgrade/SKILL.md) | A framework change is done and must reach scaffolded workspaces                                    |
+| [perf-audit](../.ai/skills/perf-audit/SKILL.md)               | Before merging UI or hot-path changes: bundle sizes and timings vs `main`                          |
 
 Cloud agents (Copilot coding agent, Devin, Codex, Cursor): machine setup is
 `bash scripts/agent-setup.sh`; see [.ai/cloud-agents.md](../.ai/cloud-agents.md).
@@ -170,6 +172,7 @@ npm run build:samples            # production builds of sample-ticker + sample-c
 npm run build:all                # all Tauri apps
 npm run sync:ai                  # regenerate AI-assistant adapter files from AGENTS.md
 npm run check:ai-drift           # CI: fail if adapter files are stale
+npm run check:bundle-size        # first-paint JS/CSS of every UI vs scripts/bundle-budgets.json (build the UIs first)
 cargo deny check                 # advisories, licenses, sources (deny.toml; CI: audit.yml)
 npm audit --omit=dev             # npm advisories in production dependencies
 ```
@@ -186,6 +189,10 @@ npm audit --omit=dev             # npm advisories in production dependencies
 ## Performance conventions
 
 - Vite apps: define `manualChunks` to separate vendor code. Entry chunk target: < 60 KB gzipped.
+- First-paint budgets (entry, initial JS, initial CSS per HTML entry) are enforced in CI by
+  `npm run check:bundle-size` against `scripts/bundle-budgets.json`. The initial-JS/CSS
+  budgets are ratchets: lower them when a change shrinks a bundle; raising one needs a
+  reason in the PR.
 - Static asset responses: set `Cache-Control: public, max-age=31536000, immutable` on content-hashed filenames; `no-cache` on `index.html`.
 - Service Workers: register in all web apps for offline-capable asset caching (production builds only).
 - Webview pool: `OT_WEBVIEW_POOL_SIZE` controls the pre-warm pool in `one-terminal` (default 1).

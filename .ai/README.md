@@ -57,6 +57,7 @@ Commit the source and the regenerated adapters together.
 | [test-author](agents/test-author.md)                         | Writes Rust, Vitest/RTL and FDC3 contract tests                           |
 | [requirements-analyst](agents/requirements-analyst.md)       | Turns an idea into a `docs/plans/NN-*.md` plan with issue briefs          |
 | [architect](agents/architect.md)                             | Designs an approved plan against the codebase; checks the issue breakdown |
+| [performance-analyst](agents/performance-analyst.md)         | Measures bundle, startup, render and FDC3 costs; reports numbers          |
 
 ### Source format
 
@@ -99,6 +100,7 @@ may change.
 | ------------------------------------------------------ | ------------------------------------------------------- |
 | [feature](skills/feature/SKILL.md)                     | Any non-trivial feature, end to end with approval gates |
 | [framework-upgrade](skills/framework-upgrade/SKILL.md) | A framework change must reach scaffolded workspaces     |
+| [perf-audit](skills/perf-audit/SKILL.md)               | Bundle sizes and timings of a branch vs main            |
 
 A skill is a folder with one `SKILL.md` in the [Agent Skills](https://agentskills.io) format:
 

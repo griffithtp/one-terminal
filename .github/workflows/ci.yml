@@ -102,5 +102,14 @@ jobs:
       - name: Build app-directory
         run: npm run build:app-directory
 
+      # Vite builds only: the Desktop Agent's `build` script also compiles the Terminal sidecar.
+      - name: Build Terminal and Desktop Agent UIs
+        run: |
+          npm -w @one-terminal/one-terminal run build
+          npm -w @one-terminal/desktop-agent exec -- vite build
+
+      - name: Bundle budgets
+        run: npm run check:bundle-size
+
       - name: Build scaffolder
         run: npm run build:scaffolder

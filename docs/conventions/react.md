@@ -63,6 +63,9 @@ during drag and resize.
 - Memoise (`useMemo`, `useCallback`, `memo`) where a profile shows a cost or where a
   callback is a dependency of a child effect — not by reflex.
 - Entry chunk < 60 KB gzipped; vendor code split by `manualChunks` in each `vite.config.ts`.
+  CI enforces this plus initial-JS/CSS ratchets (`npm run check:bundle-size`,
+  `scripts/bundle-budgets.json`); React's vendor chunk (~58 KB) dominates first paint, so
+  new dependencies in the entry path show up immediately.
   Lazy-load dialogs and settings panels that aren't needed at first paint.
 - Apply persisted theme before first render (as `main.tsx` does) to avoid a flash.
 
