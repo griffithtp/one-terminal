@@ -46,15 +46,17 @@ Commit the source and the regenerated adapters together.
 
 ## Agents
 
-| Agent                                                        | Role                                                                   |
-| ------------------------------------------------------------ | ---------------------------------------------------------------------- |
-| [cross-platform-reviewer](agents/cross-platform-reviewer.md) | Windows (WebView2) + macOS (WKWebView) correctness review              |
-| [fdc3-conformance](agents/fdc3-conformance.md)               | FDC3 3.0 / DACP conformance review of broker, bus, plugin              |
-| [scaffolder-steward](agents/scaffolder-steward.md)           | Template impact, migration decisions and create-migration answer files |
-| [security-auditor](agents/security-auditor.md)               | Trust-boundary review of changes, or a full-repo audit                 |
-| [rust-reviewer](agents/rust-reviewer.md)                     | Rust correctness and conventions review                                |
-| [react-reviewer](agents/react-reviewer.md)                   | React/TypeScript UI review (state, IPC, render cost, CSP, a11y)        |
-| [test-author](agents/test-author.md)                         | Writes Rust, Vitest/RTL and FDC3 contract tests                        |
+| Agent                                                        | Role                                                                      |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------- |
+| [cross-platform-reviewer](agents/cross-platform-reviewer.md) | Windows (WebView2) + macOS (WKWebView) correctness review                 |
+| [fdc3-conformance](agents/fdc3-conformance.md)               | FDC3 3.0 / DACP conformance review of broker, bus, plugin                 |
+| [scaffolder-steward](agents/scaffolder-steward.md)           | Template impact, migration decisions and create-migration answer files    |
+| [security-auditor](agents/security-auditor.md)               | Trust-boundary review of changes, or a full-repo audit                    |
+| [rust-reviewer](agents/rust-reviewer.md)                     | Rust correctness and conventions review                                   |
+| [react-reviewer](agents/react-reviewer.md)                   | React/TypeScript UI review (state, IPC, render cost, CSP, a11y)           |
+| [test-author](agents/test-author.md)                         | Writes Rust, Vitest/RTL and FDC3 contract tests                           |
+| [requirements-analyst](agents/requirements-analyst.md)       | Turns an idea into a `docs/plans/NN-*.md` plan with issue briefs          |
+| [architect](agents/architect.md)                             | Designs an approved plan against the codebase; checks the issue breakdown |
 
 ### Source format
 
@@ -93,9 +95,10 @@ may change.
 
 ## Skills (workflows)
 
-| Skill                                                  | Use when                                            |
-| ------------------------------------------------------ | --------------------------------------------------- |
-| [framework-upgrade](skills/framework-upgrade/SKILL.md) | A framework change must reach scaffolded workspaces |
+| Skill                                                  | Use when                                                |
+| ------------------------------------------------------ | ------------------------------------------------------- |
+| [feature](skills/feature/SKILL.md)                     | Any non-trivial feature, end to end with approval gates |
+| [framework-upgrade](skills/framework-upgrade/SKILL.md) | A framework change must reach scaffolded workspaces     |
 
 A skill is a folder with one `SKILL.md` in the [Agent Skills](https://agentskills.io) format:
 
@@ -111,6 +114,12 @@ Numbered steps with the exact commands, what to check, and where to stop for a p
 Only `SKILL.md` is supported for now (no extra files in the folder). Claude Code and Copilot
 read the same format, so both adapters are the same file. Other assistants: "Follow
 `.ai/skills/<name>/SKILL.md`."
+
+## Cloud agents
+
+Copilot's coding agent, Devin, Codex and Cursor background agents: see
+[cloud-agents.md](cloud-agents.md) — one setup script (`scripts/agent-setup.sh`) and how
+each tool finds the roles and workflows.
 
 ## Writing guidance
 

@@ -68,22 +68,27 @@ Specialist roles live in [.ai/agents/](.ai/agents/) and step-by-step workflows i
 subagents and skills, Copilot custom agents and skills); any other assistant can follow
 the file directly. Run the matching agent before you call a change done:
 
-| Change touches                                                                                        | Agent                                                            |
-| ----------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| `src-tauri/`, `ot-core`, engine hosts, window management, keybindings, scripts, CI                    | [cross-platform-reviewer](.ai/agents/cross-platform-reviewer.md) |
-| `broker/`, `fdc3_bus/`, `app_dir/`, `packages/fdc3-plugin/src`, user channels                         | [fdc3-conformance](.ai/agents/fdc3-conformance.md)               |
-| Anything in `apps/` or `packages/ot-*` that ships to scaffolded workspaces                            | [scaffolder-steward](.ai/agents/scaffolder-steward.md)           |
-| Capabilities, CSP, Tauri commands, custom schemes, FDC3 bus, App Directory, spawning, downloads, deps | [security-auditor](.ai/agents/security-auditor.md)               |
-| Any Rust (`*.rs`, `Cargo.toml`)                                                                       | [rust-reviewer](.ai/agents/rust-reviewer.md)                     |
-| Any React / TypeScript UI (`apps/*/src`, `apps/app-directory/ui`)                                     | [react-reviewer](.ai/agents/react-reviewer.md)                   |
-| Missing or failing tests, or a bug needing a regression test                                          | [test-author](.ai/agents/test-author.md)                         |
+| Change touches                                                                                        | Agent                                                                                             |
+| ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| A new feature or change request (start here)                                                          | [requirements-analyst](.ai/agents/requirements-analyst.md) → [architect](.ai/agents/architect.md) |
+| `src-tauri/`, `ot-core`, engine hosts, window management, keybindings, scripts, CI                    | [cross-platform-reviewer](.ai/agents/cross-platform-reviewer.md)                                  |
+| `broker/`, `fdc3_bus/`, `app_dir/`, `packages/fdc3-plugin/src`, user channels                         | [fdc3-conformance](.ai/agents/fdc3-conformance.md)                                                |
+| Anything in `apps/` or `packages/ot-*` that ships to scaffolded workspaces                            | [scaffolder-steward](.ai/agents/scaffolder-steward.md)                                            |
+| Capabilities, CSP, Tauri commands, custom schemes, FDC3 bus, App Directory, spawning, downloads, deps | [security-auditor](.ai/agents/security-auditor.md)                                                |
+| Any Rust (`*.rs`, `Cargo.toml`)                                                                       | [rust-reviewer](.ai/agents/rust-reviewer.md)                                                      |
+| Any React / TypeScript UI (`apps/*/src`, `apps/app-directory/ui`)                                     | [react-reviewer](.ai/agents/react-reviewer.md)                                                    |
+| Missing or failing tests, or a bug needing a regression test                                          | [test-author](.ai/agents/test-author.md)                                                          |
 
-Reviewers report findings and don't edit files; the scaffolder steward drafts and (when
+The requirements analyst writes only `docs/plans/`; the architect and reviewers report and don't edit files; the scaffolder steward drafts and (when
 asked) applies migrations.
 
-| Workflow                                                   | Use when                                                        |
-| ---------------------------------------------------------- | --------------------------------------------------------------- |
-| [framework-upgrade](.ai/skills/framework-upgrade/SKILL.md) | A framework change is done and must reach scaffolded workspaces |
+| Workflow                                                   | Use when                                                                                           |
+| ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| [feature](.ai/skills/feature/SKILL.md)                     | Any non-trivial feature: plan → design → implement → test → review → handover, with approval gates |
+| [framework-upgrade](.ai/skills/framework-upgrade/SKILL.md) | A framework change is done and must reach scaffolded workspaces                                    |
+
+Cloud agents (Copilot coding agent, Devin, Codex, Cursor): machine setup is
+`bash scripts/agent-setup.sh`; see [.ai/cloud-agents.md](.ai/cloud-agents.md).
 
 ## Generated files — never edit by hand
 
