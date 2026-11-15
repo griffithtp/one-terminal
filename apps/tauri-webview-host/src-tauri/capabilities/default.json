@@ -1,13 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Host permissions: create one external-URL webview window on startup",
+  "description": "Host window: its only local page is the stub dist/index.html; the app it hosts is a remote URL and gets no IPC.",
   "windows": ["*"],
-  "permissions": [
-    "core:default",
-    "core:webview:allow-create-webview",
-    "core:window:default",
-    "core:window:allow-create",
-    "core:window:allow-close"
-  ]
+  "permissions": ["core:default"]
 }

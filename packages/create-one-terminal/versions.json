@@ -2,6 +2,28 @@
   "schemaVersion": 1,
   "versions": [
     {
+      "version": "0.2.3",
+      "releaseDate": "2026-11-15",
+      "breaking": false,
+      "changelogUrl": "https://github.com/one-terminal/one-terminal/releases/tag/v0.2.3",
+      "migrations": [
+        {
+          "type": "dep-bump",
+          "id": "0.2.3-dep-bump-cargo",
+          "target": "Cargo.toml",
+          "description": "Bump zip 0.6 -> 9.6 (RUSTSEC-2026-0367/0368/0369/0429)",
+          "deps": [
+            {
+              "name": "zip",
+              "ecosystem": "cargo",
+              "newVersion": "9.6"
+            }
+          ],
+          "appliesTo": "standalone"
+        }
+      ]
+    },
+    {
       "version": "0.2.2",
       "releaseDate": "2026-11-11",
       "breaking": false,

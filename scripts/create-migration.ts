@@ -34,6 +34,7 @@ import { basename, extname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
+import * as prettier from "prettier";
 
 const ROOT = join(fileURLToPath(import.meta.url), "../..");
 const TEMPLATES = join(ROOT, "packages/create-one-terminal/templates");
@@ -350,7 +351,7 @@ if (mode === "amend" && amendEntry) {
   }
   const entryIdx = manifest.versions.findIndex((v) => v.version === amendEntry!.version);
   if (entryIdx >= 0) manifest.versions[entryIdx] = amendEntry;
-  await writeFile(VERSIONS_JSON, JSON.stringify(manifest, null, 2) + "\n", "utf8");
+  await writeManifest(manifest);
   p.log.success(
     `versions.json  →  v${newVersion} amended  (${amendEntry.migrations.length} total migration(s))`
   );
@@ -363,7 +364,7 @@ if (mode === "amend" && amendEntry) {
     migrations,
   };
   manifest.versions.unshift(newEntry);
-  await writeFile(VERSIONS_JSON, JSON.stringify(manifest, null, 2) + "\n", "utf8");
+  await writeManifest(manifest);
   p.log.success(`versions.json  →  v${newVersion}  (${migrations.length} migration(s))`);
 }
 
@@ -712,6 +713,19 @@ function failSpec(errors: string[]): never {
   cleanup();
   p.cancel(`Spec is invalid:\n${errors.map((e) => `  • ${e}`).join("\n")}`);
   process.exit(1);
+}
+
+/**
+ * Writes versions.json formatted with the repo's Prettier config. Plain JSON.stringify
+ * expands the short arrays Prettier collapses, which fails `format:check` on every run.
+ */
+async function writeManifest(m: VersionsManifest): Promise<void> {
+  const options = (await prettier.resolveConfig(VERSIONS_JSON)) ?? {};
+  const text = await prettier.format(JSON.stringify(m, null, 2), {
+    ...options,
+    filepath: VERSIONS_JSON,
+  });
+  await writeFile(VERSIONS_JSON, text, "utf8");
 }
 
 // ── Branch migration detection ────────────────────────────────────────────────

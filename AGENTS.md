@@ -68,11 +68,12 @@ Specialist roles live in [.ai/agents/](.ai/agents/) and step-by-step workflows i
 subagents and skills, Copilot custom agents and skills); any other assistant can follow
 the file directly. Run the matching agent before you call a change done:
 
-| Change touches                                                                     | Agent                                                            |
-| ---------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| `src-tauri/`, `ot-core`, engine hosts, window management, keybindings, scripts, CI | [cross-platform-reviewer](.ai/agents/cross-platform-reviewer.md) |
-| `broker/`, `fdc3_bus/`, `app_dir/`, `packages/fdc3-plugin/src`, user channels      | [fdc3-conformance](.ai/agents/fdc3-conformance.md)               |
-| Anything in `apps/` or `packages/ot-*` that ships to scaffolded workspaces         | [scaffolder-steward](.ai/agents/scaffolder-steward.md)           |
+| Change touches                                                                                        | Agent                                                            |
+| ----------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `src-tauri/`, `ot-core`, engine hosts, window management, keybindings, scripts, CI                    | [cross-platform-reviewer](.ai/agents/cross-platform-reviewer.md) |
+| `broker/`, `fdc3_bus/`, `app_dir/`, `packages/fdc3-plugin/src`, user channels                         | [fdc3-conformance](.ai/agents/fdc3-conformance.md)               |
+| Anything in `apps/` or `packages/ot-*` that ships to scaffolded workspaces                            | [scaffolder-steward](.ai/agents/scaffolder-steward.md)           |
+| Capabilities, CSP, Tauri commands, custom schemes, FDC3 bus, App Directory, spawning, downloads, deps | [security-auditor](.ai/agents/security-auditor.md)               |
 
 Reviewers report findings and don't edit files; the scaffolder steward drafts and (when
 asked) applies migrations.
@@ -158,6 +159,8 @@ npm run build:samples            # production builds of sample-ticker + sample-c
 npm run build:all                # all Tauri apps
 npm run sync:ai                  # regenerate AI-assistant adapter files from AGENTS.md
 npm run check:ai-drift           # CI: fail if adapter files are stale
+cargo deny check                 # advisories, licenses, sources (deny.toml; CI: audit.yml)
+npm audit --omit=dev             # npm advisories in production dependencies
 ```
 
 ## Before you call a change done

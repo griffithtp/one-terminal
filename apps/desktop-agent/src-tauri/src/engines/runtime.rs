@@ -10,7 +10,7 @@
 //! launch requests can't race on the filesystem.
 
 use std::fs;
-use std::io::{Read, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -369,9 +369,9 @@ fn extract_zip(archive: &Path, dest: &Path) -> Result<(), String> {
             fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
         let mut out = fs::File::create(&target).map_err(|e| e.to_string())?;
-        let mut buf = Vec::with_capacity(entry.size() as usize);
-        entry.read_to_end(&mut buf).map_err(|e| e.to_string())?;
-        out.write_all(&buf).map_err(|e| e.to_string())?;
+        // Stream rather than pre-allocating from the entry header: the declared size
+        // comes from the archive and must not size an allocation.
+        std::io::copy(&mut entry, &mut out).map_err(|e| e.to_string())?;
     }
     Ok(())
 }

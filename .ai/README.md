@@ -51,6 +51,7 @@ Commit the source and the regenerated adapters together.
 | [cross-platform-reviewer](agents/cross-platform-reviewer.md) | Windows (WebView2) + macOS (WKWebView) correctness review              |
 | [fdc3-conformance](agents/fdc3-conformance.md)               | FDC3 3.0 / DACP conformance review of broker, bus, plugin              |
 | [scaffolder-steward](agents/scaffolder-steward.md)           | Template impact, migration decisions and create-migration answer files |
+| [security-auditor](agents/security-auditor.md)               | Trust-boundary review of changes, or a full-repo audit                 |
 
 ### Source format
 

@@ -26,15 +26,41 @@ system or process spawning except through an explicitly validated path.
   labels and ids must refer to existing objects, paths must be canonicalised and kept
   inside an allowed root, URLs must be parsed and their scheme checked
   (`http`/`https` only for widgets).
-- `tauri-webview-host`'s capability matches `"windows": ["*"]` with `core:default`; review
-  it whenever that host's behaviour changes.
+- Grant only what the app's **JS** calls. Windows, webviews and events driven from Rust
+  need no capability. Current grants:
+
+  | App                  | Windows                                                       | Permissions beyond `core:default`                                                                                           |
+  | -------------------- | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+  | `one-terminal`       | `terminal-main-chrome`, `terminal-main-overlay`, `terminal-*` | window `start-dragging`, `start-resize-dragging`, `minimize`, `toggle-maximize`, `close`; event `emit`, `emit-to`, `listen` |
+  | `desktop-agent`      | `desktop-agent-dashboard`                                     | none                                                                                                                        |
+  | `tauri-webview-host` | `*`                                                           | none (its only local page is a script-free stub)                                                                            |
+
+  Adding a JS call to a new window/webview API means adding exactly that permission.
+
+- Capability files ship to scaffolded workspaces as static files: new workspaces get the
+  current version, existing ones keep theirs (no migration).
 
 ## Content Security Policy
 
-All three `tauri.conf.json` files currently set `"csp": null` (no CSP). A CSP for the
-Terminal chrome, Desktop Agent dashboard and host is a planned hardening task. Until then,
-don't add code to those apps' own UIs that injects HTML (`dangerouslySetInnerHTML`,
-`innerHTML`) or loads scripts from remote origins.
+Each `tauri.conf.json` sets `app.security.csp`. Tauri applies it to the app's own pages
+(Terminal chrome, overlay and popout chrome; Desktop Agent dashboard; the host's stub
+page) — **not** to widget pages, which load remote URLs or custom schemes.
+
+| Directive                                            | Terminal / Desktop Agent    | Why                                     |
+| ---------------------------------------------------- | --------------------------- | --------------------------------------- |
+| `default-src`, `script-src`, `style-src`             | `'self'`                    | Vite emits only bundled JS/CSS files    |
+| `img-src`, `font-src`                                | `'self' data:`              | Vite may inline small assets as `data:` |
+| `connect-src`                                        | `ipc: http://ipc.localhost` | Tauri IPC (macOS / Windows); no `fetch` |
+| `object-src`, `base-uri`, `form-action`, `frame-src` | `'none'`                    | Not used                                |
+
+- React `style={{…}}` props are fine (set through the CSSOM). Literal `style="…"`
+  markup, `<style>` elements, `dangerouslySetInnerHTML`, `innerHTML`, `eval` and remote
+  scripts are not — and would also be blocked.
+- Loading something new (a font, an image host, a `fetch` to the App Directory) means
+  adding that exact source to the CSP in the same change.
+- `devCsp` is `null`: the Vite dev server needs inline scripts and an HMR websocket. The
+  CSP is therefore only exercised by **production builds** (`npm run build:terminal`,
+  `npm run build:desktop-agent`) — test UI changes there before release.
 
 ## FDC3 bus
 
@@ -67,6 +93,10 @@ it hosts.
 
 - Engine runtime downloads are verified with SHA-256 against the catalog. Never add a
   download path that skips verification.
+- Archives are extracted entry by entry (`extract_zip` in both apps): paths confined with
+  `enclosed_name()`, contents streamed with `io::copy` (never sized from the entry
+  header), no symlinks created, no permission bits applied. Don't switch to
+  `ZipArchive::extract()`.
 - Plugin `LaunchMode::SpawnBinary { binary_name, … }` is passed to `Command::new`, which
   does a `PATH` lookup. Resolve plugin binaries to an absolute path inside the plugin's own
   directory, and reject names containing path separators or `..`.
@@ -81,10 +111,29 @@ it hosts.
 - `OT_APPD_TOKEN` and future auth tokens must never be logged or written into scaffolded
   files.
 - New dependencies: prefer well-maintained crates and packages; check the licence fits the
-  repo's [LICENSE](../../LICENSE). Dependency auditing (`cargo-deny`, `npm audit`) is a
-  planned CI addition.
+  repo's [LICENSE](../../LICENSE).
+- `.github/workflows/audit.yml` runs on every change and weekly:
+  `cargo deny check advisories bans licenses sources` (policy in [deny.toml](../../deny.toml))
+  and `npm audit --omit=dev --audit-level=high`. A new advisory fails it even on unrelated
+  PRs — upgrade the dependency, or add a `deny.toml` `ignore` entry whose reason shows the
+  advisory doesn't apply. Never disable the job.
+- Workspace crates are `publish = false`; that's what lets the license check skip them.
+
+## Open questions
+
+Not yet verified — check before relying on either:
+
+- **Custom scheme widgets and IPC.** The sample widget is served over the
+  `sample-widget://` custom scheme inside Terminal windows. If Tauri treats custom
+  schemes as local origins, that page can call the Terminal's app commands and the
+  capability permissions above. Confirm against Tauri's origin rules; if so, serve local
+  widgets over `http://127.0.0.1` instead or restrict app commands with an app manifest.
+- **Electron host navigation.** `apps/electron-host` runs pages with
+  `nodeIntegration: false` and `contextIsolation: true` and no preload, but doesn't
+  restrict `window.open` or navigation. Low risk without Node access; decide whether
+  hosted apps should be pinned to their origin.
 
 ## Reporting
 
 When a change touches any boundary above, say so in the PR description and state how the
-input is validated.
+input is validated, and run the [security-auditor](../../.ai/agents/security-auditor.md).

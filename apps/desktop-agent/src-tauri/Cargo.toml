@@ -4,6 +4,7 @@ version = "0.1.0"
 description = "OneTerminal Desktop Agent — FDC3 3.0 centralised hub for all apps"
 authors = ["one-terminal"]
 edition = "2021"
+publish = false
 
 [lib]
 name = "desktop_agent_lib"
