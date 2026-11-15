@@ -15,7 +15,7 @@ jobs:
     name: Rust advisories, licenses, sources
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: EmbarkStudios/cargo-deny-action@v2
         with:
           command: check advisories bans licenses sources
@@ -24,8 +24,8 @@ jobs:
     name: npm advisories (production dependencies)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
       # Reads package-lock.json only; nothing is installed.
