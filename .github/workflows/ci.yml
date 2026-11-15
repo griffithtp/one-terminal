@@ -78,6 +78,9 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: AI assistant config is in sync with AGENTS.md
+        run: npm run check:ai-drift
+
       - name: Typecheck
         run: npm run typecheck
 
