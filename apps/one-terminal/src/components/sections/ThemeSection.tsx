@@ -2,7 +2,7 @@
  * ThemeSection
  *
  * Light / Dark / System chooser, intended to be rendered inside the App Menu
- * drawer (Plan 10-C). Owns no modal shell — the parent provides the panel.
+ * drawer. Owns no modal shell — the parent provides the panel.
  *
  * Persists via theme/themeStore and applies immediately so the user sees the
  * change reflect across the chrome before they leave the section.

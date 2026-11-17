@@ -20,7 +20,8 @@ gate because the next step looks obvious.
 ## 1. Requirements → gate
 
 Run **requirements-analyst** with the person's request. It asks its questions in one
-round, then writes `docs/plans/NN-<name>.md` and updates the plan indexes.
+round, then writes `NN-<name>.md` in the planning folder (`AGENTS.md` → Plans) and
+updates its index.
 
 **Gate:** show the plan path, its summary and open questions. Proceed only when the
 person approves the scope and has answered the open questions.
@@ -76,6 +77,34 @@ needs a manual check. Write the exact steps per OS.
 
 **Gate:** the person confirms the manual checks (or accepts them as follow-ups).
 
+## 5b. Docs (after the step 5 gate)
+
+Docs are written only now, against code that is verified and won't change again.
+
+Skip this step when the change touches none of: behaviour, config, env vars, commands,
+ports, apps/packages.
+
+1. Run **docs-steward** in change mode. Tell it step 5 passed; it checks that no code
+   file is uncommitted and stops with "code not verified yet" otherwise.
+2. Show the person its findings and drafted edits.
+   - A **code** finding goes back to step 3, then through steps 4 and 5 again before this
+     step reruns.
+3. Once the person approves, apply its patch yourself (docs-steward can't edit files),
+   checking it touches only the `*.md` files it named. Then:
+
+   ```sh
+   git apply --check <patch> && git apply <patch>
+   npm run check:docs && npm run format
+   npm run sync:ai          # if an AGENTS.md changed
+   ```
+
+4. If a template README changed, run the **framework-upgrade** workflow.
+5. The docs go in the same PR as the code, as one final commit:
+   `docs(<scope>): <what is now documented>`. Commit only if asked.
+
+Docs-steward is not a step 4 reviewer: docs drafted during review would describe code
+that is still changing.
+
 ## 6. Hand over
 
 Give the person:
@@ -84,5 +113,8 @@ Give the person:
 - **Verification** — commands run with results; manual checks done or pending, per OS.
 - **Review outcomes** — findings fixed, and findings deliberately left with reasons.
 - **Scaffold impact** — migration decisions (from the framework-upgrade workflow).
-- **PR description draft** — the above, condensed, linking the plan.
+- **Docs updated** — the files step 5b changed, its `docs(…)` commit, and any template
+  READMEs that went through framework-upgrade.
+- **PR description draft** — the above, condensed. Describe the behaviour and decisions
+  themselves; don't link the plan (`.work/` is never committed).
 - **What to stage** — the file list; commit only if asked.

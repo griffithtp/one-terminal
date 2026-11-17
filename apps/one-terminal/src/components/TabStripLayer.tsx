@@ -23,8 +23,7 @@ interface TabStripLayerProps {
  * `TabStrip` child so each strip has its own ResizeObserver + menu state.
  *
  * Per-tab `×` and the right-cluster maximise/close buttons have been
- * replaced by `⋮` kebabs that route to the unified ctx menu in the overlay
- * — see [docs/Terminal Menu.md](../../../../docs/Terminal Menu.md).
+ * replaced by `⋮` kebabs that route to the unified ctx menu in the overlay.
  */
 export function TabStripLayer({ stacks, onTabPointerDown }: TabStripLayerProps) {
   return (

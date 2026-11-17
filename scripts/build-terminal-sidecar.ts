@@ -21,8 +21,7 @@
  * NOTE: `universal-apple-darwin` is NOT handled here — that target needs
  * both `aarch64-apple-darwin` and `x86_64-apple-darwin` sidecar binaries
  * present before `tauri build` lipos them together, which this script
- * doesn't attempt (unverified — see docs/plans/07-deployment-and-hosting.md
- * Issue 07-A). Release workflow currently targets `aarch64-apple-darwin`
+ * doesn't attempt (unverified). Release workflow currently targets `aarch64-apple-darwin`
  * only on macOS.
  */
 import { execFileSync } from "node:child_process";

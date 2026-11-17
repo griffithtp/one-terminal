@@ -16,7 +16,7 @@ instrumentation only in a scratch copy or when the person asks.
 
 Read the "Performance conventions" in `AGENTS.md`, the Performance section of
 `docs/conventions/react.md`, `scripts/bundle-budgets.json`, and the performance targets in
-the relevant plan (`docs/plans/*.md`), e.g. Plan 17's popout targets.
+the relevant plan, when the caller gives one (plans are in the uncommitted `.work/plans/` — `AGENTS.md` → Plans).
 
 ## Hot paths in this codebase
 
@@ -25,7 +25,7 @@ the relevant plan (`docs/plans/*.md`), e.g. Plan 17's popout targets.
 | First paint of each UI       | `apps/*/index.html`, `vite.config.ts` `manualChunks`                               | Entry and initial JS/CSS vs budgets; heavy imports in the entry; dialogs/settings not lazy-loaded        |
 | Layout emits → chrome render | `layout/store.rs` emits `wm:layout`, `wm:host-layout`; `src/components/*Layer.tsx` | Payload size per emit; emits per gesture; unstable keys or new object identities forcing full re-renders |
 | Drag / resize / splitters    | `layout/drag.rs`, `SplitterHandleLayer`, `useTabDrag`                              | Per-frame IPC or React state updates instead of refs + `requestAnimationFrame`                           |
-| Popout open / dock / restore | `terminal/popout.rs` (`[popout] … in N ms` logs)                                   | Plan 17 targets: open < 100 ms warm / < 300 ms cold, dock < 50 ms                                        |
+| Popout open / dock / restore | `terminal/popout.rs` (`[popout] … in N ms` logs)                                   | Targets: open < 100 ms warm / < 300 ms cold, dock < 50 ms                                                |
 | Startup and session restore  | `lib.rs` setup, `layout/persist.rs`, `webview_pool.rs`                             | Work before first paint; serial webview creation; `OT_WEBVIEW_POOL_SIZE` effect                          |
 | FDC3 frames                  | `fdc3_bus/mod.rs` → `broker/` `Broker::handle`                                     | `serde_json::Value` clones and re-serialisation per frame; lock hold times; fan-out to many listeners    |
 | Static assets                | `packages/ot-appdirectory/src/ui.rs`                                               | `Cache-Control: immutable` on hashed files, `no-cache` on `index.html`                                   |

@@ -24,6 +24,9 @@ packages/*/dist/
 local/
 *.local
 
+# Working notes and plans (AGENTS.md → Plans) — local only, never committed
+.work/
+
 # Scaffolder build output
 packages/create-one-terminal/dist/
 

@@ -45,18 +45,19 @@ Commit the source and the regenerated adapters together.
 
 ## Agents
 
-| Agent                                                        | Role                                                                      |
-| ------------------------------------------------------------ | ------------------------------------------------------------------------- |
-| [cross-platform-reviewer](agents/cross-platform-reviewer.md) | Windows (WebView2) + macOS (WKWebView) correctness review                 |
-| [fdc3-conformance](agents/fdc3-conformance.md)               | FDC3 3.0 / DACP conformance review of broker, bus, plugin                 |
-| [scaffolder-steward](agents/scaffolder-steward.md)           | Template impact, migration decisions and create-migration answer files    |
-| [security-auditor](agents/security-auditor.md)               | Trust-boundary review of changes, or a full-repo audit                    |
-| [rust-reviewer](agents/rust-reviewer.md)                     | Rust correctness and conventions review                                   |
-| [react-reviewer](agents/react-reviewer.md)                   | React/TypeScript UI review (state, IPC, render cost, CSP, a11y)           |
-| [test-author](agents/test-author.md)                         | Writes Rust, Vitest/RTL and FDC3 contract tests                           |
-| [requirements-analyst](agents/requirements-analyst.md)       | Turns an idea into a `docs/plans/NN-*.md` plan with issue briefs          |
-| [architect](agents/architect.md)                             | Designs an approved plan against the codebase; checks the issue breakdown |
-| [performance-analyst](agents/performance-analyst.md)         | Measures bundle, startup, render and FDC3 costs; reports numbers          |
+| Agent                                                        | Role                                                                                    |
+| ------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
+| [cross-platform-reviewer](agents/cross-platform-reviewer.md) | Windows (WebView2) + macOS (WKWebView) correctness review                               |
+| [fdc3-conformance](agents/fdc3-conformance.md)               | FDC3 3.0 / DACP conformance review of broker, bus, plugin                               |
+| [scaffolder-steward](agents/scaffolder-steward.md)           | Template impact, migration decisions and create-migration answer files                  |
+| [security-auditor](agents/security-auditor.md)               | Trust-boundary review of changes, or a full-repo audit                                  |
+| [rust-reviewer](agents/rust-reviewer.md)                     | Rust correctness and conventions review                                                 |
+| [react-reviewer](agents/react-reviewer.md)                   | React/TypeScript UI review (state, IPC, render cost, CSP, a11y)                         |
+| [test-author](agents/test-author.md)                         | Writes Rust, Vitest/RTL and FDC3 contract tests                                         |
+| [requirements-analyst](agents/requirements-analyst.md)       | Turns an idea into a plan (in the planning folder) with issue briefs                    |
+| [architect](agents/architect.md)                             | Designs an approved plan against the codebase; checks the issue breakdown               |
+| [performance-analyst](agents/performance-analyst.md)         | Measures bundle, startup, render and FDC3 costs; reports numbers                        |
+| [docs-steward](agents/docs-steward.md)                       | After the code is verified: finds stale or missing docs and drafts the edits as a patch |
 
 ### Source format
 

@@ -42,12 +42,12 @@ into `target/perf-main/scripts/` before measuring.
 
 ## 3. Runtime timings (when the change touches them)
 
-| Change touches                    | Measure                                                                                                   |
-| --------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| Popouts (`terminal/popout.rs`)    | `[popout] open … in N ms` / `dock … in N ms` log lines, 10+ runs each, warm and cold — vs Plan 17 targets |
-| Startup, restore, webview pool    | Time from launch to first paint and to restored layout (add an `[perf]` `Instant` log temporarily)        |
-| Layout / drag / chrome components | Renders per gesture in the webview devtools Profiler (dev build)                                          |
-| Broker / FDC3 bus                 | `Broker::handle` time over a message mix in a `--release` ignored test                                    |
+| Change touches                    | Measure                                                                                                                                             |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Popouts (`terminal/popout.rs`)    | `[popout] open … in N ms` / `dock … in N ms` log lines, 10+ runs each, warm and cold — vs targets: open < 100 ms warm / < 300 ms cold, dock < 50 ms |
+| Startup, restore, webview pool    | Time from launch to first paint and to restored layout (add an `[perf]` `Instant` log temporarily)                                                  |
+| Layout / drag / chrome components | Renders per gesture in the webview devtools Profiler (dev build)                                                                                    |
+| Broker / FDC3 bus                 | `Broker::handle` time over a message mix in a `--release` ignored test                                                                              |
 
 Use release builds for reported numbers, the same machine for both sides, and medians.
 Say which OS you measured on; the other OS is a manual follow-up.

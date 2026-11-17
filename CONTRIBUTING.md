@@ -509,7 +509,7 @@ curl -s -o /dev/null -w "%{http_code}\n" localhost:3005/   # 200 — admin UI
 
 `cargo run`/`tauri dev` prove the code works; they don't prove the **packaged app** works, since bundling changes how resources (like the embedded App Directory UI, `agent.config.json`, and the `one-terminal` sidecar binary) are located and included. Do this before any release, and any time you touch `packages/ot-appdirectory`, `tauri.conf.json`, `bundle.resources`/`externalBin` config, or `scripts/build-terminal-sidecar.ts`.
 
-`desktop-agent` is the single downloadable installer — it embeds `one-terminal` as an `externalBin` sidecar and auto-launches it on startup ([Plan 07](docs/plans/07-deployment-and-hosting.md) Issue 07-F), same as it already auto-launches the in-process App Directory (Issue 07-E). You only need to build and launch `desktop-agent`; `one-terminal`'s own installer still works standalone for anyone pointing it at a separately-hosted `desktop-agent`, but isn't required for the single-bundle path.
+`desktop-agent` is the single downloadable installer — it embeds `one-terminal` as an `externalBin` sidecar and auto-launches it on startup, same as it already auto-launches the in-process App Directory. You only need to build and launch `desktop-agent`; `one-terminal`'s own installer still works standalone for anyone pointing it at a separately-hosted `desktop-agent`, but isn't required for the single-bundle path.
 
 **Step 1 — Build the App Directory UI, then the bundle:**
 

@@ -39,7 +39,7 @@ export interface CtxMenuItemDef {
  * before the Close tab button. A separator is automatically inserted when any
  * custom items are present.
  *
- * In a future Epic 08 release this registry will be superseded by the dynamic
+ * In a future release this registry will be superseded by the dynamic
  * plugin hook (`window.OT.plugins.get("contextMenu")`); static entries here
  * will continue to work unchanged.
  */

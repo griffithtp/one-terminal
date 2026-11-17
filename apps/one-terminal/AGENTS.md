@@ -98,7 +98,7 @@ registerCtxMenuItems("my-app-id", [
 | `floating`    | `boolean`             | Widget is popped out (`stackPath` is `[]`)   |
 | `group`       | `string \| undefined` | Glue group id of a glued popout; else unset  |
 
-**Epic 08 note:** this registry will be superseded by `window.OT.plugins.get("contextMenu")` once the dynamic plugin system lands. Static entries will continue to work unchanged.
+**Plugin system note:** this registry will be superseded by `window.OT.plugins.get("contextMenu")` once the dynamic plugin system lands. Static entries will continue to work unchanged.
 
 ## Tests
 

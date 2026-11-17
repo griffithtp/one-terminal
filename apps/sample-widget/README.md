@@ -41,5 +41,5 @@ curl -X POST http://localhost:3005/v2/apps \
 ## Customize the widget header
 
 The Terminal's `panelHeaders.tsx` registry lets you render a custom title bar
-for this widget. See [CLAUDE.md](../../CLAUDE.md#widget-ui-extension-points)
+for this widget. See [apps/one-terminal/AGENTS.md](../one-terminal/AGENTS.md#widget-ui-extension-points)
 for the registry API.

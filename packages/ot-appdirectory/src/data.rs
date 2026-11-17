@@ -1,7 +1,6 @@
 //! In-memory app catalogue. Ported from `apps/app-directory/src/data.ts`.
 //!
-//! Persistence (SQLite) is out of scope for this crate as shipped — see
-//! docs/plans/03-app-directory-roles-permissions.md Issue 03-A.
+//! Persistence (SQLite) is out of scope for this crate as shipped.
 
 use std::collections::HashMap;
 use std::sync::Arc;

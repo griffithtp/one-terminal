@@ -4,8 +4,8 @@
 //! stored under a user-visible name. The active dashboard is what the
 //! window manager currently displays.
 //!
-//! Plan 15 splits what used to be a single per-Terminal `DashboardStore`
-//! into two pieces living at different scopes:
+//! What used to be a single per-Terminal `DashboardStore` is split into
+//! two pieces living at different scopes:
 //! - [`DashboardRegistry`] — the dashboards themselves. Shared process-wide:
 //!   one instance, referenced by every Terminal window's `LayoutTree` via
 //!   `TerminalManager`.
@@ -662,7 +662,7 @@ mod tests {
     fn rename_never_orphans_another_sessions_active_reference() {
         // Simulates window B holding "Trading" active/locked while window A
         // renames it — the exact scenario flagged in review as a gap the
-        // stable id is meant to close (see Plan 15, Issue 15-A step 7).
+        // stable id is meant to close.
         let mut registry = DashboardRegistry::new();
         registry.create("Trading".to_string());
         let mut session_b = DashboardSession::with_empty();

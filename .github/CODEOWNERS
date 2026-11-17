@@ -8,7 +8,7 @@
 /packages/fdc3-plugin/fdc3-plugin.js          @griffithtp
 
 # AI assistant sources and enforcement
-/AGENTS.md                                    @griffithtp
+**/AGENTS.md                                  @griffithtp
 /.ai/                                         @griffithtp
 /.claude/                                     @griffithtp
 /docs/conventions/                            @griffithtp

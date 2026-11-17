@@ -107,10 +107,9 @@ No code-signing step — Linux installers (`.deb`/`.AppImage`, whichever
 
 ## Auto-updater key (not yet wired up)
 
-[Plan 07](plans/07-deployment-and-hosting.md) Issue 07-D (Tauri
-auto-updater config) hasn't landed yet — `TAURI_SIGNING_PRIVATE_KEY` /
+The Tauri auto-updater config hasn't landed yet — `TAURI_SIGNING_PRIVATE_KEY` /
 `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` aren't referenced by `release.yml` for
-that reason. When 07-D lands, generate the key pair with:
+that reason. When it lands, generate the key pair with:
 
 ```sh
 npx @tauri-apps/cli@latest signer generate -w ~/.tauri/one-terminal.key
@@ -143,13 +142,10 @@ on a suffix like `-test` (confirmed on the first real test run).
   `scripts/build-terminal-sidecar.ts` to cross-compile the embedded
   `one-terminal` sidecar for both `aarch64` and `x86_64` before
   `desktop-agent` packages them together, which hasn't been exercised.
-  Intel Mac users are unsupported until this is verified. See
-  [docs/plans/07-deployment-and-hosting.md](plans/07-deployment-and-hosting.md)
-  Issue 07-A.
+  Intel Mac users are unsupported until this is verified.
 - Releases are created as **drafts** — publishing is a manual step.
 - No Docker/GHCR publishing yet for the hosted `app-directory-server`
-  binary — that's [Plan 07](plans/07-deployment-and-hosting.md) Issue 07-B,
-  not yet implemented.
+  binary — not yet implemented.
 - Tested against a real `v0.0.1-test` tag push: found and fixed the MSI
   version-format bug and the empty-secret codesigning bug documented above.
   The `create-release` → matrix `releaseId` handoff itself (does it actually
