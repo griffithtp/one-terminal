@@ -349,9 +349,16 @@ export function extractCommentLinks(file: string, source: string): Link[] {
 
 /** GitHub's heading anchor for a heading's text. */
 export function slug(heading: string): string {
-  return heading
-    .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
-    .replace(/<[^>]+>/g, "")
+  let text = heading;
+  let previous: string;
+  do {
+    previous = text;
+    text = text
+      .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
+      .replace(/<[^>]+>/g, "");
+  } while (text !== previous);
+
+  return text
     .trim()
     .toLowerCase()
     .replace(/[^\p{L}\p{N}\p{M} _-]/gu, "")
