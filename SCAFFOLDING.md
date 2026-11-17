@@ -343,8 +343,6 @@ User-modified managed fields trigger the conflict handler.
 
 ## Phase 9 — Standalone vs Enterprise Variants
 
-Full design in [docs/plans/standalone-vs-enterprise-plans.md](docs/plans/standalone-vs-enterprise-plans.md).
-
 - [x] **A** — Restructure `templates/` into `shared/` / `enterprise/` / `standalone/` overlays. Extractor classifies each `SOURCES` entry; `render.ts` walks `shared/` then the variant overlay (variant-overlay-wins). `static-manifest.json` records `{path, overlay}` per entry.
 - [x] **B** — Add `variant` prompt (default `standalone`) and `externalFdc3AgentUrl` prompt. New framework app `apps/sample-widget/` (Standalone-only sample). Hand-authored Standalone files under `packages/create-one-terminal/overlay-overrides/standalone/` for slim Cargo.toml, package.json, widgets.config.json, terminal.config.json.
 - [x] **C** — Terminal `WidgetSource` abstraction. New Rust `widgets` module + `wm_list_apps` Tauri command. Frontend `loadWidgetRegistry()` helper centralises the source choice. `WidgetSourceKind` enum + `OT_WIDGET_SOURCE` / `OT_WIDGETS_CONFIG_PATH` env overrides.

@@ -148,7 +148,7 @@ Everything crossing IPC is a typed contract; both sides change in the same commi
 - **(new code)** `TODO` / `FIXME` name an owner or issue: `// TODO(#123): …`. An
   unowned TODO is a bug report nobody will read.
 - **Docs change with the code.** A change to behaviour, config, env vars, commands or
-  conventions updates the matching `AGENTS.md`, conventions doc or plan in the same PR.
+  conventions updates the matching `AGENTS.md` or conventions doc in the same PR.
 
 ## Git and pull requests
 

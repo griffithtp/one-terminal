@@ -807,10 +807,10 @@ pub fn run() {
 
             let ec = app.state::<EngineCatalogClient>().inner().clone();
 
-            // In-process App Directory server (docs/plans/07-deployment-and-hosting.md
-            // Issue 07-E). Bound to app_directory_url's port so the existing
-            // AppDirectoryCache/EngineCatalogClient reqwest clients below talk to
-            // it over loopback exactly as they would to a remote instance. Skipped
+            // In-process App Directory server. Bound to app_directory_url's port so
+            // the existing AppDirectoryCache/EngineCatalogClient reqwest clients
+            // below talk to it over loopback exactly as they would to a remote
+            // instance. Skipped
             // when OT_APPD_EMBEDDED=0 (pointing OT_APP_DIR_URL at a remote/hosted
             // App Directory instead) or when the port is already taken by
             // something else (e.g. a dev-mode `npm run dev:app-directory`).

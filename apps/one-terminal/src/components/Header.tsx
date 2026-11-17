@@ -3,14 +3,14 @@
  *
  * 40 px toolbar that sits at the top of the chrome webview.
  *
- * After Plan 10, the header is intentionally minimal: brand/menu button on
+ * The header is intentionally minimal: brand/menu button on
  * the left, dashboard switcher, optional launch-error banner, then window
  * controls on the right. Widget launching moved into the App Menu drawer's
  * Add Widget section (see AppMenuSidebar). Launch errors still surface here
  * via `errorMessage` / `onClearError` because the header is the
  * always-visible status surface.
  *
- * FDC3 channel selection (Plan 11) is per-widget, not per-Terminal — there is
+ * FDC3 channel selection is per-widget, not per-Terminal — there is
  * no channel control here anymore. See the tab strip's "Set channel" context
  * menu item (`OverlayApp.tsx`) and `wm_set_panel_fdc3_channel`.
  */

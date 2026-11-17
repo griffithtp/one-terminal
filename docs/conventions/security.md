@@ -6,13 +6,13 @@ system or process spawning except through an explicitly validated path.
 
 ## Trust boundaries
 
-| Boundary                                        | Untrusted side                     | Guard                                                                |
-| ----------------------------------------------- | ---------------------------------- | -------------------------------------------------------------------- |
-| Panel webview → Tauri IPC                       | Widget pages (any URL)             | Tauri capabilities (local origins only)                              |
-| Widget → FDC3 bus (`ws://127.0.0.1:7891/fdc3`)  | Any local process or web page      | WCP handshake (see gaps below)                                       |
-| Client → App Directory REST (`:3005`)           | Admin UI, scripts, browsers        | Loopback bind; CORS on the standalone server; auth planned (Plan 03) |
-| App Directory / plugin manifest → process spawn | Directory records, `manifest.json` | Engine catalog checksums; launch routing in `engines/router.rs`      |
-| Config files / env vars                         | Local user                         | Validation in `AgentConfig::load()`; unknown keys ignored            |
+| Boundary                                        | Untrusted side                     | Guard                                                           |
+| ----------------------------------------------- | ---------------------------------- | --------------------------------------------------------------- |
+| Panel webview → Tauri IPC                       | Widget pages (any URL)             | Tauri capabilities (local origins only)                         |
+| Widget → FDC3 bus (`ws://127.0.0.1:7891/fdc3`)  | Any local process or web page      | WCP handshake (see gaps below)                                  |
+| Client → App Directory REST (`:3005`)           | Admin UI, scripts, browsers        | Loopback bind; CORS on the standalone server; auth planned      |
+| App Directory / plugin manifest → process spawn | Directory records, `manifest.json` | Engine catalog checksums; launch routing in `engines/router.rs` |
+| Config files / env vars                         | Local user                         | Validation in `AgentConfig::load()`; unknown keys ignored       |
 
 ## Tauri capabilities
 
@@ -85,8 +85,8 @@ it hosts.
   cross-origin JSON writes (preflight fails). The standalone server allows only the
   origins in `CORS_ORIGIN`.
 - `POST /v2/apps`, `PUT` and `DELETE /v2/apps/:app_id` are **unauthenticated** — any local process
-  can register an app, including its URL and engine binding. Auth arrives with
-  [Plan 03](../plans/03-app-directory-roles-permissions.md); until then, treat directory
+  can register an app, including its URL and engine binding. Auth is planned;
+  until then, treat directory
   records as untrusted input when launching.
 
 ## Process spawning
@@ -102,7 +102,7 @@ it hosts.
   directory, and reject names containing path separators or `..`.
 - Pass untrusted values (`{{url}}`, `{{title}}`, `{{app_id}}`) as discrete arguments or
   env vars — never through a shell (`sh -c`, `cmd /C`).
-- Native app launch ([Plan 04](../plans/04-native-app-launch.md)) must be allow-list based
+- Native app launch (planned) must be allow-list based
   (`OT_NATIVE_APP_ALLOW_PATHS`).
 
 ## Secrets and dependencies

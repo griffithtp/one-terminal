@@ -426,9 +426,9 @@ All menu styles live in [`src/wm.css`](src/wm.css). Key classes:
 
 The menu position is automatically clamped to stay within the viewport (8 px margin).
 
-#### Epic 08 upgrade path
+#### Plugin system upgrade path
 
-When the dynamic plugin system (Epic 08) lands, `window.OT.plugins.get("contextMenu")` will supersede this static registry. Existing `registerCtxMenuItems` calls will continue to work without modification.
+When the dynamic plugin system lands, `window.OT.plugins.get("contextMenu")` will supersede this static registry. Existing `registerCtxMenuItems` calls will continue to work without modification.
 
 ### Pointing at a different App Directory
 

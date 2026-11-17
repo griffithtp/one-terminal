@@ -82,7 +82,7 @@ the `.ai/` file directly. Run the matching agent before you call a change done:
 | Missing or failing tests, or a bug needing a regression test                                          | [test-author](.ai/agents/test-author.md)                                                          |
 | Bundle size, startup, layout/drag render cost, popouts, FDC3 frame handling, or a failing budget      | [performance-analyst](.ai/agents/performance-analyst.md)                                          |
 
-The requirements analyst writes only `docs/plans/`; the architect and reviewers report and don't edit files; the scaffolder steward drafts and (when
+The requirements analyst writes only to the planning folder (see [Plans](#plans)); the architect and reviewers report and don't edit files; the scaffolder steward drafts and (when
 asked) applies migrations.
 
 | Workflow                                                   | Use when                                                                                           |
@@ -146,7 +146,7 @@ The standalone App Directory server (`apps/app-directory-server`) reads its vars
 
 `OT_APPD_TOKEN` is read only by the scaffolder's `new-widget` wizard (sent as a bearer token when it registers the widget; the server doesn't check it yet).
 
-Not yet implemented (planned in [Plan 03](docs/plans/03-app-directory-roles-permissions.md) / [Plan 04](docs/plans/04-native-app-launch.md)): `OT_NATIVE_APP_ALLOW_PATHS`, `APPD_DB_PATH`, `APPD_JWT_SECRET`, `APPD_ALLOW_ANONYMOUS_READ`, `APPD_AUTH_PLUGIN_URL` (Auth Provider plugin on 4477, OIDC redirect on 4476). The App Directory store is in-memory, seeded from `packages/ot-appdirectory/src/data.rs`.
+Not yet implemented (planned): `OT_NATIVE_APP_ALLOW_PATHS`, `APPD_DB_PATH`, `APPD_JWT_SECRET`, `APPD_ALLOW_ANONYMOUS_READ`, `APPD_AUTH_PLUGIN_URL` (Auth Provider plugin on 4477, OIDC redirect on 4476). The App Directory store is in-memory, seeded from `packages/ot-appdirectory/src/data.rs`.
 
 ## FDC3 architecture (summary)
 
@@ -168,7 +168,7 @@ npm run build:fdc3-plugin        # regenerates packages/fdc3-plugin/fdc3-plugin.
 npm run test:fdc3-plugin         # contract tests: the official proxy against the real Rust bus
 npm run test:terminal            # Terminal UI unit/component tests (Vitest + RTL, jsdom)
 npm run build:app-directory      # rebuilds apps/app-directory/dist
-npm run build:samples            # production builds of sample-ticker + sample-chart (after Epic 07)
+npm run build:samples            # production builds of sample-ticker + sample-chart (planned; not in package.json yet)
 npm run build:all                # all Tauri apps
 npm run sync:ai                  # regenerate AI-assistant adapter files from AGENTS.md
 npm run check:ai-drift           # CI: fail if adapter files are stale
@@ -197,32 +197,15 @@ npm audit --omit=dev             # npm advisories in production dependencies
 - Service Workers: register in all web apps for offline-capable asset caching (production builds only).
 - Webview pool: `OT_WEBVIEW_POOL_SIZE` controls the pre-warm pool in `one-terminal` (default 1).
 
-## Framework plugins (planned, Epic 08)
+## Framework plugins (planned)
 
-Framework plugins are distinct from engine plugins. They will live in `<data_dir>/one-terminal/plugins/<name>/` and declare a `plugin.json` (not `manifest.json`); engine plugins declare a `manifest.json` and only add a browser runtime. Framework plugins run as Node.js sidecars and can extend the Desktop Agent, App Directory, and browser API. Planned packages (not yet in the repo): `packages/plugin-sdk/` (`@one-terminal/plugin-sdk`), `packages/plugin-themes/`, `packages/plugin-auth-provider/`, `packages/plugin-permissions/`. Browser API: `window.OT.plugins.get(capabilityName)`. See [Plan 08](docs/plans/08-plugin-system.md).
+Framework plugins are distinct from engine plugins. They will live in `<data_dir>/one-terminal/plugins/<name>/` and declare a `plugin.json` (not `manifest.json`); engine plugins declare a `manifest.json` and only add a browser runtime. Framework plugins run as Node.js sidecars and can extend the Desktop Agent, App Directory, and browser API. Planned packages (not yet in the repo): `packages/plugin-sdk/` (`@one-terminal/plugin-sdk`), `packages/plugin-themes/`, `packages/plugin-auth-provider/`, `packages/plugin-permissions/`. Browser API: `window.OT.plugins.get(capabilityName)`.
 
-## Enhancement plans
+## Plans
 
-Detailed implementation plans for the next development phase are in `docs/plans/`.
-
-| Plan                        | File                                                                                                         | Milestone |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------ | --------- |
-| 01 — Widget Headers         | [docs/plans/01-customisable-widget-headers.md](docs/plans/01-customisable-widget-headers.md)                 | Phase 1   |
-| 02 — Faster Loading         | [docs/plans/02-faster-widget-loading.md](docs/plans/02-faster-widget-loading.md)                             | Phase 3   |
-| 03 — App Directory Auth     | [docs/plans/03-app-directory-roles-permissions.md](docs/plans/03-app-directory-roles-permissions.md)         | Phase 1   |
-| 04 — Native App Launch      | [docs/plans/04-native-app-launch.md](docs/plans/04-native-app-launch.md)                                     | Phase 3   |
-| 05 — Ticker View Chart      | [docs/plans/05-ticker-view-chart-enhancement.md](docs/plans/05-ticker-view-chart-enhancement.md)             | Phase 2   |
-| 06 — Command Palette        | [docs/plans/06-command-palette-hotkeys.md](docs/plans/06-command-palette-hotkeys.md)                         | Phase 2   |
-| 07 — Deployment             | [docs/plans/07-deployment-and-hosting.md](docs/plans/07-deployment-and-hosting.md)                           | Phase 4   |
-| 08 — Plugin System          | [docs/plans/08-plugin-system.md](docs/plans/08-plugin-system.md)                                             | Phase 5   |
-| 09 — Dashboards & Terminals | [docs/dashboards/README.md](docs/dashboards/README.md)                                                       | Phase 2–5 |
-| 10 — Terminal App Menu      | [docs/plans/10-terminal-app-menu.md](docs/plans/10-terminal-app-menu.md)                                     | Phase 2   |
-| 11 — Widget Channel Scoping | [docs/plans/11-widget-channel-scoping.md](docs/plans/11-widget-channel-scoping.md)                           | Phase 2   |
-| 12 — Widget Keep-Alive      | [docs/plans/12-widget-keep-alive-across-dashboards.md](docs/plans/12-widget-keep-alive-across-dashboards.md) | Phase 2   |
-| 13 — Generic Web Widget     | [docs/plans/13-generic-web-widget.md](docs/plans/13-generic-web-widget.md)                                   | Phase 2   |
-| 14 — Dashboard Tab Menu     | [docs/plans/14-dashboard-tab-context-menu.md](docs/plans/14-dashboard-tab-context-menu.md)                   | Phase 2   |
-| 15 — Shared Dashboards      | [docs/plans/15-shared-dashboards-across-terminals.md](docs/plans/15-shared-dashboards-across-terminals.md)   | Phase 3   |
-| 16 — Desktop Agent Select   | [docs/plans/16-desktop-agent-selection.md](docs/plans/16-desktop-agent-selection.md)                         | Phase 3   |
-| 17 — Widget Pop-out         | [docs/plans/17-widget-popout.md](docs/plans/17-widget-popout.md)                                             | Phase 3   |
-
-See [docs/plans/README.md](docs/plans/README.md) for execution order, effort estimates, and GitHub Project setup instructions.
+Enhancement plans and design notes live in the **planning folder**, `.work/` at the repo
+root (`.work/plans/` with its own `README.md` index, `.work/dashboards/`). It is
+gitignored: plans are local working material and are **never committed**. The
+requirements analyst writes plans there and the architect reads them from there. Nothing
+committed links to or names a plan — describe the behaviour or decision itself in code
+comments, docs and PRs.

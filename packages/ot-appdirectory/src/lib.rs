@@ -1,8 +1,7 @@
 //! Shared FDC3 3.0 App Directory server logic — no Tauri deps.
 //!
 //! Mounted in-process by `desktop-agent` and served standalone by
-//! `apps/app-directory-server`. See docs/plans/07-deployment-and-hosting.md
-//! Issue 07-E.
+//! `apps/app-directory-server`.
 
 pub mod data;
 pub mod engines;

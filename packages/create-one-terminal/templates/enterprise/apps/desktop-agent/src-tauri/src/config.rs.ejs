@@ -74,7 +74,7 @@ pub struct AgentConfig {
     /// Start an in-process App Directory server bound to `app_directory_url`'s
     /// port (see `packages/ot-appdirectory`). Defaults to `true`; set
     /// `OT_APPD_EMBEDDED=0` when pointing `OT_APP_DIR_URL` at a remote/hosted
-    /// App Directory instead (docs/plans/07-deployment-and-hosting.md Issue 07-E).
+    /// App Directory instead.
     #[serde(default = "default_appd_embedded")]
     pub appd_embedded: bool,
 }

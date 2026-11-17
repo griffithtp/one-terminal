@@ -70,8 +70,7 @@ jobs:
             # Apple Silicon only for now, not `universal-apple-darwin` — a
             # universal build needs the one-terminal sidecar cross-compiled
             # for both aarch64 and x86_64 before desktop-agent embeds it,
-            # which is unverified. See docs/plans/07-deployment-and-hosting.md
-            # Issue 07-A.
+            # which is unverified (see scripts/build-terminal-sidecar.ts).
             target: aarch64-apple-darwin
 
     runs-on: ${{ matrix.os }}

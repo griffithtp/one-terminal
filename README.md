@@ -11,7 +11,7 @@ OneTerminal lets you compose a workspace of independent browser apps — tickers
   <a href="#-features"><strong>Features</strong></a> &nbsp;·&nbsp;
   <a href="#-architecture"><strong>Architecture</strong></a> &nbsp;·&nbsp;
   <a href="CONTRIBUTING.md"><strong>Contributing</strong></a> &nbsp;·&nbsp;
-  <a href="docs/plans/README.md"><strong>Roadmap</strong></a>
+  <a href="../../issues"><strong>Roadmap</strong></a>
 </p>
 
 ---
@@ -35,7 +35,7 @@ Buy-side and sell-side desks have spent the last decade stitching together brows
 - **Multiple Terminal instances** — each with its own dashboard list, theme, and configuration.
 - **App Menu drawer** — discover and launch widgets directly from the Terminal. The catalog **combines** the FDC3 App Directory with a local `widgets.config.json`; each entry is badged by source. Point the Terminal at any App Directory endpoint from the drawer's **App Directory** section (persisted per-user, applied live).
 - **Customisable per-app UI** — register custom widget headers and tab context-menu items per `appId` ([see widget extension points](#widget-ui-extension-points)).
-- **Hotkey-driven** — Command Palette ([Epic 06](docs/plans/06-command-palette-hotkeys.md)) is on the roadmap; keybindings configurable today.
+- **Hotkey-driven** — Command Palette is on the roadmap; keybindings configurable today.
 
 ### Interoperability (FDC3 3.0)
 
@@ -53,7 +53,7 @@ Buy-side and sell-side desks have spent the last decade stitching together brows
 ### Platform & Extensibility
 
 - **App Directory** — embedded FDC3 AppD REST API + React management UI with auth provider plugin support.
-- **Framework plugin system** ([Epic 08](docs/plans/08-plugin-system.md)) — Node.js sidecars that extend the Desktop Agent, App Directory, and browser API surface (`window.OT.plugins`).
+- **Framework plugin system** (planned) — Node.js sidecars that extend the Desktop Agent, App Directory, and browser API surface (`window.OT.plugins`).
 - **Engine plugin manifests** — register new engine families (CEF, Servo, …) via a `manifest.json` — no recompile.
 - **Scaffolder** — `npx create-one-terminal` generates a new workspace; `upgrade` migrates it to newer framework versions in place.
 
@@ -486,28 +486,13 @@ Two static registries in `apps/one-terminal/src/components/` let developers cust
 - **Custom widget headers** — `panelHeaders.tsx` — render badges, status indicators, or controls inside each tab's title bar, keyed by `appId`.
 - **Tab context-menu items** — `contextMenuItems.ts` — add per-app actions to the right-click menu (`"*"` targets all apps).
 
-Full API docs in [CLAUDE.md → Widget UI extension points](CLAUDE.md#widget-ui-extension-points). These will be superseded by `window.OT.plugins.get("contextMenu")` once the dynamic plugin system ([Epic 08](docs/plans/08-plugin-system.md)) lands — static entries will continue to work unchanged.
+Full API docs in [CLAUDE.md → Widget UI extension points](CLAUDE.md#widget-ui-extension-points). These will be superseded by `window.OT.plugins.get("contextMenu")` once the dynamic plugin system lands — static entries will continue to work unchanged.
 
 ---
 
 ## 🛣️ Roadmap
 
-Detailed implementation plans for the next development phase are in [`docs/plans/`](docs/plans/).
-
-| Plan                        | File                                                                                                 | Milestone |
-| --------------------------- | ---------------------------------------------------------------------------------------------------- | --------- |
-| 01 — Widget Headers         | [docs/plans/01-customisable-widget-headers.md](docs/plans/01-customisable-widget-headers.md)         | Phase 1   |
-| 02 — Faster Loading         | [docs/plans/02-faster-widget-loading.md](docs/plans/02-faster-widget-loading.md)                     | Phase 3   |
-| 03 — App Directory Auth     | [docs/plans/03-app-directory-roles-permissions.md](docs/plans/03-app-directory-roles-permissions.md) | Phase 1   |
-| 04 — Native App Launch      | [docs/plans/04-native-app-launch.md](docs/plans/04-native-app-launch.md)                             | Phase 3   |
-| 05 — Ticker View Chart      | [docs/plans/05-ticker-view-chart-enhancement.md](docs/plans/05-ticker-view-chart-enhancement.md)     | Phase 2   |
-| 06 — Command Palette        | [docs/plans/06-command-palette-hotkeys.md](docs/plans/06-command-palette-hotkeys.md)                 | Phase 2   |
-| 07 — Deployment             | [docs/plans/07-deployment-and-hosting.md](docs/plans/07-deployment-and-hosting.md)                   | Phase 4   |
-| 08 — Plugin System          | [docs/plans/08-plugin-system.md](docs/plans/08-plugin-system.md)                                     | Phase 5   |
-| 09 — Dashboards & Terminals | [docs/dashboards/README.md](docs/dashboards/README.md)                                               | Phase 2–5 |
-| 10 — Terminal App Menu      | [docs/plans/10-terminal-app-menu.md](docs/plans/10-terminal-app-menu.md)                             | Phase 2   |
-
-See [docs/plans/README.md](docs/plans/README.md) for execution order and effort estimates.
+Planned work is tracked in [GitHub issues](../../issues).
 
 ---
 
@@ -516,7 +501,7 @@ See [docs/plans/README.md](docs/plans/README.md) for execution order and effort 
 We welcome contributions of all sizes — bug reports, docs improvements, sample apps, engine plugins, framework plugins, and core changes.
 
 - **First time?** Read [CONTRIBUTING.md](CONTRIBUTING.md) — it walks through the development setup, scaffolder workflow, and PR conventions.
-- **Picking something up?** Browse [open issues](../../issues) or the [roadmap plans](docs/plans/) — many are scoped as discrete contributor-friendly tasks.
+- **Picking something up?** Browse [open issues](../../issues) — many are scoped as discrete contributor-friendly tasks.
 - **Building a sample trading app?** We'd love to feature it. Open a PR adding it under `apps/` or link it from the docs.
 - **Reporting security issues?** Please email the maintainers privately rather than opening a public issue.
 
@@ -553,7 +538,7 @@ Templates live at `packages/create-one-terminal/templates/`, partitioned across 
 - `templates/enterprise/` — Desktop Agent, App Directory, enterprise samples
 - `templates/standalone/` — slim Cargo/package, `widgets.config.json`
 
-Templates are regenerated from the live apps via `npm run create-migration`. See [SCAFFOLDING.md](SCAFFOLDING.md), [docs/plans/standalone-vs-enterprise-plans.md](docs/plans/standalone-vs-enterprise-plans.md), and [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow.
+Templates are regenerated from the live apps via `npm run create-migration`. See [SCAFFOLDING.md](SCAFFOLDING.md) and [CONTRIBUTING.md](CONTRIBUTING.md) for the full workflow.
 
 ---
 
@@ -573,9 +558,7 @@ one-terminal/
 │   ├── ot-core/               Shared Rust crate (engine abstraction, plugin manifests)
 │   ├── fdc3-plugin/           Browser FDC3 client (official proxy over WebSocket)
 │   └── create-one-terminal/   Scaffolder + upgrade tool
-├── docs/
-│   ├── dashboards/            Dashboards & multi-terminal planning docs
-│   └── plans/                 Roadmap and implementation plans
+├── docs/                      Conventions, FDC3 guide, signing and release notes
 ├── Cargo.toml                 Rust workspace
 └── package.json               npm workspace root
 ```

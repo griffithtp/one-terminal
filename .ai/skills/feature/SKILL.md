@@ -18,7 +18,8 @@ gate because the next step looks obvious.
 ## 1. Requirements → gate
 
 Run **requirements-analyst** with the person's request. It asks its questions in one
-round, then writes `docs/plans/NN-<name>.md` and updates the plan indexes.
+round, then writes `NN-<name>.md` in the planning folder (`AGENTS.md` → Plans) and
+updates its index.
 
 **Gate:** show the plan path, its summary and open questions. Proceed only when the
 person approves the scope and has answered the open questions.
@@ -82,5 +83,6 @@ Give the person:
 - **Verification** — commands run with results; manual checks done or pending, per OS.
 - **Review outcomes** — findings fixed, and findings deliberately left with reasons.
 - **Scaffold impact** — migration decisions (from the framework-upgrade workflow).
-- **PR description draft** — the above, condensed, linking the plan.
+- **PR description draft** — the above, condensed. Describe the behaviour and decisions
+  themselves; don't link the plan (`.work/` is never committed).
 - **What to stage** — the file list; commit only if asked.

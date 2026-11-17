@@ -54,7 +54,7 @@ Commit the source and the regenerated adapters together.
 | [rust-reviewer](agents/rust-reviewer.md)                     | Rust correctness and conventions review                                   |
 | [react-reviewer](agents/react-reviewer.md)                   | React/TypeScript UI review (state, IPC, render cost, CSP, a11y)           |
 | [test-author](agents/test-author.md)                         | Writes Rust, Vitest/RTL and FDC3 contract tests                           |
-| [requirements-analyst](agents/requirements-analyst.md)       | Turns an idea into a `docs/plans/NN-*.md` plan with issue briefs          |
+| [requirements-analyst](agents/requirements-analyst.md)       | Turns an idea into a plan (in the planning folder) with issue briefs      |
 | [architect](agents/architect.md)                             | Designs an approved plan against the codebase; checks the issue breakdown |
 | [performance-analyst](agents/performance-analyst.md)         | Measures bundle, startup, render and FDC3 costs; reports numbers          |
 

@@ -1,5 +1,4 @@
-//! Standalone App Directory server for hosted/Docker deployment
-//! (docs/plans/07-deployment-and-hosting.md Issue 07-B). Thin wrapper around
+//! Standalone App Directory server for hosted/Docker deployment. Thin wrapper around
 //! `ot-appdirectory`'s router + embedded admin UI — no Tauri deps, replaces
 //! the retired `apps/app-directory/src/index.ts` Node/Express entrypoint.
 
