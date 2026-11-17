@@ -23,6 +23,9 @@ packages/*/dist/
 .claude/settings.local.json
 local/
 *.local
+.env
+.env.*
+!.env.example
 
 # Working notes and plans (AGENTS.md → Plans) — local only, never committed
 .work/
