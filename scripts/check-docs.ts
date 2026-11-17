@@ -353,9 +353,7 @@ export function slug(heading: string): string {
   let previous: string;
   do {
     previous = text;
-    text = text
-      .replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
-      .replace(/<[^>]+>/g, "");
+    text = text.replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1").replace(/<[^>]+>/g, "");
   } while (text !== previous);
 
   return text
