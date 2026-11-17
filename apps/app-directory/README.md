@@ -226,7 +226,7 @@ Returns the engine catalog — the list of available browser runtimes per OS. Us
 }
 ```
 
-The catalog is defined in [`src/engines.ts`](src/engines.ts). Update that file to add or remove engine versions. Any `engineBindings` entry on a registered app is validated against this catalog at `POST` / `PUT` time — an unknown `(family, version)` pair returns `400`.
+The catalog is defined in [`packages/ot-appdirectory/src/engines.rs`](../../packages/ot-appdirectory/src/engines.rs). Update that file to add or remove engine versions. Any `engineBindings` entry on a registered app is validated against this catalog at `POST` / `PUT` time — an unknown `(family, version)` pair returns `400`.
 
 ---
 

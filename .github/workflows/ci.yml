@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
 
+# No job pushes or comments; keep the token read-only.
+permissions:
+  contents: read
+
 jobs:
   rust:
     # Windows (WebView2) and macOS (WKWebView) are the shipping platforms; Linux
@@ -20,9 +24,22 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # the change detection below diffs against the base commit
+          persist-credentials: false
+
+      # Build and test steps skip only for a PR that changes nothing but Markdown; the
+      # rules (and why they fail safe) are in scripts/ci-changes.mjs. Skipping steps
+      # rather than the job keeps the check names, so required checks still pass.
+      - name: Detect a Markdown-only change
+        id: changes
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: node scripts/ci-changes.mjs
 
       - name: Install Tauri system dependencies
-        if: runner.os == 'Linux'
+        if: steps.changes.outputs.code == 'true' && runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y \
@@ -33,36 +50,43 @@ jobs:
             patchelf
 
       - name: Install Rust stable
+        if: steps.changes.outputs.code == 'true'
         uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
 
       - name: Cache Rust build artifacts
+        if: steps.changes.outputs.code == 'true'
         uses: Swatinem/rust-cache@v2
 
       - name: Create stub frontend dist dirs
+        if: steps.changes.outputs.code == 'true'
         run: mkdir -p apps/one-terminal/dist apps/desktop-agent/dist apps/tauri-webview-host/dist
         # apps/app-directory/ui/dist is NOT stubbed here — packages/ot-appdirectory's
         # build.rs creates its own placeholder if missing (rust-embed needs the
         # folder to exist at compile time; see build.rs for why).
 
       - name: Check formatting
-        if: runner.os == 'Linux'
+        if: steps.changes.outputs.code == 'true' && runner.os == 'Linux'
         run: cargo fmt --check --all
 
       # Clippy type-checks the whole workspace, so no separate `cargo check` step.
       - name: Clippy
+        if: steps.changes.outputs.code == 'true'
         run: cargo clippy --workspace --all-targets -- -D warnings
 
       - name: Tests
+        if: steps.changes.outputs.code == 'true'
         run: cargo test --workspace
 
       - uses: actions/setup-node@v7
+        if: steps.changes.outputs.code == 'true'
         with:
           node-version: "22"
           cache: "npm"
 
       - name: FDC3 contract tests
+        if: steps.changes.outputs.code == 'true'
         run: |
           npm ci --ignore-scripts
           npm run test:fdc3-plugin
@@ -72,6 +96,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0 # the change detection below diffs against the base commit
+          persist-credentials: false
+
+      # Build and test steps skip only for a PR that changes nothing but Markdown; the
+      # rules (and why they fail safe) are in scripts/ci-changes.mjs. Skipping steps
+      # rather than the job keeps the check names, so required checks still pass.
+      - name: Detect a Markdown-only change
+        id: changes
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: node scripts/ci-changes.mjs
 
       - uses: actions/setup-node@v7
         with:
@@ -85,31 +122,68 @@ jobs:
         run: npm run format:check
 
       - name: Lint
+        if: steps.changes.outputs.code == 'true'
         run: npm run lint
 
       - name: AI assistant config is in sync with AGENTS.md
         run: npm run check:ai-drift
 
       - name: Typecheck
+        if: steps.changes.outputs.code == 'true'
         run: npm run typecheck
 
+      - name: Typecheck scripts
+        if: steps.changes.outputs.code == 'true'
+        run: npm run typecheck:scripts
+
+      - name: Script tests (check-docs, ci-changes)
+        if: steps.changes.outputs.code == 'true'
+        run: npm run test:scripts
+
       - name: Terminal unit tests
+        if: steps.changes.outputs.code == 'true'
         run: npm run test:terminal
 
       - name: fdc3-plugin bundle is up to date
+        if: steps.changes.outputs.code == 'true'
         run: npm -w @one-terminal/fdc3-plugin run check:bundle
 
       - name: Build app-directory
+        if: steps.changes.outputs.code == 'true'
         run: npm run build:app-directory
 
       # Vite builds only: the Desktop Agent's `build` script also compiles the Terminal sidecar.
       - name: Build Terminal and Desktop Agent UIs
+        if: steps.changes.outputs.code == 'true'
         run: |
           npm -w @one-terminal/one-terminal run build
           npm -w @one-terminal/desktop-agent exec -- vite build
 
       - name: Bundle budgets
+        if: steps.changes.outputs.code == 'true'
         run: npm run check:bundle-size
 
       - name: Build scaffolder
+        if: steps.changes.outputs.code == 'true'
         run: npm run build:scaffolder
+
+  # Separate from build and test so stale docs never block verifying the code; required
+  # for merge. The feature workflow's docs step (docs-steward) turns it green.
+  docs:
+    name: Docs match the code
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: check:docs
+        run: npm run check:docs

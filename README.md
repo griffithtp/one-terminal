@@ -11,7 +11,7 @@ OneTerminal lets you compose a workspace of independent browser apps — tickers
   <a href="#-features"><strong>Features</strong></a> &nbsp;·&nbsp;
   <a href="#-architecture"><strong>Architecture</strong></a> &nbsp;·&nbsp;
   <a href="CONTRIBUTING.md"><strong>Contributing</strong></a> &nbsp;·&nbsp;
-  <a href="../../issues"><strong>Roadmap</strong></a>
+  <a href="https://github.com/griffithtp/one-terminal/issues"><strong>Roadmap</strong></a>
 </p>
 
 ---
@@ -34,7 +34,7 @@ Buy-side and sell-side desks have spent the last decade stitching together brows
 - **Tiled dashboards with tabs** — drag, split, stack, and rename tabs. Persist multiple dashboards per Terminal and switch between them with one click.
 - **Multiple Terminal instances** — each with its own dashboard list, theme, and configuration.
 - **App Menu drawer** — discover and launch widgets directly from the Terminal. The catalog **combines** the FDC3 App Directory with a local `widgets.config.json`; each entry is badged by source. Point the Terminal at any App Directory endpoint from the drawer's **App Directory** section (persisted per-user, applied live).
-- **Customisable per-app UI** — register custom widget headers and tab context-menu items per `appId` ([see widget extension points](#widget-ui-extension-points)).
+- **Customisable per-app UI** — register custom widget headers and tab context-menu items per `appId` ([see widget extension points](#-widget-ui-extension-points)).
 - **Hotkey-driven** — Command Palette is on the roadmap; keybindings configurable today.
 
 ### Interoperability (FDC3 3.0)
@@ -251,7 +251,7 @@ The Desktop Agent reads `agent.config.json` (bundled as a resource) and applies 
 
 > The Terminal's widget catalog is the **union** of the App Directory (`appDirectoryUrl`) and the local `widgets.config.json` — not an either/or switch. An empty `appDirectoryUrl` disables the remote source; a missing `widgets.config.json` disables the local source. The legacy `OT_WIDGET_SOURCE` / `widgetSource` field is deprecated and no longer selects between sources (retained only for back-compat deserialization).
 
-For the full list (App Directory auth, native-app allowlists, engine cache root), see [CLAUDE.md → Environment variables](CLAUDE.md#environment-variables-expanded).
+For the full list (App Directory auth, native-app allowlists, engine cache root), see [AGENTS.md → Environment variables](AGENTS.md#environment-variables).
 
 ---
 
@@ -486,13 +486,13 @@ Two static registries in `apps/one-terminal/src/components/` let developers cust
 - **Custom widget headers** — `panelHeaders.tsx` — render badges, status indicators, or controls inside each tab's title bar, keyed by `appId`.
 - **Tab context-menu items** — `contextMenuItems.ts` — add per-app actions to the right-click menu (`"*"` targets all apps).
 
-Full API docs in [CLAUDE.md → Widget UI extension points](CLAUDE.md#widget-ui-extension-points). These will be superseded by `window.OT.plugins.get("contextMenu")` once the dynamic plugin system lands — static entries will continue to work unchanged.
+Full API docs in [apps/one-terminal/AGENTS.md → Widget UI extension points](apps/one-terminal/AGENTS.md#widget-ui-extension-points). These will be superseded by `window.OT.plugins.get("contextMenu")` once the dynamic plugin system lands — static entries will continue to work unchanged.
 
 ---
 
 ## 🛣️ Roadmap
 
-Planned work is tracked in [GitHub issues](../../issues).
+Planned work is tracked in [GitHub issues](https://github.com/griffithtp/one-terminal/issues).
 
 ---
 
@@ -501,7 +501,7 @@ Planned work is tracked in [GitHub issues](../../issues).
 We welcome contributions of all sizes — bug reports, docs improvements, sample apps, engine plugins, framework plugins, and core changes.
 
 - **First time?** Read [CONTRIBUTING.md](CONTRIBUTING.md) — it walks through the development setup, scaffolder workflow, and PR conventions.
-- **Picking something up?** Browse [open issues](../../issues) — many are scoped as discrete contributor-friendly tasks.
+- **Picking something up?** Browse [open issues](https://github.com/griffithtp/one-terminal/issues) — many are scoped as discrete contributor-friendly tasks.
 - **Building a sample trading app?** We'd love to feature it. Open a PR adding it under `apps/` or link it from the docs.
 - **Reporting security issues?** Please email the maintainers privately rather than opening a public issue.
 

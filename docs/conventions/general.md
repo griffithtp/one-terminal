@@ -13,6 +13,7 @@ conventions docs — this file doesn't repeat them, it links to them.
 | Security               | [security.md](security.md)             |
 | FDC3                   | [fdc3.md](fdc3.md)                     |
 | Scaffolder / templates | [scaffolder.md](scaffolder.md)         |
+| Documentation          | [docs.md](docs.md)                     |
 
 Rules marked **(new code)** describe where the codebase is heading; existing code that
 doesn't follow them yet isn't a defect, but don't add more of it.
@@ -149,6 +150,7 @@ Everything crossing IPC is a typed contract; both sides change in the same commi
   unowned TODO is a bug report nobody will read.
 - **Docs change with the code.** A change to behaviour, config, env vars, commands or
   conventions updates the matching `AGENTS.md` or conventions doc in the same PR.
+  What counts, where each fact lives and how docs land: [docs.md](docs.md).
 
 ## Git and pull requests
 

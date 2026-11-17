@@ -156,6 +156,9 @@ const ROOT_PACKAGE_SCRIPTS_OMIT = new Set([
   "sync:ai",
   "check:ai-drift",
   "check:bundle-size",
+  "check:docs",
+  "test:scripts",
+  "typecheck:scripts",
   "build:fdc3-plugin",
   "test:fdc3-plugin",
   // sample-widget is standalone-only; its dev script lives in the

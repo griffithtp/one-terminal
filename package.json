@@ -46,6 +46,9 @@
     "sync:ai": "npx tsx scripts/sync-ai-config.ts",
     "check:ai-drift": "npx tsx scripts/sync-ai-config.ts --check",
     "check:bundle-size": "npx tsx scripts/check-bundle-size.ts",
+    "check:docs": "npx tsx scripts/check-docs.ts",
+    "test:scripts": "npx tsx --test scripts/check-docs.test.ts scripts/ci-changes.test.ts",
+    "typecheck:scripts": "tsc -p scripts",
     "fmt:rust": "cargo fmt --all",
     "lint:rust": "cargo fmt --check --all",
     "prepare": "lefthook install"

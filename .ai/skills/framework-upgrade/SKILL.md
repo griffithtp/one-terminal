@@ -19,6 +19,11 @@ npm run lint && npm run typecheck
 
 Fix failures first — templates extracted from broken source ship broken workspaces.
 
+If the change affects docs and the feature workflow's step 5b hasn't run, run the
+**docs-steward** agent now (the code is verified at this point). README edits in the
+five template READMEs (`apps/one-terminal`, `apps/desktop-agent`, `apps/app-directory`,
+`apps/electron-host`, `packages/fdc3-plugin`) then go into the same template extraction.
+
 ## 2. Check scaffold impact
 
 ```sh
