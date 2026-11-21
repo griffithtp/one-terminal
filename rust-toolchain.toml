@@ -1,0 +1,7 @@
+# Pins the Rust toolchain for local builds, cloud agents and CI so clippy's lint
+# set is the same everywhere. Bump it here and in the
+# `dtolnay/rust-toolchain@<version>` steps in .github/workflows/ together.
+[toolchain]
+channel = "1.94.0"
+components = ["rustfmt", "clippy"]
+profile = "minimal"

@@ -258,10 +258,9 @@ fn resolve_otlp(
                 join_signal_path(&base, path),
                 "env OTEL_EXPORTER_OTLP_ENDPOINT".to_string(),
             )
-        } else if let Some(base) = cfg.otlp.endpoint.clone().filter(|v| !v.trim().is_empty()) {
-            (join_signal_path(&base, path), "config".to_string())
         } else {
-            return None;
+            let base = cfg.otlp.endpoint.clone().filter(|v| !v.trim().is_empty())?;
+            (join_signal_path(&base, path), "config".to_string())
         };
         match check_endpoint(&url) {
             Ok(note) => {

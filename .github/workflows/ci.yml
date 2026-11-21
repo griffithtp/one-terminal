@@ -49,9 +49,9 @@ jobs:
             librsvg2-dev \
             patchelf
 
-      - name: Install Rust stable
+      - name: Install Rust (pinned in rust-toolchain.toml)
         if: steps.changes.outputs.code == 'true'
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.94.0
         with:
           components: rustfmt, clippy
 
