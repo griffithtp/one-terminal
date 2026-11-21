@@ -101,7 +101,7 @@ fn last_background() -> &'static Mutex<(u8, u8, u8)> {
 
 fn set_background(win: &Window, (r, g, b): (u8, u8, u8)) {
     if let Err(e) = win.set_background_color(Some(tauri::window::Color(r, g, b, 255))) {
-        eprintln!("[popout] set background on {}: {e}", win.label());
+        tracing::warn!("set background on {}: {e}", win.label());
     }
 }
 
@@ -409,8 +409,8 @@ pub fn open_popout(
     }
     install_listeners(app, &popout, &panel, &tree);
     show_when_ready(app, &popout);
-    eprintln!(
-        "[popout] open {popout} (panel={panel}) in {} ms",
+    tracing::info!(
+        "open {popout} (panel={panel}) in {} ms",
         started.elapsed().as_millis()
     );
     Ok(popout)
@@ -545,7 +545,7 @@ fn install_listeners(app: &AppHandle, popout: &str, panel: &str, tree: &LayoutTr
             tauri::async_runtime::spawn(async move {
                 let manager = app.state::<TerminalManager>();
                 if let Err(e) = dock_panel(&app, &manager, &panel) {
-                    eprintln!("[popout] dock on close failed for {panel}: {e}");
+                    tracing::warn!("dock on close failed for {panel}: {e}");
                 }
             });
         }
@@ -633,7 +633,7 @@ fn urlencode(s: &str) -> String {
 pub fn stash_popouts(app: &AppHandle, manager: &TerminalManager, terminal: &TerminalState) {
     for (popout, panel) in manager.popouts_of(&terminal.id) {
         if let Err(e) = reparent_back(app, manager, &terminal.id, &popout, &panel) {
-            eprintln!("[popout] stash {panel}: {e}");
+            tracing::warn!("stash {panel}: {e}");
             destroy_popout(app, manager, &popout);
         }
         crate::layout::reflow::park_label_offscreen(app, &panel);
@@ -667,7 +667,7 @@ pub fn close_terminal_popouts(app: &AppHandle, manager: &TerminalManager, owner:
         if !label.starts_with(&prefix) || closed.contains(&label) {
             continue;
         }
-        eprintln!("[popout] closing orphaned popout {label}");
+        tracing::info!("closing orphaned popout {label}");
         for wv in win.webviews() {
             let _ = wv.close();
         }
@@ -712,12 +712,12 @@ pub fn restore_popouts(app: &AppHandle, manager: &TerminalManager, terminal: &Te
         };
         match open_popout(app, manager, terminal, &floating, source) {
             Ok(_) => opened += 1,
-            Err(e) => eprintln!("[popout] restore {}: {e}", floating.label),
+            Err(e) => tracing::warn!("restore {}: {e}", floating.label),
         }
     }
     if opened > 0 {
-        eprintln!(
-            "[popout] restored {opened} popout(s) for {} in {} ms",
+        tracing::info!(
+            "restored {opened} popout(s) for {} in {} ms",
             terminal.id,
             started.elapsed().as_millis()
         );
@@ -803,10 +803,7 @@ pub fn dock_panel(app: &AppHandle, manager: &TerminalManager, label: &str) -> Re
     if let Some(w) = app.get_window(&terminal.id) {
         let _ = w.set_focus();
     }
-    eprintln!(
-        "[popout] dock {label} in {} ms",
-        started.elapsed().as_millis()
-    );
+    tracing::info!("dock {label} in {} ms", started.elapsed().as_millis());
     Ok(())
 }
 
@@ -1114,7 +1111,7 @@ fn sync_window_state(app: &AppHandle, win: &Window, panel: &str, tree: &LayoutTr
         }
         Next::Forget => {
             suspended().lock().unwrap().remove(&popout);
-            eprintln!("[popout] {popout} moved while maximised: stays unglued");
+            tracing::debug!("{popout} moved while maximised: stays unglued");
         }
         Next::Nothing => {
             if minimized {
@@ -1323,7 +1320,7 @@ pub fn wm_popout_drag_end(
     if !drag.contacts.is_empty() {
         if let Some(group) = tree.glue(&panels) {
             notify_panels(&app, &manager, &terminal, &tree.group_members(&group));
-            eprintln!("[popout] glued {} popout(s) into {group}", panels.len());
+            tracing::debug!("glued {} popout(s) into {group}", panels.len());
         }
     }
     for p in &moving {

@@ -17,6 +17,11 @@ tauri-build = { version = "2", features = [] }
 tauri      = { workspace = true }
 serde      = { workspace = true }
 serde_json = { workspace = true }
+# Local log files only (no `otlp` feature): this thin per-window host carries no
+# exporter, TLS stack or export threads. Its log lines still carry the
+# TRACEPARENT trace id of the span that launched it.
+ot-telemetry = { workspace = true }
+tracing      = { workspace = true }
 
 [lints]
 workspace = true

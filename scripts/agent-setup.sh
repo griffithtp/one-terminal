@@ -31,7 +31,8 @@ if ! command -v cargo >/dev/null 2>&1; then
   # shellcheck source=/dev/null
   . "$HOME/.cargo/env"
 fi
-rustup component add rustfmt clippy
+# Installs the toolchain and components pinned in rust-toolchain.toml.
+rustup toolchain install
 
 step "Node.js"
 node_major="$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)"

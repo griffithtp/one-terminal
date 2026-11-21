@@ -1,0 +1,49 @@
+[package]
+name = "ot-telemetry"
+version = "0.1.0"
+description = "Logging, tracing and opt-in OpenTelemetry export for OneTerminal processes — no Tauri, no FDC3"
+edition = "2021"
+publish = false
+
+[features]
+default = ["otlp"]
+# OTLP/HTTP export of traces, metrics and logs. Without it the crate writes
+# local log files only and contains no network code — `tauri-webview-host`
+# builds it that way.
+otlp = [
+    "dep:opentelemetry",
+    "dep:opentelemetry_sdk",
+    "dep:opentelemetry-otlp",
+    "dep:opentelemetry-http",
+    "dep:tracing-opentelemetry",
+    "dep:opentelemetry-appender-tracing",
+    "dep:async-trait",
+    "dep:reqwest",
+]
+
+[dependencies]
+serde              = { workspace = true }
+serde_json         = { workspace = true }
+tracing            = { workspace = true }
+tracing-subscriber = { workspace = true }
+tracing-appender   = { workspace = true }
+tracing-log        = { workspace = true }
+
+opentelemetry                  = { workspace = true, optional = true }
+opentelemetry_sdk              = { workspace = true, optional = true }
+opentelemetry-otlp             = { workspace = true, optional = true }
+opentelemetry-http             = { workspace = true, optional = true }
+tracing-opentelemetry          = { workspace = true, optional = true }
+opentelemetry-appender-tracing = { workspace = true, optional = true }
+async-trait                    = { workspace = true, optional = true }
+# The exporter's own reqwest 0.13 client would switch rustls to aws-lc-rs for
+# the whole workspace; reuse the workspace's reqwest 0.12 (ring) instead.
+reqwest = { workspace = true, optional = true, features = ["blocking"] }
+
+[dev-dependencies]
+opentelemetry_sdk = { workspace = true, features = ["testing"] }
+# Emit `log`-crate records in tests (tao/wry/tauri log through it).
+log = "0.4"
+
+[lints]
+workspace = true

@@ -6,7 +6,11 @@
 //!   3. Environment variable overrides (`OT_TITLE`, `OT_APP_DIR_URL`, `OT_CATALOG_URL`)
 //!
 //! Integrators only need to ship a `terminal.config.json` — no code changes required.
+//!
+//! Loading is quiet ([`TerminalConfig::load_quiet`]): telemetry's settings come
+//! from this file, so its messages are logged once telemetry is initialised.
 
+use ot_telemetry::TelemetryConfig;
 use serde::{Deserialize, Serialize};
 
 // ── Sub-structs ───────────────────────────────────────────────────────────────
@@ -172,6 +176,12 @@ pub struct TerminalConfig {
     /// frontend (hit-testing) via the `wm_config` IPC command.
     #[serde(default)]
     pub layout: LayoutConfig,
+    /// Log files and opt-in OTLP export. Environment overrides (`OT_LOG`,
+    /// `OT_LOG_DIR`, `OT_OTLP_ENDPOINT`, standard `OTEL_*`) are applied by
+    /// `ot_telemetry::resolve`, not here. Never serialized: `wm_config` sends
+    /// this struct to the frontend, and `otlp.headers` may hold credentials.
+    #[serde(default, skip_serializing)]
+    pub telemetry: TelemetryConfig,
 }
 
 impl Default for TerminalConfig {
@@ -185,6 +195,34 @@ impl Default for TerminalConfig {
             fdc3: Fdc3Config::default(),
             window: WindowConfig::default(),
             layout: LayoutConfig::default(),
+            telemetry: TelemetryConfig::default(),
+        }
+    }
+}
+
+/// Messages produced while loading the config, held until logging is set up.
+#[derive(Debug, Default)]
+pub struct LoadReport {
+    lines: Vec<(bool, String)>,
+}
+
+impl LoadReport {
+    fn info(&mut self, msg: String) {
+        self.lines.push((false, msg));
+    }
+
+    fn warn(&mut self, msg: String) {
+        self.lines.push((true, msg));
+    }
+
+    /// Emit the collected messages through `tracing`.
+    pub fn log(&self) {
+        for (is_warning, msg) in &self.lines {
+            if *is_warning {
+                tracing::warn!("{msg}");
+            } else {
+                tracing::info!("{msg}");
+            }
         }
     }
 }
@@ -192,13 +230,15 @@ impl Default for TerminalConfig {
 impl TerminalConfig {
     /// Load config from `terminal.config.json` next to the binary (dev) or in
     /// the Tauri resource directory (release), then apply env var overrides.
-    pub fn load() -> Self {
-        let mut cfg = Self::from_file().unwrap_or_default();
-        cfg.apply_env_overrides();
-        cfg
+    /// Nothing is logged yet — call [`LoadReport::log`] after telemetry init.
+    pub fn load_quiet() -> (Self, LoadReport) {
+        let mut report = LoadReport::default();
+        let mut cfg = Self::from_file(&mut report).unwrap_or_default();
+        cfg.apply_env_overrides(&mut report);
+        (cfg, report)
     }
 
-    fn from_file() -> Option<Self> {
+    fn from_file(report: &mut LoadReport) -> Option<Self> {
         // In dev mode the binary sits at target/debug/one-terminal, so look
         // one level up toward the src-tauri directory for the resources folder.
         let search_paths: Vec<std::path::PathBuf> = {
@@ -223,15 +263,15 @@ impl TerminalConfig {
                 match std::fs::read_to_string(path) {
                     Ok(text) => match serde_json::from_str::<TerminalConfig>(&text) {
                         Ok(cfg) => {
-                            println!("[config] loaded from {}", path.display());
+                            report.info(format!("config loaded from {}", path.display()));
                             return Some(cfg);
                         }
                         Err(e) => {
-                            eprintln!("[config] parse error in {}: {e}", path.display());
+                            report.warn(format!("config parse error in {}: {e}", path.display()));
                         }
                     },
                     Err(e) => {
-                        eprintln!("[config] read error at {}: {e}", path.display());
+                        report.warn(format!("config read error at {}: {e}", path.display()));
                     }
                 }
             }
@@ -240,7 +280,7 @@ impl TerminalConfig {
         None
     }
 
-    fn apply_env_overrides(&mut self) {
+    fn apply_env_overrides(&mut self, report: &mut LoadReport) {
         if let Ok(v) = std::env::var("OT_TITLE") {
             self.title = v;
         }
@@ -254,7 +294,7 @@ impl TerminalConfig {
             match v.to_lowercase().as_str() {
                 "local" => self.widget_source = WidgetSourceKind::Local,
                 "appd" => self.widget_source = WidgetSourceKind::Appd,
-                other => eprintln!("[config] unknown OT_WIDGET_SOURCE value: {other}"),
+                other => report.warn(format!("config: unknown OT_WIDGET_SOURCE value: {other}")),
             }
         }
         if let Ok(v) = std::env::var("OT_WIDGETS_CONFIG_PATH") {
@@ -289,5 +329,29 @@ pub fn append_initial_channel(base_script: &str, channel_id: Option<&str>) -> St
             format!("{base_script}\nwindow.OT_FDC3_INITIAL_CHANNEL = {encoded};")
         }
         None => base_script.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod telemetry_tests {
+    use super::*;
+
+    #[test]
+    fn telemetry_never_reaches_the_frontend() {
+        let mut cfg: TerminalConfig = serde_json::from_str(
+            r#"{"title":"T","appDirectoryUrl":"a","engineCatalogUrl":"e",
+                "telemetry":{"otlp":{"endpoint":"https://c","headers":{"authorization":"Bearer s3cret"}}}}"#,
+        )
+        .expect("config with telemetry parses");
+        assert_eq!(
+            cfg.telemetry.otlp.headers.0["authorization"],
+            "Bearer s3cret"
+        );
+        cfg.title = "T".into();
+        let json = serde_json::to_string(&cfg).unwrap();
+        assert!(
+            !json.contains("telemetry") && !json.contains("s3cret"),
+            "{json}"
+        );
     }
 }

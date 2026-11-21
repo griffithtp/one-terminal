@@ -23,7 +23,7 @@ Buy-side and sell-side desks have spent the last decade stitching together brows
 - **Ship a branded trading workspace in days, not quarters** — scaffold a workspace with `create-one-terminal`, wire your apps to the App Directory, done.
 - **Run your existing browser apps unchanged** — drop in any HTTP(S) URL; FDC3 channels and intents work via a small `fdc3-plugin.js` script.
 - **Choose the right engine per app** — system WebView for native footprint, Electron for compatibility, or a custom engine via the plugin system.
-- **Stay in control** — everything is open source, runs locally, has no telemetry, and is built on a tiny Rust + TypeScript codebase you can read in an afternoon.
+- **Stay in control** — everything is open source, runs locally, sends no telemetry unless you configure an OpenTelemetry collector, and is built on a tiny Rust + TypeScript codebase you can read in an afternoon.
 
 ---
 

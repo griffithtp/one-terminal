@@ -120,15 +120,15 @@ fn build_agents(cfg: &Fdc3Config) -> Vec<AgentEntry> {
             url,
         } = p;
         if [LOCAL_ID, CONFIG_ID, NONE_ID, ENV_ID].contains(&id.as_str()) {
-            eprintln!("[agent] fdc3.agents: id '{id}' is reserved — skipped");
+            tracing::warn!("fdc3.agents: id '{id}' is reserved — skipped");
             continue;
         }
         if agents.iter().any(|a| &a.id == id) {
-            eprintln!("[agent] fdc3.agents: duplicate id '{id}' — skipped");
+            tracing::warn!("fdc3.agents: duplicate id '{id}' — skipped");
             continue;
         }
         if url.trim().is_empty() {
-            eprintln!("[agent] fdc3.agents: '{id}' has no url — skipped");
+            tracing::warn!("fdc3.agents: '{id}' has no url — skipped");
             continue;
         }
         agents.push(AgentEntry {
@@ -170,10 +170,10 @@ fn default_selection(cfg: &Fdc3Config, agents: &[AgentEntry]) -> (String, Select
     if let Some(id) = &cfg.default_agent {
         match agents.iter().find(|a| &a.id == id) {
             Some(a) if a.supported => return (a.id.clone(), SelectionSource::Config),
-            Some(_) => eprintln!(
-                "[agent] fdc3.defaultAgent '{id}' uses an unsupported connector — ignored"
-            ),
-            None => eprintln!("[agent] fdc3.defaultAgent '{id}' is not in fdc3.agents — ignored"),
+            Some(_) => {
+                tracing::warn!("fdc3.defaultAgent '{id}' uses an unsupported connector — ignored");
+            }
+            None => tracing::warn!("fdc3.defaultAgent '{id}' is not in fdc3.agents — ignored"),
         }
     }
     match cfg.agent_url.as_deref() {
@@ -354,7 +354,7 @@ impl AgentSelection {
             }
         }
         if let Some(n) = &resolved.notice {
-            eprintln!("[agent] {n}");
+            tracing::warn!("{n}");
         }
         let sel = Self {
             inner: Arc::new(RwLock::new(resolved)),
@@ -367,19 +367,19 @@ impl AgentSelection {
     fn log(&self) {
         let r = self.inner.read().unwrap();
         match r.selected() {
-            Some(a) if a.id == LOCAL_ID => println!(
-                "[agent] Desktop Agent: {} = {PLUGIN_DEFAULT_URL} (fdc3-plugin default; source: {})",
+            Some(a) if a.id == LOCAL_ID => tracing::info!(
+                "Desktop Agent: {} = {PLUGIN_DEFAULT_URL} (fdc3-plugin default; source: {})",
                 a.name,
                 r.source.label()
             ),
-            Some(a) if a.url.is_empty() => eprintln!(
-                "[agent] Desktop Agent: none — FDC3 disabled for all widgets (source: {})",
+            Some(a) if a.url.is_empty() => tracing::warn!(
+                "Desktop Agent: none — FDC3 disabled for all widgets (source: {})",
                 r.source.label()
             ),
-            Some(a) => println!(
-                "[agent] Desktop Agent: {} = {} (source: {})",
+            Some(a) => tracing::info!(
+                "Desktop Agent: {} = {} (source: {})",
                 a.name,
-                a.url,
+                ot_telemetry::redact::url(&a.url),
                 r.source.label()
             ),
             None => {}
@@ -407,10 +407,7 @@ impl AgentSelection {
                 },
             };
             if let Err(e) = result {
-                eprintln!(
-                    "[agent] could not save selection to {}: {e}",
-                    path.display()
-                );
+                tracing::warn!("could not save selection to {}: {e}", path.display());
             }
         }
         self.log();
@@ -423,7 +420,7 @@ fn read_saved(path: &Path) -> Option<String> {
     match serde_json::from_str::<SavedSelection>(&text) {
         Ok(s) => Some(s.agent_id),
         Err(e) => {
-            eprintln!("[agent] ignoring unreadable {}: {e}", path.display());
+            tracing::warn!("ignoring unreadable {}: {e}", path.display());
             None
         }
     }
@@ -488,7 +485,10 @@ fn recreate_webviews(terminal: &Arc<TerminalState>, app: &AppHandle) -> Result<(
             }
             for (label, url, channel) in &panels {
                 let Ok(parsed) = url.parse::<tauri::Url>() else {
-                    eprintln!("[agent] recreate '{label}': invalid url '{url}'");
+                    tracing::warn!(
+                        "recreate '{label}': invalid url '{}'",
+                        ot_telemetry::redact::url(url)
+                    );
                     continue;
                 };
                 if let Some(wv) = app_main.get_webview(label) {
@@ -561,7 +561,7 @@ pub async fn wm_agent_select(
     if changed {
         for terminal in manager.list() {
             if let Err(e) = recreate_webviews(&terminal, &app) {
-                eprintln!("[agent] '{}': recreating webviews failed: {e}", terminal.id);
+                tracing::warn!("'{}': recreating webviews failed: {e}", terminal.id);
             }
         }
     }

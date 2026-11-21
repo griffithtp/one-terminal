@@ -488,8 +488,8 @@ impl TerminalRegistry {
             }
             match status {
                 Ok(s) if s.success() => {}
-                Ok(s) => eprintln!("[cda] one-terminal (pid {pid}) exited unexpectedly: {s}"),
-                Err(e) => eprintln!("[cda] one-terminal (pid {pid}) wait() failed: {e}"),
+                Ok(s) => tracing::warn!("one-terminal (pid {pid}) exited unexpectedly: {s}"),
+                Err(e) => tracing::warn!("one-terminal (pid {pid}) wait() failed: {e}"),
             }
         });
     }
@@ -538,9 +538,9 @@ fn spawn_wm_restore(registry: &TerminalRegistry) {
     match locate_wm_binary() {
         Ok(bin) => match wm_command(&bin).spawn() {
             Ok(child) => registry.track(child),
-            Err(e) => eprintln!("[cda/tray] Failed to spawn window-manager: {e}"),
+            Err(e) => tracing::error!("Failed to spawn window-manager: {e}"),
         },
-        Err(e) => eprintln!("[cda/tray] {e}"),
+        Err(e) => tracing::error!("{e}"),
     }
 }
 
@@ -642,9 +642,9 @@ fn spawn_wm_new_terminal(registry: &TerminalRegistry) {
     match locate_wm_binary() {
         Ok(bin) => match wm_command(&bin).env("OT_NEW_TERMINAL", "1").spawn() {
             Ok(child) => registry.track(child),
-            Err(e) => eprintln!("[cda/tray] Failed to spawn new Terminal: {e}"),
+            Err(e) => tracing::error!("Failed to spawn new Terminal: {e}"),
         },
-        Err(e) => eprintln!("[cda/tray] {e}"),
+        Err(e) => tracing::error!("{e}"),
     }
 }
 
@@ -691,7 +691,7 @@ async fn launch_app_from_tray(app: AppHandle, app_id: String) {
 
     let apps = app.state::<AppDirectoryCache>().list_all().await;
     let Some(record) = apps.into_iter().find(|r| r.app_id == app_id) else {
-        eprintln!("[cda/tray] App '{app_id}' not found in directory");
+        tracing::warn!("App '{app_id}' not found in directory");
         return;
     };
 
@@ -714,7 +714,7 @@ async fn launch_app_from_tray(app: AppHandle, app_id: String) {
         {
             Ok(e) => Some(e),
             Err(e) => {
-                eprintln!("[cda/tray] Engine ensure failed for '{app_id}': {e}");
+                tracing::error!("Engine ensure failed for '{app_id}': {e}");
                 return;
             }
         }
@@ -731,10 +731,10 @@ async fn launch_app_from_tray(app: AppHandle, app_id: String) {
     ) {
         Ok(plan) => {
             if let Err(e) = execute_plan(&app, &label, plan).await {
-                eprintln!("[cda/tray] Launch failed for '{app_id}': {e}");
+                tracing::error!("Launch failed for '{app_id}': {e}");
             }
         }
-        Err(e) => eprintln!("[cda/tray] Plan failed for '{app_id}': {e}"),
+        Err(e) => tracing::error!("Plan failed for '{app_id}': {e}"),
     }
 }
 
@@ -754,8 +754,8 @@ fn validate_electron_override() {
         if path.is_dir() && path.join("main.js").is_file() {
             path
         } else {
-            eprintln!(
-                "[desktop-agent] warning: OT_ELECTRON_HOST_OVERRIDE={raw} is not a valid \
+            tracing::warn!(
+                "OT_ELECTRON_HOST_OVERRIDE={raw} is not a valid \
                  electron-host directory (expected main.js inside)\n  \
                  Fix: run `npm run setup:electron-host` from the workspace root, then retry."
             );
@@ -770,16 +770,23 @@ fn validate_electron_override() {
         version: "system".to_string(),
     };
     if let Err(msg) = ot_core::electron_host::locate_electron_binary(&probe, &cache_root, &shell) {
-        eprintln!("[desktop-agent] warning: Electron binary not available — {msg}");
+        tracing::warn!("Electron binary not available — {msg}");
     }
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let cfg = AgentConfig::load();
+    let (cfg, config_report) = AgentConfig::load_quiet();
+    let resolved = ot_telemetry::resolve(&cfg.telemetry, "desktop-agent", &|key| {
+        std::env::var(key).ok()
+    });
+    let mut telemetry = ot_telemetry::init(&resolved, env!("CARGO_PKG_VERSION"));
+    telemetry.install_panic_hook();
+    config_report.log();
 
     if let Err(msg) = cfg.ports.check_availability() {
-        eprintln!("[desktop-agent] {msg}");
+        tracing::error!("{msg}");
+        telemetry.shutdown();
         std::process::exit(1);
     }
 
@@ -820,15 +827,18 @@ pub fn run() {
                 tauri::async_runtime::spawn(async move {
                     match tokio::net::TcpListener::bind(("127.0.0.1", port)).await {
                         Ok(listener) => {
-                            println!("[desktop-agent] App Directory (embedded) listening on 127.0.0.1:{port}");
-                            let router = ot_appdirectory::router_with_ui(ot_appdirectory::AppStore::new());
+                            tracing::info!(
+                                "App Directory (embedded) listening on 127.0.0.1:{port}"
+                            );
+                            let router =
+                                ot_appdirectory::router_with_ui(ot_appdirectory::AppStore::new());
                             if let Err(e) = axum::serve(listener, router).await {
-                                eprintln!("[desktop-agent] App Directory server error: {e}");
+                                tracing::error!("App Directory server error: {e}");
                             }
                         }
                         Err(e) => {
-                            eprintln!(
-                                "[desktop-agent] App Directory (embedded) skipped — port {port} unavailable: {e}"
+                            tracing::warn!(
+                                "App Directory (embedded) skipped — port {port} unavailable: {e}"
                             );
                         }
                     }
@@ -854,22 +864,22 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 match adc.refresh().await {
                     Ok(n) => {
-                        println!("[cda] App Directory: {n} app(s) loaded at startup");
+                        tracing::info!("App Directory: {n} app(s) loaded at startup");
                         if let Ok(menu) = build_tray_menu(&app_handle_tray).await {
                             if let Some(tray) = app_handle_tray.tray_by_id("main") {
                                 let _ = tray.set_menu(Some(menu));
                             }
                         }
                     }
-                    Err(e) => eprintln!("[cda] App Directory unavailable at startup: {e}"),
+                    Err(e) => tracing::warn!("App Directory unavailable at startup: {e}"),
                 }
             });
 
             // Initial engine catalog fetch (same non-fatal policy).
             tauri::async_runtime::spawn(async move {
                 match ec.refresh().await {
-                    Ok(n) => println!("[cda] Engine catalog: {n} entry/entries loaded at startup"),
-                    Err(e) => eprintln!("[cda] Engine catalog unavailable at startup: {e}"),
+                    Ok(n) => tracing::info!("Engine catalog: {n} entry/entries loaded at startup"),
+                    Err(e) => tracing::warn!("Engine catalog unavailable at startup: {e}"),
                 }
             });
 
@@ -985,6 +995,11 @@ pub fn run() {
             engines::commands::engine_list_installed,
             engines::commands::engine_ensure,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running OneTerminal Desktop Agent");
+        .build(tauri::generate_context!())
+        .expect("error while building OneTerminal Desktop Agent")
+        .run(move |_app, event| {
+            if let tauri::RunEvent::Exit = event {
+                telemetry.shutdown();
+            }
+        });
 }

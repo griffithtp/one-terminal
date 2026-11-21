@@ -160,7 +160,7 @@ fn schedule_position_save(
         tokio::time::sleep(std::time::Duration::from_millis(500)).await;
         if let Ok(data_dir) = app.path().app_data_dir() {
             if let Err(e) = persist::update_window_config(&tid, &cfg, &data_dir) {
-                eprintln!("[wm] save window position for {tid}: {e}");
+                tracing::warn!("save window position for {tid}: {e}");
             }
         }
     }));
@@ -217,8 +217,8 @@ pub fn load_persisted_terminals(manager: &TerminalManager, app: &AppHandle, pool
     };
     for id in persist::list_saved_terminal_ids(&data_dir) {
         match restore_terminal(&id, manager, app, pool_size) {
-            Ok(info) => eprintln!("[wm] restored terminal: {} ({})", info.id, info.name),
-            Err(e) => eprintln!("[wm] failed to restore terminal {id}: {e}"),
+            Ok(info) => tracing::info!("restored terminal: {} ({})", info.id, info.name),
+            Err(e) => tracing::warn!("failed to restore terminal {id}: {e}"),
         }
     }
 }
@@ -293,7 +293,7 @@ fn spawn_or_restore(
         // Load dashboards and panels from disk for this terminal ID.
         let t = LayoutTree::new(label, init_w, init_h, manager.dashboards());
         if let Err(e) = t.init(app) {
-            eprintln!("[restore_terminal] init failed for {label}: {e}");
+            tracing::error!("init failed for {label}: {e}");
         }
 
         // A terminal implicitly holds a lock on its own active dashboard at
@@ -303,8 +303,8 @@ fn spawn_or_restore(
         let active_id = t.active_dashboard_id();
         if !active_id.is_empty() {
             if let Err(owner) = manager.acquire_dashboard_lock(&active_id, label) {
-                eprintln!(
-                    "[restore_terminal] '{label}' startup: dashboard already locked by \
+                tracing::warn!(
+                    "'{label}' startup: dashboard already locked by \
                      '{owner}', falling back to no active dashboard"
                 );
                 t.clear_active_for_lock_conflict();
@@ -316,7 +316,7 @@ fn spawn_or_restore(
         // be loaded on a future restore pass, then start with a clean slate.
         if let Ok(data_dir) = app.path().app_data_dir() {
             if let Err(e) = crate::layout::persist::delete_terminal_for(label, &data_dir) {
-                eprintln!("[spawn_terminal] stale persist cleanup for {label}: {e}");
+                tracing::warn!("stale persist cleanup for {label}: {e}");
             }
         }
         let t = LayoutTree::new(label, init_w, init_h, manager.dashboards());
@@ -380,7 +380,7 @@ fn spawn_or_restore(
             LogicalSize::new(init_w, init_h),
         ) {
             Ok(_) => pool.push(lbl),
-            Err(e) => eprintln!("[spawn_terminal] pool pre-warm failed for {lbl}: {e}"),
+            Err(e) => tracing::warn!("pool pre-warm failed for {lbl}: {e}"),
         }
     }
 
@@ -408,7 +408,7 @@ fn spawn_or_restore(
                     LogicalPosition::new(0.0, 0.0),
                     LogicalSize::new(1.0, 1.0),
                 ) {
-                    eprintln!("[spawn_terminal] restore panel '{panel_label}': {e}");
+                    tracing::warn!("restore panel '{panel_label}': {e}");
                 }
             }
         }

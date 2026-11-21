@@ -42,8 +42,8 @@ impl WmHostIdentity {
         let runtime_path = if is_system_version(&binding.version) {
             None
         } else if let Some(dev_path) = dev_runtime_override() {
-            eprintln!(
-                "[wm] using OT_ENGINE_RUNTIME_OVERRIDE={} for {}@{}",
+            tracing::warn!(
+                "using OT_ENGINE_RUNTIME_OVERRIDE={} for {}@{}",
                 dev_path.display(),
                 binding.family.as_dir(),
                 binding.version,
@@ -57,8 +57,8 @@ impl WmHostIdentity {
                 // Spawner promised a runtime but it's missing. We leave path
                 // as None and the webview falls back to the system engine —
                 // safer than crashing, but worth a loud log so it's noticed.
-                eprintln!(
-                    "[wm] engine {}@{} missing at {} — falling back to system",
+                tracing::warn!(
+                    "engine {}@{} missing at {} — falling back to system",
                     binding.family.as_dir(),
                     binding.version,
                     dir.display(),
@@ -94,8 +94,8 @@ fn dev_runtime_override() -> Option<PathBuf> {
     if path.is_dir() {
         Some(path)
     } else {
-        eprintln!(
-            "[wm] OT_ENGINE_RUNTIME_OVERRIDE={} is not a directory; ignoring",
+        tracing::warn!(
+            "OT_ENGINE_RUNTIME_OVERRIDE={} is not a directory; ignoring",
             path.display()
         );
         None

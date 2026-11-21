@@ -61,10 +61,25 @@ once its count is driven down — update this table when you do.
 
 ## Logging
 
-There is no `log`/`tracing` crate; the code uses `println!` / `eprintln!` with a bracketed
-component tag: `eprintln!("[wm] dev: open new Terminal: {e}")`, `"[fdc3-bus]"`,
-`"[desktop-agent]"`. Follow the same pattern: tag, short context, then the error.
-Never log secrets, tokens or full context payloads.
+Log with the `tracing` macros; `println!`/`eprintln!` are only for `build.rs` directives
+and stdout protocols (the `fdc3_bus_harness` example). Each binary calls
+`ot_telemetry::init` once at startup — after loading its config, before anything else
+logs — and `Telemetry::shutdown()` on `RunEvent::Exit` and before any
+`std::process::exit`. Libraries (`ot-core`, the broker) depend on `tracing` only.
+
+- **Levels:** `error!` — an operation failed and the user loses something (a launch, a
+  save); `warn!` — degraded or ignored input (bad config value, unreachable App
+  Directory); `info!` — lifecycle and one-off events (startup, connect/disconnect,
+  restores, timings); `debug!` — per-operation detail useful when diagnosing.
+- **No tag prefix:** the target (module path) identifies the component. Put identifiers
+  in fields, not only in the message: `tracing::info!(app_id = %id, "connected")`.
+- **Never log** secrets, tokens, header values, or full FDC3 context payloads (log the
+  context `type`). Pass URLs through `ot_telemetry::redact::url`, which drops
+  credentials and query strings.
+- **Timings** stay `"<operation> in N ms"` in the message until a metric replaces them.
+- **Spans** for work that crosses a boundary (an FDC3 request, a launch): create them
+  with `tracing::info_span!` and use `.instrument(span)` on spawned futures so the span
+  survives the `await`.
 
 ## Async and blocking
 

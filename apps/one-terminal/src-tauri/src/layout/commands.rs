@@ -468,10 +468,7 @@ pub fn wm_list_dashboards(
     match manager.dashboards_snapshot_for(window.label()) {
         Some(snapshot) => snapshot,
         None => {
-            eprintln!(
-                "[wm_list_dashboards] terminal '{}' not found",
-                window.label()
-            );
+            tracing::warn!("terminal '{}' not found", window.label());
             DashboardsSnapshot {
                 active: String::new(),
                 auto_save: true,
@@ -517,10 +514,7 @@ pub fn wm_create_dashboard(
 #[tauri::command]
 pub fn wm_save_dashboard(window: Window, manager: State<'_, TerminalManager>, app: AppHandle) {
     let Some(terminal) = manager.get(window.label()) else {
-        eprintln!(
-            "[wm_save_dashboard] terminal '{}' not found",
-            window.label()
-        );
+        tracing::warn!("terminal '{}' not found", window.label());
         return;
     };
     terminal.layout_tree.save_dashboard();
@@ -736,10 +730,7 @@ pub fn wm_reorder_dashboards(
     app: AppHandle,
 ) {
     let Some(terminal) = manager.get(window.label()) else {
-        eprintln!(
-            "[wm_reorder_dashboards] terminal '{}' not found",
-            window.label()
-        );
+        tracing::warn!("terminal '{}' not found", window.label());
         return;
     };
     terminal.layout_tree.reorder_tabs(&order);
@@ -885,7 +876,7 @@ pub fn wm_set_auto_save(
     app: AppHandle,
 ) {
     let Some(terminal) = manager.get(window.label()) else {
-        eprintln!("[wm_set_auto_save] terminal '{}' not found", window.label());
+        tracing::warn!("terminal '{}' not found", window.label());
         return;
     };
     terminal.layout_tree.set_auto_save(enabled);

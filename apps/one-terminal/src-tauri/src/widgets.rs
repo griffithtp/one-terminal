@@ -67,7 +67,10 @@ pub async fn wm_list_apps(
         match fetch_appd(effective_url).await {
             Ok(apps) => apps,
             Err(e) => {
-                eprintln!("[widgets] app directory fetch failed ({effective_url}): {e}");
+                tracing::warn!(
+                    "app directory fetch failed ({}): {e}",
+                    ot_telemetry::redact::url(effective_url)
+                );
                 Vec::new()
             }
         }
@@ -125,7 +128,7 @@ fn read_local(path: &str, resource_dir: Option<&Path>) -> Result<AppDirectoryRes
         None => {
             // Missing file is not fatal — return empty catalog so the launcher
             // renders with no widgets rather than erroring out.
-            eprintln!("[widgets] {path} not found; returning empty catalog");
+            tracing::warn!("{path} not found; returning empty catalog");
             return Ok(AppDirectoryResponse {
                 applications: vec![],
             });

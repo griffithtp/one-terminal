@@ -75,6 +75,11 @@ const SOURCES: Array<{ src: string; templateBase: string; overlay: Overlay }> = 
   { src: join(ROOT, "apps/one-terminal"), templateBase: "apps/one-terminal", overlay: "shared" },
   { src: join(ROOT, "packages/ot-core"), templateBase: "packages/ot-core", overlay: "shared" },
   {
+    src: join(ROOT, "packages/ot-telemetry"),
+    templateBase: "packages/ot-telemetry",
+    overlay: "shared",
+  },
+  {
     src: join(ROOT, "packages/fdc3-plugin"),
     templateBase: "packages/fdc3-plugin",
     overlay: "shared",

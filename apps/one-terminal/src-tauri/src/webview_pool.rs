@@ -137,13 +137,13 @@ impl WebviewPool {
             match rx.recv() {
                 Ok(Ok(())) => {
                     available.lock().unwrap().push_back(label.clone());
-                    eprintln!("[pool] +1 ready: {label}");
+                    tracing::debug!("+1 ready: {label}");
                     // Prewarm the overlay so the next menu open hits a
                     // ready overlay instead of paying recreate latency
                     // when the user clicks a kebab right after a launch.
                     crate::overlay_prewarm_in_background(overlay, &terminal_id, &app);
                 }
-                Ok(Err(e)) => eprintln!("[pool] replenish failed: {e}"),
+                Ok(Err(e)) => tracing::warn!("replenish failed: {e}"),
                 Err(_) => {}
             }
         });

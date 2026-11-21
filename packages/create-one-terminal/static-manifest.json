@@ -739,6 +739,38 @@
     {
       "path": "packages/ot-core/src/plugin.rs",
       "overlay": "shared"
+    },
+    {
+      "path": "packages/ot-telemetry/Cargo.toml",
+      "overlay": "shared"
+    },
+    {
+      "path": "packages/ot-telemetry/src/config.rs",
+      "overlay": "shared"
+    },
+    {
+      "path": "packages/ot-telemetry/src/lib.rs",
+      "overlay": "shared"
+    },
+    {
+      "path": "packages/ot-telemetry/src/logs.rs",
+      "overlay": "shared"
+    },
+    {
+      "path": "packages/ot-telemetry/src/otlp.rs",
+      "overlay": "shared"
+    },
+    {
+      "path": "packages/ot-telemetry/src/paths.rs",
+      "overlay": "shared"
+    },
+    {
+      "path": "packages/ot-telemetry/src/propagation.rs",
+      "overlay": "shared"
+    },
+    {
+      "path": "packages/ot-telemetry/src/redact.rs",
+      "overlay": "shared"
     }
   ]
 }

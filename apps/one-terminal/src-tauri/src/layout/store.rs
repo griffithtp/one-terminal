@@ -1321,10 +1321,10 @@ impl LayoutTree {
         if let Ok(data_dir) = app.path().app_data_dir() {
             let tid = self.terminal_id.to_string();
             if let Err(e) = persist::save_terminal_dashboards(&tid, &terminal_persist, &data_dir) {
-                eprintln!("[layout] persist_dashboards: {e}");
+                tracing::error!("persist_dashboards: {e}");
             }
             if let Err(e) = persist::save_registry(&data_dir, &registry_persist) {
-                eprintln!("[layout] persist_dashboards (registry): {e}");
+                tracing::error!("persist_dashboards (registry): {e}");
             }
         }
     }
@@ -1421,10 +1421,10 @@ impl LayoutTree {
         if let Ok(data_dir) = app.path().app_data_dir() {
             let tid = self.terminal_id.to_string();
             if let Err(e) = persist::save_terminal_dashboards(&tid, &terminal_persist, &data_dir) {
-                eprintln!("[layout] save_dashboard: {e}");
+                tracing::error!("save_dashboard: {e}");
             }
             if let Err(e) = persist::save_registry(&data_dir, &registry_persist) {
-                eprintln!("[layout] save_dashboard (registry): {e}");
+                tracing::error!("save_dashboard (registry): {e}");
             }
         }
     }
@@ -1994,7 +1994,10 @@ impl LayoutTree {
                             )
                             .map_err(|e| e.to_string())?;
                     } else {
-                        eprintln!("[layout] switch: invalid url '{url}' for panel '{label}'");
+                        tracing::warn!(
+                            "switch: invalid url '{}' for panel '{label}'",
+                            ot_telemetry::redact::url(url)
+                        );
                     }
                 }
                 Ok(())
@@ -2299,7 +2302,7 @@ impl LayoutTree {
         let data_dir = match app.path().app_data_dir() {
             Ok(d) => d,
             Err(e) => {
-                eprintln!("[layout] failed to resolve app_data_dir: {e}");
+                tracing::error!("failed to resolve app_data_dir: {e}");
                 return;
             }
         };
@@ -2341,10 +2344,10 @@ impl LayoutTree {
             if let Err(e) =
                 persist::save_terminal_dashboards(&terminal_id, &terminal_persist, &data_dir)
             {
-                eprintln!("[layout] persist::save_terminal_dashboards failed: {e}");
+                tracing::error!("persist::save_terminal_dashboards failed: {e}");
             }
             if let Err(e) = persist::save_registry(&data_dir, &registry_persist) {
-                eprintln!("[layout] persist::save_registry failed: {e}");
+                tracing::error!("persist::save_registry failed: {e}");
             }
         }));
     }

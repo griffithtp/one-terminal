@@ -162,7 +162,7 @@ fn spawn_external_host(
             // The Terminal doesn't know how to launch them directly — open a
             // tauri-webview-host without a pinned runtime so the user gets
             // something rather than a hard error.
-            eprintln!("[wm] custom engine '{name}' — plugin launch not supported in Terminal; falling back to system webview");
+            tracing::warn!("custom engine '{name}' — plugin launch not supported in Terminal; falling back to system webview");
             let host_bin = locate_host_binary()?;
             std::process::Command::new(&host_bin)
                 .env("OT_APP_ID", app_id)
@@ -415,16 +415,17 @@ async fn wm_open(
             Ok(())
         })();
         match &result {
-            Ok(_) => eprintln!(
-                "[wm_open] {} (panel={panel_id_for_main}, url={url_for_main})",
+            Ok(_) => tracing::debug!(
+                "{} (panel={panel_id_for_main}, url={})",
                 if using_pool {
                     "pool->navigate Ok"
                 } else {
                     "add_child Ok"
-                }
+                },
+                ot_telemetry::redact::url(&url_for_main)
             ),
-            Err(e) => eprintln!(
-                "[wm_open] {} Err: {e}",
+            Err(e) => tracing::warn!(
+                "{} Err: {e}",
                 if using_pool {
                     "pool->navigate"
                 } else {
@@ -435,7 +436,7 @@ async fn wm_open(
         let _ = tx.send(result);
     })
     .map_err(|e| {
-        eprintln!("[wm_open] run_on_main_thread dispatch -> Err: {e}");
+        tracing::warn!("run_on_main_thread dispatch -> Err: {e}");
         e.to_string()
     })?;
 
@@ -555,7 +556,7 @@ async fn wm_engine_install(
 #[tauri::command]
 fn wm_overlay_ready(window: Window, manager: State<'_, TerminalManager>) {
     let Some(terminal) = manager.get(window.label()) else {
-        eprintln!("[wm_overlay_ready] terminal '{}' not found", window.label());
+        tracing::warn!("terminal '{}' not found", window.label());
         return;
     };
     let mut inner = terminal.overlay.lock().unwrap();
@@ -669,7 +670,7 @@ pub(crate) fn overlay_prewarm_in_background(
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         if let Err(e) = overlay_prewarm(overlay_arc, &terminal_id, &app).await {
-            eprintln!("[overlay_prewarm bg] {terminal_id}: {e}");
+            tracing::warn!("{terminal_id}: {e}");
         }
     });
 }
@@ -1382,14 +1383,14 @@ fn start_instance_discovery(
     let listener = match std::net::TcpListener::bind(("127.0.0.1", 0)) {
         Ok(l) => l,
         Err(e) => {
-            eprintln!("[wm] instance discovery listener failed to bind: {e}");
+            tracing::error!("instance discovery listener failed to bind: {e}");
             return;
         }
     };
     let port = match listener.local_addr() {
         Ok(addr) => addr.port(),
         Err(e) => {
-            eprintln!("[wm] instance discovery: could not read bound port: {e}");
+            tracing::warn!("instance discovery: could not read bound port: {e}");
             return;
         }
     };
@@ -1399,7 +1400,7 @@ fn start_instance_discovery(
         port,
     };
     if let Err(e) = terminal::instances::register_self(&data_dir, &record) {
-        eprintln!("[wm] failed to register instance for discovery: {e}");
+        tracing::error!("failed to register instance for discovery: {e}");
     }
 
     std::thread::spawn(move || {
@@ -1623,7 +1624,7 @@ fn wm_close_terminal(
 
     if let Ok(data_dir) = app.path().app_data_dir() {
         if let Err(e) = layout_persist::delete_terminal_for(&label, &data_dir) {
-            eprintln!("[wm_close_terminal] delete persist for {label}: {e}");
+            tracing::warn!("delete persist for {label}: {e}");
         }
     }
 
@@ -1654,7 +1655,13 @@ pub fn run() {
     let keep_running_when_empty =
         tauri::is_dev() && std::env::var_os("OT_SPAWNED_BY_AGENT").is_none();
 
-    let cfg = TerminalConfig::load();
+    let (cfg, config_report) = TerminalConfig::load_quiet();
+    let resolved = ot_telemetry::resolve(&cfg.telemetry, "one-terminal", &|key| {
+        std::env::var(key).ok()
+    });
+    let mut telemetry = ot_telemetry::init(&resolved, env!("CARGO_PKG_VERSION"));
+    telemetry.install_panic_hook();
+    config_report.log();
     let manager = TerminalManager::new();
     let tree = LayoutTree::new(
         WIN,
@@ -1676,13 +1683,13 @@ pub fn run() {
         // the `terminals/main/` session of the process that restored it.
         layout_persist::set_main_terminal_dir(instance_id[..8].to_string());
     }
-    println!(
-        "[wm] engine: {}@{} (runtime={:?})",
+    tracing::info!(
+        "engine: {}@{} (runtime={:?})",
         identity.binding.family.as_dir(),
         identity.binding.version,
         identity.runtime_path,
     );
-    println!("[wm] webview pool size: {pool_size}");
+    tracing::info!("webview pool size: {pool_size}");
 
     tauri::Builder::default()
         .plugin(
@@ -1749,7 +1756,7 @@ pub fn run() {
                     if let Err(e) =
                         layout_persist::save_terminal_dashboards(WIN, &persist, &data_dir)
                     {
-                        eprintln!("[wm] save new Terminal session: {e}");
+                        tracing::warn!("save new Terminal session: {e}");
                     }
                 }
             } else {
@@ -1763,8 +1770,8 @@ pub fn run() {
                 let active_id = tree.active_dashboard_id();
                 if !active_id.is_empty() {
                     if let Err(owner) = manager.acquire_dashboard_lock(&active_id, WIN) {
-                        eprintln!(
-                            "[wm] '{WIN}' startup: dashboard already locked by '{owner}', \
+                        tracing::warn!(
+                            "'{WIN}' startup: dashboard already locked by '{owner}', \
                              falling back to no active dashboard"
                         );
                         tree.clear_active_for_lock_conflict();
@@ -1881,10 +1888,10 @@ pub fn run() {
                         LogicalSize::new(init_w, init_h),
                     ) {
                         Ok(_) => {
-                            eprintln!("[pool] pre-warmed: {label}");
+                            tracing::debug!("pre-warmed: {label}");
                             pool.push(label);
                         }
-                        Err(e) => eprintln!("[pool] pre-warm failed: {e}"),
+                        Err(e) => tracing::warn!("pre-warm failed: {e}"),
                     }
                 }
             }
@@ -1915,10 +1922,13 @@ pub fn run() {
                             LogicalPosition::new(0.0, 0.0),
                             LogicalSize::new(1.0, 1.0),
                         ) {
-                            eprintln!("[wm] restore panel '{label}': {e}");
+                            tracing::warn!("restore panel '{label}': {e}");
                         }
                     } else {
-                        eprintln!("[wm] restore panel '{label}': invalid url '{url}'");
+                        tracing::warn!(
+                            "restore panel '{label}': invalid url '{}'",
+                            ot_telemetry::redact::url(url)
+                        );
                     }
                 }
                 {
@@ -2069,6 +2079,11 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building one-terminal")
         .run(move |app, event| {
+            if let tauri::RunEvent::Exit = event {
+                telemetry.shutdown();
+                return;
+            }
+
             // Closing the last window normally ends the process (each
             // Terminal the Desktop Agent opens is its own process). Under
             // `npm run dev:terminal` that also stops `tauri dev` and its Vite
@@ -2081,8 +2096,8 @@ pub fn run() {
                 } = &event
                 {
                     api.prevent_exit();
-                    println!(
-                        "[wm] dev: last Terminal window closed; process kept running \
+                    tracing::info!(
+                        "dev: last Terminal window closed; process kept running \
                          (Ctrl+C to stop{})",
                         if cfg!(target_os = "macos") {
                             ", click the Dock icon for a new Terminal"
@@ -2105,7 +2120,7 @@ pub fn run() {
                 // Only reachable in the dev case above: every window closed.
                 if terminals.is_empty() && keep_running_when_empty {
                     if let Err(e) = open_new_window(&manager, app) {
-                        eprintln!("[wm] dev: open new Terminal: {e}");
+                        tracing::warn!("dev: open new Terminal: {e}");
                     }
                     return;
                 }
