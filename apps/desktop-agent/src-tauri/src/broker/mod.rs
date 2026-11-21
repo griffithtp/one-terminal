@@ -36,6 +36,18 @@ const APP_LAUNCH_TIMEOUT: Duration = Duration::from_secs(20);
 const DASHBOARD_APP_ID: &str = "desktop-agent";
 const DASHBOARD_INSTANCE_ID: &str = "__dashboard__";
 
+/// Longest peer-supplied string (message type, app id) written to a log line.
+const UNTRUSTED_LOG_CHARS: usize = 128;
+
+/// A peer-controlled string (message `type`, self-asserted `appId`) cut for
+/// logging, so one frame can't write megabytes to the log file.
+pub(crate) fn clip_untrusted(s: &str) -> std::borrow::Cow<'_, str> {
+    match s.char_indices().nth(UNTRUSTED_LOG_CHARS) {
+        None => std::borrow::Cow::Borrowed(s),
+        Some((cut, _)) => std::borrow::Cow::Owned(format!("{}… ({} bytes)", &s[..cut], s.len())),
+    }
+}
+
 /// Side effects [`Broker::handle`] can't perform itself.
 #[derive(Debug)]
 pub enum Effect {
@@ -467,7 +479,8 @@ impl Broker {
                         "InvalidArguments",
                     );
                 }
-                eprintln!("[broker] unhandled message type: {other}");
+                // `other` is peer-controlled: clip it so a frame can't bloat the log.
+                tracing::warn!("unhandled message type: {}", clip_untrusted(other));
             }
         }
         Vec::new()
@@ -495,7 +508,7 @@ impl Broker {
                 }
             }
             Err(e) => {
-                eprintln!("[broker] launch failed: {e}");
+                tracing::warn!("launch failed: {e}");
                 apps::fail_open(&mut st, pending_id, "ErrorOnLaunch");
                 intents::fail_pending(&mut st, pending_id);
             }

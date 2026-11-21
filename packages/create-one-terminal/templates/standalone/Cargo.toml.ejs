@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "apps/one-terminal/src-tauri",
     "packages/ot-core",
+    "packages/ot-telemetry",
 ]
 
 # ── Shared dependency versions ────────────────────────────────────────────────
@@ -32,8 +33,26 @@ sha2 = "0.10"
 hex  = "0.4"
 zip  = { version = "9.6", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 
+# Logging, tracing and OpenTelemetry (packages/ot-telemetry). The opentelemetry*
+# crates move together: same minor for all of them, tracing-opentelemetry one higher.
+# tracing-subscriber without `env-filter`: its regex engine adds ~1 MB to every
+# binary; ot-telemetry filters with the regex-free `Targets` instead.
+tracing            = "0.1"
+tracing-subscriber = { version = "0.3", default-features = false, features = ["std", "fmt", "ansi", "json", "registry", "tracing-log", "smallvec"] }
+tracing-appender   = "0.2"
+tracing-log        = { version = "0.2", default-features = false, features = ["std"] }
+opentelemetry      = { version = "0.33", default-features = false, features = ["trace", "metrics", "logs"] }
+opentelemetry_sdk  = { version = "0.33", default-features = false, features = ["trace", "metrics", "logs"] }
+# No built-in HTTP client: ot-telemetry plugs in the workspace's reqwest 0.12.
+opentelemetry-otlp = { version = "0.33", default-features = false, features = ["http-proto", "trace", "metrics", "logs"] }
+opentelemetry-http = { version = "0.33", default-features = false }
+async-trait        = "0.1"
+tracing-opentelemetry          = { version = "0.34", default-features = false }
+opentelemetry-appender-tracing = { version = "0.33", default-features = false }
+
 # Internal crates
 ot-core = { path = "packages/ot-core" }
+ot-telemetry = { path = "packages/ot-telemetry", default-features = false }
 
 # ── Lints ─────────────────────────────────────────────────────────────────────
 # Inherited by every member with `[lints] workspace = true`. CI runs Clippy with

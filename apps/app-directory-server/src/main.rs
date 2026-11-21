@@ -6,8 +6,27 @@ use axum::http::{HeaderValue, Method};
 use ot_appdirectory::{router_with_ui, AppStore};
 use tower_http::cors::CorsLayer;
 
-#[tokio::main]
-async fn main() {
+fn main() {
+    // Telemetry before the runtime: the OTLP client is blocking and must be
+    // created and dropped outside a tokio context.
+    let resolved = ot_telemetry::resolve(
+        &ot_telemetry::TelemetryConfig::default(),
+        "app-directory-server",
+        &|key| std::env::var(key).ok(),
+    );
+    let mut telemetry = ot_telemetry::init(&resolved, env!("CARGO_PKG_VERSION"));
+    telemetry.install_panic_hook();
+
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .expect("app-directory-server: failed to start the tokio runtime");
+    runtime.block_on(serve());
+    drop(runtime);
+    telemetry.shutdown();
+}
+
+async fn serve() {
     let port: u16 = std::env::var("PORT")
         .ok()
         .and_then(|v| v.parse().ok())
@@ -43,8 +62,42 @@ async fn main() {
         .await
         .unwrap_or_else(|e| panic!("app-directory-server: failed to bind 0.0.0.0:{port}: {e}"));
 
-    println!("[app-directory-server] listening on 0.0.0.0:{port} (FDC3 3.0 App Directory)");
+    tracing::info!("listening on 0.0.0.0:{port} (FDC3 3.0 App Directory)");
     axum::serve(listener, app)
+        .with_graceful_shutdown(shutdown_signal())
         .await
         .expect("app-directory-server: fatal server error");
+    tracing::info!("stopped");
+}
+
+/// Ctrl+C everywhere; also SIGTERM on Unix (what `docker stop` sends), so
+/// telemetry is flushed on a normal stop.
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        if let Err(e) = tokio::signal::ctrl_c().await {
+            tracing::warn!("Ctrl+C handler unavailable: {e}");
+            std::future::pending::<()>().await;
+        }
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+            Ok(mut sig) => {
+                sig.recv().await;
+            }
+            Err(e) => {
+                tracing::warn!("SIGTERM handler unavailable: {e}");
+                std::future::pending::<()>().await;
+            }
+        }
+    };
+    // Windows has no SIGTERM; services and consoles deliver Ctrl+C/Ctrl+Break.
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        () = ctrl_c => {}
+        () = terminate => {}
+    }
 }

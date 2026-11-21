@@ -472,10 +472,7 @@ pub fn load_registry(data_dir: &Path) -> Option<PersistedDashboardRegistry> {
     let mut dashboards = Vec::new();
     for path in dashboard_files(&dir) {
         let Some((dashboard, hash)) = read_dashboard(&path) else {
-            eprintln!(
-                "[layout] skipping unreadable dashboard file {}",
-                path.display()
-            );
+            tracing::warn!("skipping unreadable dashboard file {}", path.display());
             continue;
         };
         known.insert(path.clone(), stamp(&path, &dashboard.id, hash));
@@ -496,12 +493,12 @@ fn migrate_single_file_registry(data_dir: &Path) -> Option<PersistedDashboardReg
     let registry: PersistedDashboardRegistry = serde_json::from_slice(&bytes).ok()?;
     backfill_open_dashboards(data_dir, &registry);
     if let Err(e) = save_registry(data_dir, &registry) {
-        eprintln!("[layout] migration: failed to split dashboards.json: {e}");
+        tracing::error!("migration: failed to split dashboards.json: {e}");
         return Some(registry);
     }
     let _ = std::fs::rename(&legacy_path, data_dir.join("dashboards.json.migrated"));
-    eprintln!(
-        "[layout] migrated dashboards.json → dashboards/ ({} dashboard(s))",
+    tracing::info!(
+        "migrated dashboards.json → dashboards/ ({} dashboard(s))",
         registry.dashboards.len()
     );
     Some(registry)
@@ -531,7 +528,7 @@ fn backfill_open_dashboards(data_dir: &Path, registry: &PersistedDashboardRegist
         persist.open_dashboards = Some(open.clone());
         if let Ok(json) = serde_json::to_vec(&persist) {
             if let Err(e) = write_atomic(&path, &json) {
-                eprintln!("[layout] migration: {}: {e}", path.display());
+                tracing::warn!("migration: {}: {e}", path.display());
             }
         }
     }
@@ -746,7 +743,7 @@ pub fn load_or_migrate_registry(data_dir: &Path) -> PersistedDashboardRegistry {
     // Write the shared registry FIRST — only once it's confirmed on disk do
     // we touch any per-terminal file (see crash-safety note above).
     if let Err(e) = save_registry(data_dir, &registry) {
-        eprintln!("[layout] migration: failed to write shared dashboard registry: {e}");
+        tracing::error!("migration: failed to write shared dashboard registry: {e}");
         return registry;
     }
 
@@ -777,12 +774,12 @@ pub fn load_or_migrate_registry(data_dir: &Path) -> PersistedDashboardRegistry {
             format!("terminal-{dir_name}")
         };
         if let Err(e) = save_terminal_for(&terminal_id, &trimmed, data_dir) {
-            eprintln!("[layout] migration: failed to trim {dir_name}/dashboards.json: {e}");
+            tracing::error!("migration: failed to trim {dir_name}/dashboards.json: {e}");
         }
     }
 
-    eprintln!(
-        "[layout] migrated {} terminal(s) into the shared dashboard registry: \
+    tracing::info!(
+        "migrated {} terminal(s) into the shared dashboard registry: \
          {} dashboard(s) found, {} written ({} renamed to avoid name collisions)",
         source_dirs.len(),
         total_dashboards,
@@ -904,7 +901,7 @@ pub fn load_terminal(data_dir: &Path) -> Option<TerminalPersist> {
                 && save_terminal(&persist, data_dir).is_ok()
             {
                 let _ = std::fs::remove_file(&old_path);
-                eprintln!("[layout] migrated layout.json → dashboards.json");
+                tracing::info!("migrated layout.json → dashboards.json");
             }
             return Some(persist);
         }

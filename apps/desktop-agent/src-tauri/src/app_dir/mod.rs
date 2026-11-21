@@ -175,7 +175,8 @@ impl AppDirectoryCache {
         let url = format!("{}/v2/apps", self.base_url.trim_end_matches('/'));
         let response = reqwest::get(&url)
             .await
-            .map_err(|e| format!("App Directory fetch failed: {e}"))?;
+            // `without_url`: the URL may embed credentials and this error is logged.
+            .map_err(|e| format!("App Directory fetch failed: {}", e.without_url()))?;
 
         if !response.status().is_success() {
             return Err(format!("App Directory returned HTTP {}", response.status()));
@@ -184,12 +185,12 @@ impl AppDirectoryCache {
         let data: AppsListResponse = response
             .json()
             .await
-            .map_err(|e| format!("App Directory JSON parse error: {e}"))?;
+            .map_err(|e| format!("App Directory JSON parse error: {}", e.without_url()))?;
 
         let count = data.applications.len();
         let mut guard = self.inner.write().await;
         *guard = data.applications;
-        println!("[cda] App Directory cache refreshed: {count} record(s)");
+        tracing::info!("App Directory cache refreshed: {count} record(s)");
         Ok(count)
     }
 

@@ -64,15 +64,15 @@ A change that breaks one of these is wrong even if it works. Reviewers check eve
 
 ### Names that cross a boundary
 
-| Thing                | Convention                                | Examples                                                                 |
-| -------------------- | ----------------------------------------- | ------------------------------------------------------------------------ |
-| Tauri command        | `snake_case` with the app prefix          | `wm_open`, `wm_set_zoom` (Terminal); `cda_list_channels` (Desktop Agent) |
-| Tauri event          | `<prefix>:<kebab-case>`                   | `wm:layout`, `wm:popout-snap`, `cda:connected`                           |
-| Environment variable | `OT_SCREAMING_SNAKE`                      | `OT_FDC3_BUS_PORT`, `OT_WEBVIEW_POOL_SIZE`                               |
-| Log tag              | `[component]` at the start of the message | `[wm]`, `[fdc3-bus]`, `[popout]`                                         |
-| CSS class            | `wm-block__element--modifier`             | `wm-tab-ctx-menu__item--danger`                                          |
-| npm package          | `@one-terminal/<name>`                    | `@one-terminal/fdc3-plugin`                                              |
-| Keybinding           | Tauri accelerator with `CmdOrCtrl`        | `CmdOrCtrl+Shift+K`                                                      |
+| Thing                | Convention                            | Examples                                                                 |
+| -------------------- | ------------------------------------- | ------------------------------------------------------------------------ |
+| Tauri command        | `snake_case` with the app prefix      | `wm_open`, `wm_set_zoom` (Terminal); `cda_list_channels` (Desktop Agent) |
+| Tauri event          | `<prefix>:<kebab-case>`               | `wm:layout`, `wm:popout-snap`, `cda:connected`                           |
+| Environment variable | `OT_SCREAMING_SNAKE`                  | `OT_FDC3_BUS_PORT`, `OT_WEBVIEW_POOL_SIZE`                               |
+| Log target           | the module path (`tracing`'s default) | `desktop_agent_lib::fdc3_bus`, `one_terminal_lib::terminal::popout`      |
+| CSS class            | `wm-block__element--modifier`         | `wm-tab-ctx-menu__item--danger`                                          |
+| npm package          | `@one-terminal/<name>`                | `@one-terminal/fdc3-plugin`                                              |
+| Keybinding           | Tauri accelerator with `CmdOrCtrl`    | `CmdOrCtrl+Shift+K`                                                      |
 
 A few older commands (`close_tab`) predate the prefix; new commands always use it. These
 names are substitution keys or public API for scaffolded workspaces — renaming one is a
@@ -111,10 +111,14 @@ Everything crossing IPC is a typed contract; both sides change in the same commi
   own types.
 - **Never swallow errors silently.** In Rust, `let _ =` only for best-effort operations;
   in TS, `.catch(console.error)` at minimum — a bare `.catch(() => {})` needs a comment.
-- **Logging:** `eprintln!` / `println!` with a `[component]` tag; no secrets, tokens or
-  full FDC3 context payloads. Timings follow the `[tag] <operation> in N ms` pattern
-  used by popouts. (There is no log-level crate; adopting `tracing` would be a separate
-  decision.)
+- **Logging:** Rust logs with the `tracing` macros (`tracing::info!`, `warn!`, `error!`,
+  `debug!`), never `println!`/`eprintln!` — each binary installs the subscriber through
+  `ot-telemetry`, which writes the log file and (opt-in) exports. No secrets, tokens or
+  full FDC3 context payloads; pass URLs through `ot_telemetry::redact::url`. Details:
+  [rust.md](rust.md#logging).
+- **Telemetry depends on nothing domain-specific.** `ot-telemetry` never depends on FDC3
+  or Tauri; FDC3 and app code only call the `tracing` API. Instrument a subsystem from
+  the outside — never route telemetry through it.
 - **New settings** go through the layered config model: a compiled-in default → a key in
   `agent.config.json` (or the Terminal's config) → an `OT_*` override if it's
   operationally useful → a row in the `AGENTS.md` env-var table → a test of the layering.

@@ -1021,3 +1021,15 @@ fn dashboard_broadcast_and_raise_use_the_agent_identity() {
         .raise_from_dashboard("Nope", instrument(), None)
         .is_err());
 }
+
+#[test]
+fn untrusted_strings_are_clipped_for_logging() {
+    assert_eq!(
+        super::clip_untrusted("broadcastRequest"),
+        "broadcastRequest"
+    );
+    let huge = "t".repeat(1_000_000);
+    let clipped = super::clip_untrusted(&huge);
+    assert!(clipped.len() < 200, "{} bytes", clipped.len());
+    assert!(clipped.ends_with("(1000000 bytes)"));
+}

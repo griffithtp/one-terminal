@@ -55,7 +55,7 @@ impl EngineRuntimeStore {
     pub fn new(root: PathBuf) -> Self {
         let plugins = ot_core::plugin::EngineManifest::scan_plugins(&root);
         if !plugins.is_empty() {
-            println!("[cda] {} engine plugin(s) loaded", plugins.len());
+            tracing::info!("{} engine plugin(s) loaded", plugins.len());
         }
         Self {
             root,
@@ -157,8 +157,8 @@ impl EngineRuntimeStore {
         // Debug-only dev override: if OT_ENGINE_RUNTIME_OVERRIDE points at an
         // existing dir, short-circuit download and use it as the runtime.
         if let Some(dev_path) = dev_runtime_override() {
-            eprintln!(
-                "[cda] OT_ENGINE_RUNTIME_OVERRIDE={} → skipping download for {}@{}",
+            tracing::warn!(
+                "OT_ENGINE_RUNTIME_OVERRIDE={} → skipping download for {}@{}",
                 dev_path.display(),
                 binding.family.as_dir(),
                 binding.version,
@@ -337,8 +337,8 @@ fn dev_runtime_override() -> Option<PathBuf> {
     if path.is_dir() {
         Some(path)
     } else {
-        eprintln!(
-            "[cda] OT_ENGINE_RUNTIME_OVERRIDE={} is not a directory; ignoring",
+        tracing::warn!(
+            "OT_ENGINE_RUNTIME_OVERRIDE={} is not a directory; ignoring",
             path.display()
         );
         None

@@ -13,9 +13,7 @@ all-features = false
 unmaintained = "workspace"
 unsound = "workspace"
 yanked = "deny"
-ignore = [
-  { id = "RUSTSEC-2026-0097", reason = "rand 0.8: unsound only with a custom logger via rand::rng(); we use no log integration. Remove when moving to rand >= 0.9." },
-]
+ignore = []
 
 [licenses]
 # Permissive licenses found in the current dependency graph. OR-expressions pass if any

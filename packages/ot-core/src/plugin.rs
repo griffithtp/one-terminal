@@ -106,10 +106,10 @@ impl EngineManifest {
             if manifest_path.exists() {
                 match Self::load(&manifest_path) {
                     Ok(m) => {
-                        println!("[engine-plugin] loaded manifest for '{}'", m.family);
+                        tracing::info!("loaded manifest for '{}'", m.family);
                         manifests.push(m);
                     }
-                    Err(e) => eprintln!("[engine-plugin] {e}"),
+                    Err(e) => tracing::warn!("{e}"),
                 }
             }
         }

@@ -71,10 +71,10 @@ pub async fn start(port: u16, broker: Broker, host: Arc<dyn BusHost>) {
     let addr = format!("127.0.0.1:{port}");
     match TcpListener::bind(&addr).await {
         Ok(listener) => {
-            println!("[fdc3-bus] WebSocket server on ws://{addr}/fdc3");
+            tracing::info!("WebSocket server on ws://{addr}/fdc3");
             let _ = axum::serve(listener, router(broker, host)).await;
         }
-        Err(e) => eprintln!("[fdc3-bus] cannot bind on {addr}: {e}"),
+        Err(e) => tracing::error!("cannot bind on {addr}: {e}"),
     }
 }
 
@@ -115,7 +115,11 @@ async fn handle_connection(socket: WebSocket, app_id: String, state: BusState) {
             _ => return,
         }
     };
-    println!("[fdc3-bus] connected: {app_id} ({instance_id})");
+    tracing::info!(
+        app_id = %crate::broker::clip_untrusted(&app_id),
+        instance_id = %instance_id,
+        "connected"
+    );
 
     // ── Phase 2: message loop ─────────────────────────────────────────────────
     let mut heartbeat = tokio::time::interval(HEARTBEAT_INTERVAL);
@@ -156,7 +160,11 @@ async fn handle_connection(socket: WebSocket, app_id: String, state: BusState) {
 
     // ── Phase 3: cleanup ──────────────────────────────────────────────────────
     state.broker.disconnect(&instance_id);
-    println!("[fdc3-bus] disconnected: {app_id} ({instance_id})");
+    tracing::info!(
+        app_id = %crate::broker::clip_untrusted(&app_id),
+        instance_id = %instance_id,
+        "disconnected"
+    );
 }
 
 /// Carry out broker side effects without blocking the connection's message loop.
@@ -183,7 +191,7 @@ fn perform(effects: Vec<Effect>, state: &BusState) {
                 label,
             } => {
                 if let Err(e) = host.close_window(&label) {
-                    eprintln!("[fdc3-bus] close failed for {label}: {e}");
+                    tracing::warn!("close failed for {label}: {e}");
                     broker.close_failed(&instance_id, &request_uuid);
                 }
             }

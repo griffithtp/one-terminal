@@ -72,6 +72,14 @@ fn app(app_id: &str, intents: &[(&str, &[&str], Option<&str>)]) -> AppRecord {
 
 #[tokio::main]
 async fn main() {
+    // The contract tests wait for the bus's "WebSocket server" log line on
+    // stdout; the `launch …`/`close …` lines above are a separate protocol
+    // printed directly.
+    tracing_subscriber::fmt()
+        .with_writer(std::io::stdout)
+        .with_ansi(false)
+        .init();
+
     let port: u16 = std::env::args()
         .nth(1)
         .and_then(|p| p.parse().ok())

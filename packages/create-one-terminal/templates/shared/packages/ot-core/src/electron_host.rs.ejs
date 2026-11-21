@@ -30,8 +30,8 @@ pub fn locate_electron_shell() -> Result<PathBuf, String> {
         if p.is_dir() && p.join("main.js").is_file() {
             return Ok(p);
         }
-        eprintln!(
-            "[electron-host] OT_ELECTRON_HOST_OVERRIDE={} is not a usable shell directory; falling back",
+        tracing::warn!(
+            "OT_ELECTRON_HOST_OVERRIDE={} is not a usable shell directory; falling back",
             p.display()
         );
     }
@@ -60,8 +60,8 @@ pub fn locate_electron_binary(
         if p.is_file() {
             return Ok(p);
         }
-        eprintln!(
-            "[electron-host] OT_ELECTRON_BIN={} is not a file; falling back",
+        tracing::warn!(
+            "OT_ELECTRON_BIN={} is not a file; falling back",
             p.display()
         );
     }
@@ -147,7 +147,7 @@ pub fn spawn_electron_app(
             // Auto-install only in dev mode (when the shell override is set).
             // In release builds the binary must ship alongside the app.
             if std::env::var("OT_ELECTRON_HOST_OVERRIDE").is_ok() {
-                eprintln!("[electron-host] {e}");
+                tracing::warn!("{e}");
                 auto_install_binary(&shell)?;
                 locate_electron_binary(binding, cache_root, &shell)?
             } else {
@@ -180,8 +180,8 @@ fn auto_install_binary(shell_dir: &Path) -> Result<(), String> {
             )
         })?;
 
-    eprintln!(
-        "[electron-host] running `npm install -w @<%= orgScope %>/electron-host` \
+    tracing::info!(
+        "running `npm install -w @<%= orgScope %>/electron-host` \
          from {} …",
         workspace_root.display()
     );
@@ -194,7 +194,7 @@ fn auto_install_binary(shell_dir: &Path) -> Result<(), String> {
         .map_err(|e| format!("failed to run npm: {e}"))?;
 
     if status.success() {
-        eprintln!("[electron-host] install complete — Electron binary ready");
+        tracing::info!("install complete — Electron binary ready");
         Ok(())
     } else {
         Err(format!(

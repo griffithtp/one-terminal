@@ -33,7 +33,8 @@ impl EngineCatalogClient {
         let url = format!("{}/v2/engines", self.base_url.trim_end_matches('/'));
         let response = reqwest::get(&url)
             .await
-            .map_err(|e| format!("Engine catalog fetch failed: {e}"))?;
+            // `without_url`: the URL may embed credentials and this error is logged.
+            .map_err(|e| format!("Engine catalog fetch failed: {}", e.without_url()))?;
 
         if !response.status().is_success() {
             return Err(format!(
@@ -45,14 +46,14 @@ impl EngineCatalogClient {
         let data: EngineCatalogResponse = response
             .json()
             .await
-            .map_err(|e| format!("Engine catalog JSON parse error: {e}"))?;
+            .map_err(|e| format!("Engine catalog JSON parse error: {}", e.without_url()))?;
 
         let count = data.engines.windows.as_ref().map(|v| v.len()).unwrap_or(0)
             + data.engines.macos.as_ref().map(|v| v.len()).unwrap_or(0)
             + data.engines.linux.as_ref().map(|v| v.len()).unwrap_or(0);
 
         *self.inner.write().await = data.engines;
-        println!("[cda] Engine catalog refreshed: {count} entry/entries");
+        tracing::info!("Engine catalog refreshed: {count} entry/entries");
         Ok(count)
     }
 
