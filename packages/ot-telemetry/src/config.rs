@@ -643,8 +643,13 @@ mod tests {
             .insert("authorization".into(), "Bearer s3cret".into());
         let r = resolve(&cfg, "x", &env_with(&[]));
         let text = format!("{:?} {:?}", r.summary, r.otlp);
-        for secret in ["pw", "token=abc", "s3cret"] {
-            assert!(!text.contains(secret), "{secret} leaked: {text}");
+        // Fixture values only; the failure message stays generic so a failing
+        // run doesn't print them (and CodeQL doesn't flag it as logging).
+        for (i, fixture) in ["pw", "token=abc", "s3cret"].iter().enumerate() {
+            assert!(
+                !text.contains(fixture),
+                "fixture #{i} leaked into the summary"
+            );
         }
     }
 
