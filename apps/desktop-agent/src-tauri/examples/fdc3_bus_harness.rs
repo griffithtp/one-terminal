@@ -72,13 +72,19 @@ fn app(app_id: &str, intents: &[(&str, &[&str], Option<&str>)]) -> AppRecord {
 
 #[tokio::main]
 async fn main() {
-    // The contract tests wait for the bus's "WebSocket server" log line on
-    // stdout; the `launch …`/`close …` lines above are a separate protocol
-    // printed directly.
-    tracing_subscriber::fmt()
-        .with_writer(std::io::stdout)
-        .with_ansi(false)
-        .init();
+    // The real telemetry stack (spans get trace ids, so FDC3 trace ids are
+    // linked as in the Desktop Agent), logging to stderr only: never to the
+    // user's log files, never exported. The contract tests wait for the bus's
+    // "WebSocket server" line there; stdout carries only the `launch …` /
+    // `close …` protocol above.
+    let mut resolved = ot_telemetry::resolve(
+        &ot_telemetry::TelemetryConfig::default(),
+        "fdc3-bus-harness",
+        &|key| std::env::var(key).ok(),
+    );
+    resolved.log_dir = None;
+    resolved.otlp = None;
+    let _telemetry = ot_telemetry::init(&resolved, env!("CARGO_PKG_VERSION"));
 
     let port: u16 = std::env::args()
         .nth(1)

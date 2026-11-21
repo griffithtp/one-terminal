@@ -409,6 +409,7 @@ pub fn open_popout(
     }
     install_listeners(app, &popout, &panel, &tree);
     show_when_ready(app, &popout);
+    crate::metrics::wm().popout_timing(crate::metrics::PopoutOp::Open, started);
     tracing::info!(
         "open {popout} (panel={panel}) in {} ms",
         started.elapsed().as_millis()
@@ -803,6 +804,7 @@ pub fn dock_panel(app: &AppHandle, manager: &TerminalManager, label: &str) -> Re
     if let Some(w) = app.get_window(&terminal.id) {
         let _ = w.set_focus();
     }
+    crate::metrics::wm().popout_timing(crate::metrics::PopoutOp::Dock, started);
     tracing::info!("dock {label} in {} ms", started.elapsed().as_millis());
     Ok(())
 }

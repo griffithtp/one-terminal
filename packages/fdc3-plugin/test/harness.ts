@@ -31,13 +31,24 @@ export default async function setup(project: TestProject) {
   const port = await freePort();
   const exe = process.platform === "win32" ? ".exe" : "";
   const binary = join(repoRoot, "target", "debug", "examples", `fdc3_bus_harness${exe}`);
-  child = spawn(binary, [String(port)], { stdio: ["ignore", "pipe", "inherit"] });
+  // stdout: the harness's launch/close protocol; stderr: its logs, including
+  // the bus's "WebSocket server" line once it is listening.
+  child = spawn(binary, [String(port)], { stdio: ["ignore", "pipe", "pipe"] });
+  child.stdout!.resume();
   await new Promise<void>((resolve, reject) => {
     child!.once("error", reject);
-    child!.stdout!.on("data", (chunk: Buffer) => {
-      if (chunk.toString().includes("WebSocket server")) resolve();
+    const timer = setTimeout(() => reject(new Error("fdc3_bus_harness did not start")), 10_000);
+    // Accumulate: a pipe chunk can split the marker line.
+    let seen = "";
+    child!.stderr!.setEncoding("utf8");
+    child!.stderr!.on("data", (chunk: string) => {
+      if (seen.includes("WebSocket server")) return; // keep draining after start
+      seen += chunk;
+      if (seen.includes("WebSocket server")) {
+        clearTimeout(timer);
+        resolve();
+      }
     });
-    setTimeout(() => reject(new Error("fdc3_bus_harness did not start")), 10_000);
   });
   project.provide("busUrl", `ws://127.0.0.1:${port}/fdc3`);
   return () => {

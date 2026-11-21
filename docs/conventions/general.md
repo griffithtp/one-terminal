@@ -117,8 +117,16 @@ Everything crossing IPC is a typed contract; both sides change in the same commi
   full FDC3 context payloads; pass URLs through `ot_telemetry::redact::url`. Details:
   [rust.md](rust.md#logging).
 - **Telemetry depends on nothing domain-specific.** `ot-telemetry` never depends on FDC3
-  or Tauri; FDC3 and app code only call the `tracing` API. Instrument a subsystem from
-  the outside — never route telemetry through it.
+  or Tauri. App code logs and creates spans with `tracing`, and records metrics or links
+  traces through `ot_telemetry::metrics` / `ot_telemetry::trace` only from a dedicated
+  instrumentation module (e.g. `fdc3_bus/instrument.rs`); the broker uses `tracing`
+  alone. Instrument a subsystem from the outside — never route telemetry through it.
+- **Metric attributes stay low-cardinality:** message types from a fixed list, launch
+  kinds, outcomes — never app ids, URLs, window labels or other peer-supplied strings.
+- **Child processes** get trace context and telemetry settings through
+  `ot_telemetry::propagation::inject_env(cmd, kind)` at every spawn site: `Exporting`
+  for the Terminal, `LogsOnly` for engine hosts, `Untrusted` for third-party plugin
+  binaries (no OTLP credentials).
 - **New settings** go through the layered config model: a compiled-in default → a key in
   `agent.config.json` (or the Terminal's config) → an `OT_*` override if it's
   operationally useful → a row in the `AGENTS.md` env-var table → a test of the layering.

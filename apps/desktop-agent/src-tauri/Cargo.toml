@@ -34,8 +34,7 @@ ot-telemetry        = { workspace = true, features = ["otlp"] }
 tracing             = { workspace = true }
 
 [dev-dependencies]
-# The fdc3_bus_harness example logs to stdout, where the contract tests read it.
-tracing-subscriber  = { workspace = true }
+ot-telemetry        = { workspace = true, features = ["otlp", "testing"] }
 
 [lints]
 workspace = true

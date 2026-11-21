@@ -14,7 +14,7 @@
 //! postMessage, which doesn't apply to a direct socket.
 //!
 //! This module only moves frames and performs [`Effect`]s. All FDC3 behaviour
-//! lives in [`crate::broker`].
+//! lives in [`crate::broker`]; spans and metrics live in [`instrument`].
 
 use axum::{
     extract::{
@@ -29,12 +29,16 @@ use futures_util::{future::BoxFuture, SinkExt, StreamExt};
 use serde::Deserialize;
 use serde_json::Value;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::net::TcpListener;
 use tokio::sync::mpsc;
+use tracing::Instrument;
 
 use crate::app_dir::AppRecord;
 use crate::broker::{Broker, Effect};
+
+mod instrument;
+use instrument::BusMetrics;
 
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(30);
 
@@ -53,6 +57,7 @@ pub trait BusHost: Send + Sync + 'static {
 struct BusState {
     broker: Broker,
     host: Arc<dyn BusHost>,
+    metrics: Arc<BusMetrics>,
 }
 
 #[derive(Deserialize)]
@@ -64,7 +69,13 @@ struct ConnectParams {
 pub fn router(broker: Broker, host: Arc<dyn BusHost>) -> Router {
     Router::new()
         .route("/fdc3", get(ws_handler))
-        .with_state(BusState { broker, host })
+        .with_state(BusState {
+            broker,
+            host,
+            metrics: Arc::new(BusMetrics::new(&ot_telemetry::metrics::meter(
+                "desktop-agent",
+            ))),
+        })
 }
 
 pub async fn start(port: u16, broker: Broker, host: Arc<dyn BusHost>) {
@@ -112,9 +123,13 @@ async fn handle_connection(socket: WebSocket, app_id: String, state: BusState) {
             Some(Ok(Message::Ping(d))) => {
                 let _ = sink.send(Message::Pong(d)).await;
             }
-            _ => return,
+            _ => {
+                state.metrics.handshake_failed();
+                return;
+            }
         }
     };
+    state.metrics.connected();
     tracing::info!(
         app_id = %crate::broker::clip_untrusted(&app_id),
         instance_id = %instance_id,
@@ -128,13 +143,29 @@ async fn handle_connection(socket: WebSocket, app_id: String, state: BusState) {
         tokio::select! {
             inbound = stream.next() => match inbound {
                 Some(Ok(Message::Text(txt))) => {
-                    let Ok(msg) = serde_json::from_str::<Value>(&txt) else { continue };
+                    let Ok(mut msg) = serde_json::from_str::<Value>(&txt) else { continue };
                     if msg["type"] == "WCP6Goodbye" {
                         break;
                     }
                     let directory = state.host.directory().await;
-                    let effects = state.broker.handle(&instance_id, &msg, &directory);
-                    perform(effects, &state);
+                    let label = instrument::message_label(msg["type"].as_str().unwrap_or_default());
+                    match label {
+                        Some(label) => {
+                            let span = instrument::request_span(label, &msg, &instance_id);
+                            instrument::link_trace(&span, &mut msg);
+                            let started = Instant::now();
+                            // Synchronous: no guard is held across an await.
+                            span.in_scope(|| {
+                                let effects = state.broker.handle(&instance_id, &msg, &directory);
+                                perform(effects, &state);
+                            });
+                            state.metrics.handled(label, started);
+                        }
+                        None => {
+                            let effects = state.broker.handle(&instance_id, &msg, &directory);
+                            perform(effects, &state);
+                        }
+                    }
                 }
                 Some(Ok(Message::Ping(d))) => {
                     let _ = sink.send(Message::Pong(d)).await;
@@ -160,6 +191,7 @@ async fn handle_connection(socket: WebSocket, app_id: String, state: BusState) {
 
     // ── Phase 3: cleanup ──────────────────────────────────────────────────────
     state.broker.disconnect(&instance_id);
+    state.metrics.disconnected();
     tracing::info!(
         app_id = %crate::broker::clip_untrusted(&app_id),
         instance_id = %instance_id,
@@ -174,10 +206,20 @@ fn perform(effects: Vec<Effect>, state: &BusState) {
         let host = Arc::clone(&state.host);
         match effect {
             Effect::Launch { pending_id, app } => {
-                tokio::spawn(async move {
-                    let result = host.launch(*app).await;
-                    broker.launch_finished(&pending_id, result);
-                });
+                // A child of the current request span; the launched process
+                // gets it as TRACEPARENT, so the launch is one trace.
+                let span = tracing::info_span!(
+                    target: ot_telemetry::SPAN_TARGET,
+                    "fdc3.launch",
+                    app_id = %crate::broker::clip_untrusted(&app.app_id)
+                );
+                tokio::spawn(
+                    async move {
+                        let result = host.launch(*app).await;
+                        broker.launch_finished(&pending_id, result);
+                    }
+                    .instrument(span),
+                );
             }
             Effect::ExpireAfter { pending_id, after } => {
                 tokio::spawn(async move {

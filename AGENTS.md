@@ -174,11 +174,12 @@ The standalone App Directory server (`apps/app-directory-server`) reads its vars
 
 Set by OneTerminal for its own child processes. Don't set them by hand.
 
-| Variable              | Set by → read by                                                | Purpose                                                                                                            |
-| --------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `OT_URL`              | Terminal, Desktop Agent → `tauri-webview-host`, `electron-host` | URL the engine host window opens                                                                                   |
-| `OT_APP_ID`           | Terminal, Desktop Agent → `tauri-webview-host`, `electron-host` | App id / window label of that host window                                                                          |
-| `OT_SPAWNED_BY_AGENT` | Desktop Agent → one-terminal                                    | Marks a Terminal the Desktop Agent spawned. Under `tauri dev`, a Terminal without it keeps running with no windows |
+| Variable              | Set by → read by                                                | Purpose                                                                                                                                                                                    |
+| --------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `OT_URL`              | Terminal, Desktop Agent → `tauri-webview-host`, `electron-host` | URL the engine host window opens                                                                                                                                                           |
+| `OT_APP_ID`           | Terminal, Desktop Agent → `tauri-webview-host`, `electron-host` | App id / window label of that host window                                                                                                                                                  |
+| `TRACEPARENT`         | Desktop Agent, Terminal → every spawned process                 | W3C trace context of the span that spawned the process, so its startup and logs join that trace (with `OT_LOG`/`OT_LOG_DIR` and, for the Terminal only, the parent's OTLP export settings) |
+| `OT_SPAWNED_BY_AGENT` | Desktop Agent → one-terminal                                    | Marks a Terminal the Desktop Agent spawned. Under `tauri dev`, a Terminal without it keeps running with no windows                                                                         |
 
 Not yet implemented (planned): `OT_NATIVE_APP_ALLOW_PATHS`, `APPD_DB_PATH`, `APPD_JWT_SECRET`, `APPD_ALLOW_ANONYMOUS_READ`, `APPD_AUTH_PLUGIN_URL` (Auth Provider plugin on 4477, OIDC redirect on 4476). The App Directory store is in-memory, seeded from `packages/ot-appdirectory/src/data.rs`.
 

@@ -78,8 +78,10 @@ logs — and `Telemetry::shutdown()` on `RunEvent::Exit` and before any
   credentials and query strings.
 - **Timings** stay `"<operation> in N ms"` in the message until a metric replaces them.
 - **Spans** for work that crosses a boundary (an FDC3 request, a launch): create them
-  with `tracing::info_span!` and use `.instrument(span)` on spawned futures so the span
-  survives the `await`.
+  with `tracing::info_span!(target: ot_telemetry::SPAN_TARGET, …)` — that target stays
+  enabled however quiet the log filter is — and use `.instrument(span)` on spawned
+  futures so the span survives the `await`. Never make a peer-supplied id (an FDC3
+  `traceId`) a span's parent; record it as an attribute.
 
 ## Async and blocking
 

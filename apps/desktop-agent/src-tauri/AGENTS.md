@@ -8,15 +8,17 @@ User-facing FDC3 docs: [docs/fdc3.md](../../../docs/fdc3.md).
 
 ## Module map
 
-| Path            | Responsibility                                                                                                                                     |
-| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/broker/`   | **All FDC3 rules.** Synchronous, no sockets, no Tauri. `Broker::handle` applies one DACP message and returns `Effect`s. Tests in `broker/tests.rs` |
-| `src/fdc3_bus/` | WebSocket server on `127.0.0.1:<OT_FDC3_BUS_PORT>/fdc3`. Moves frames, runs the WCP4/WCP5 handshake, performs `Effect`s. No FDC3 logic             |
-| `src/engines/`  | Engine catalog, runtime cache (`<app_data>/engines/<family>/<version>/`), launch routing (`router.rs`)                                             |
-| `src/app_dir/`  | Slim FDC3 3.0 AppD types (`AppRecord`), `fdc3Version` range matching, `AppDirectoryCache` the broker resolves against                              |
-| `src/config.rs` | `AgentConfig::load()` (layering below)                                                                                                             |
-| `src/lib.rs`    | App setup, tray, process lifecycle (spawned child PIDs, kill on quit), embedded App Directory mount                                                |
-| `../src/`       | React dashboard UI for the Desktop Agent window                                                                                                    |
+| Path                         | Responsibility                                                                                                                                     |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/broker/`                | **All FDC3 rules.** Synchronous, no sockets, no Tauri. `Broker::handle` applies one DACP message and returns `Effect`s. Tests in `broker/tests.rs` |
+| `src/fdc3_bus/`              | WebSocket server on `127.0.0.1:<OT_FDC3_BUS_PORT>/fdc3`. Moves frames, runs the WCP4/WCP5 handshake, performs `Effect`s. No FDC3 logic             |
+| `src/engines/`               | Engine catalog, runtime cache (`<app_data>/engines/<family>/<version>/`), launch routing (`router.rs`)                                             |
+| `src/app_dir/`               | Slim FDC3 3.0 AppD types (`AppRecord`), `fdc3Version` range matching, `AppDirectoryCache` the broker resolves against                              |
+| `src/fdc3_bus/instrument.rs` | Spans (`fdc3.request` per message, `fdc3.launch`), FDC3 trace-id ↔ span linking, bus metrics. The broker knows nothing about telemetry             |
+| `src/metrics.rs`             | App-launch metrics (`ot.app.launches`, `ot.app.launch.duration`)                                                                                   |
+| `src/config.rs`              | `AgentConfig::load_quiet()` (layering below), including the `telemetry` block                                                                      |
+| `src/lib.rs`                 | App setup, tray, process lifecycle (spawned child PIDs, kill on quit), embedded App Directory mount                                                |
+| `../src/`                    | React dashboard UI for the Desktop Agent window                                                                                                    |
 
 ## Broker / bus boundary (do not blur it)
 

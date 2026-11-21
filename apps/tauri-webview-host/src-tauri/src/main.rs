@@ -43,25 +43,34 @@ fn main() {
     let label = format!("host-{}", sanitize_label(&app_id));
     let title_clone = title.clone();
 
-    tauri::Builder::default()
-        .setup(move |app| {
-            tauri::WebviewWindowBuilder::new(
-                app,
-                &label,
-                tauri::WebviewUrl::External(parsed.clone()),
-            )
-            .title(title_clone.clone())
-            .inner_size(1280.0, 800.0)
-            .build()?;
-            Ok(())
-        })
-        .build(tauri::generate_context!())
-        .expect("tauri-webview-host failed to build")
-        .run(move |_, event| {
-            if let tauri::RunEvent::Exit = event {
-                telemetry.shutdown();
-            }
-        });
+    // `process.startup` covers `build` and `setup`: Tauri runs `setup` inside
+    // `App::run`, so the setup closure holds a clone; the span ends when setup
+    // returns.
+    let startup = telemetry.startup_span();
+    let startup_setup = startup.clone();
+    let app = startup.in_scope(|| {
+        tauri::Builder::default()
+            .setup(move |app| {
+                let _startup = startup_setup.enter();
+                tauri::WebviewWindowBuilder::new(
+                    app,
+                    &label,
+                    tauri::WebviewUrl::External(parsed.clone()),
+                )
+                .title(title_clone.clone())
+                .inner_size(1280.0, 800.0)
+                .build()?;
+                Ok(())
+            })
+            .build(tauri::generate_context!())
+            .expect("tauri-webview-host failed to build")
+    });
+    drop(startup);
+    app.run(move |_, event| {
+        if let tauri::RunEvent::Exit = event {
+            telemetry.shutdown();
+        }
+    });
 }
 
 fn sanitize_label(s: &str) -> String {

@@ -13,10 +13,16 @@
 pub mod config;
 mod logs;
 #[cfg(feature = "otlp")]
+pub mod metrics;
+#[cfg(feature = "otlp")]
 mod otlp;
 pub mod paths;
 pub mod propagation;
 pub mod redact;
+#[cfg(feature = "testing")]
+pub mod testing;
+#[cfg(feature = "otlp")]
+pub mod trace;
 
 pub use config::{resolve, Resolved, TelemetryConfig};
 
@@ -89,6 +95,9 @@ pub fn init(resolved: &Resolved, version: &str) -> Telemetry {
             None => otlp::Providers::local_only(resolved, version),
         };
         layers.extend(providers.layers());
+        if let Some(meter) = &providers.meter {
+            metrics::install(meter.clone());
+        }
         let exporting = providers.exports(resolved.otlp.as_ref());
         (Some(providers), exporting)
     };
@@ -100,6 +109,8 @@ pub fn init(resolved: &Resolved, version: &str) -> Telemetry {
         }
         false
     };
+
+    propagation::capture_child_settings(resolved, &|key| std::env::var(key).ok());
 
     if let Err(e) = tracing_subscriber::registry()
         .with(layers)
@@ -133,21 +144,12 @@ impl Telemetry {
         self.exporting
     }
 
-    /// A meter for `scope` (e.g. `"desktop-agent"`). A no-op meter when
-    /// metrics aren't exported, so instruments cost almost nothing.
-    #[cfg(feature = "otlp")]
-    pub fn meter(&self, scope: &'static str) -> opentelemetry::metrics::Meter {
-        match &self.providers {
-            Some(p) => p.meter(scope),
-            None => opentelemetry::global::meter(scope),
-        }
-    }
-
     /// A `process.startup` span. When this process was spawned with
     /// `TRACEPARENT`, the span is a child of the spawning span, so the launch
     /// appears as one trace across processes. Later spans are new roots.
     pub fn startup_span(&self) -> tracing::Span {
-        let span = tracing::info_span!(target: TELEMETRY_TARGET, "process.startup", pid = std::process::id());
+        let span =
+            tracing::info_span!(target: SPAN_TARGET, "process.startup", pid = std::process::id());
         #[cfg(feature = "otlp")]
         if let Some(parent) = propagation::startup_parent() {
             use tracing_opentelemetry::OpenTelemetrySpanExt;
@@ -237,14 +239,19 @@ fn run_capped(jobs: Vec<otlp::Job>) -> bool {
     true
 }
 
-/// Target of telemetry's own log lines and the `process.startup` span.
+/// Target of telemetry's own log lines.
 const TELEMETRY_TARGET: &str = "telemetry";
+
+/// Target for spans that carry traces (`fdc3.request`, `app.launch`,
+/// `process.startup`, …): `info_span!(target: ot_telemetry::SPAN_TARGET, …)`.
+/// The log filter always enables it (unless it names it), so a quiet
+/// `OT_LOG=warn` keeps logs quiet without turning tracing off.
+pub const SPAN_TARGET: &str = "ot_spans";
 
 /// `Targets` has no implicit default: `OT_LOG=desktop_agent_lib=debug` alone
 /// would silence every other warning and error. Add a `warn` default when none
-/// is given, and keep telemetry's own target (the effective-config lines and
-/// the `process.startup` span that links a child to its parent) at `info`
-/// unless the filter names it.
+/// is given, and keep telemetry's own targets — the effective-config lines
+/// and [`SPAN_TARGET`] — at `info` unless the filter names them.
 fn complete_filter(filter: Targets) -> Targets {
     use tracing_subscriber::filter::LevelFilter;
     let filter = if filter.default_level().is_none() {
@@ -252,11 +259,15 @@ fn complete_filter(filter: Targets) -> Targets {
     } else {
         filter
     };
-    if filter.iter().any(|(target, _)| target == TELEMETRY_TARGET) {
-        filter
-    } else {
-        filter.with_target(TELEMETRY_TARGET, LevelFilter::INFO)
-    }
+    [TELEMETRY_TARGET, SPAN_TARGET]
+        .into_iter()
+        .fold(filter, |filter, own| {
+            if filter.iter().any(|(target, _)| target == own) {
+                filter
+            } else {
+                filter.with_target(own, LevelFilter::INFO)
+            }
+        })
 }
 
 /// Random id for this process (`service.instance.id`), without pulling in a
@@ -283,6 +294,10 @@ mod tests {
         assert!(f.would_enable("tao", &Level::WARN), "warn default added");
         assert!(!f.would_enable("tao", &Level::INFO));
         assert!(f.would_enable(TELEMETRY_TARGET, &Level::INFO));
+        assert!(
+            f.would_enable(SPAN_TARGET, &Level::INFO),
+            "tracing on at warn"
+        );
 
         let f = complete_filter("error,telemetry=off".parse().unwrap());
         assert!(

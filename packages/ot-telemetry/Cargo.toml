@@ -20,6 +20,8 @@ otlp = [
     "dep:async-trait",
     "dep:reqwest",
 ]
+# `ot_telemetry::testing`: in-memory span and metric capture for app-crate tests.
+testing = ["otlp", "opentelemetry_sdk/testing"]
 
 [dependencies]
 serde              = { workspace = true }

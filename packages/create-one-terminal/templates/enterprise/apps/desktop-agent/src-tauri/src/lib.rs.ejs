@@ -3,6 +3,7 @@ pub mod broker;
 mod config;
 mod engines;
 pub mod fdc3_bus;
+mod metrics;
 
 use app_dir::{AppDirectoryCache, AppRecord};
 use broker::{Broker, BrokerEvent, BrokerEvents, ChannelInfo, IntentHandlerInfo, WindowHandle};
@@ -339,14 +340,48 @@ async fn cda_launch_app(
     execute_plan(&app, &label, plan).await
 }
 
-/// Carry out a [`LaunchPlan`]: open in-process, spawn the pinned-WebView2
-/// host, or spawn the Electron host (latter is Phase 5 — not installed yet).
+/// Longest app-derived string (window label) recorded on a span: app ids come
+/// from the App Directory, which accepts unauthenticated writes.
+const UNTRUSTED_ATTR_CHARS: usize = 128;
+
+/// Carry out a [`LaunchPlan`] in an `app.launch` span (a child of the FDC3
+/// request that asked for it, if any), recording launch metrics. Spawned
+/// processes get the span as `TRACEPARENT`.
 async fn execute_plan(
     app: &AppHandle,
     label: &str,
     plan: engines::router::LaunchPlan,
 ) -> Result<(), String> {
     use engines::router::LaunchPlan;
+    use tracing::Instrument;
+
+    let kind = match &plan {
+        LaunchPlan::InProcessWebview { .. } => "in_process",
+        LaunchPlan::SpawnTauriHost { .. } => "tauri_host",
+        LaunchPlan::SpawnElectronHost { .. } => "electron_host",
+        LaunchPlan::SpawnBinary { .. } => "plugin_binary",
+    };
+    let span = tracing::info_span!(
+        target: ot_telemetry::SPAN_TARGET,
+        "app.launch",
+        ot.launch.kind = kind,
+        ot.window = %ot_telemetry::redact::clip(label, UNTRUSTED_ATTR_CHARS)
+    );
+    let started = std::time::Instant::now();
+    let result = run_plan(app, label, plan).instrument(span).await;
+    metrics::launches().record(kind, result.is_ok(), started);
+    result
+}
+
+/// Open in-process, spawn the pinned-WebView2 host, the Electron host or a
+/// plugin binary.
+async fn run_plan(
+    app: &AppHandle,
+    label: &str,
+    plan: engines::router::LaunchPlan,
+) -> Result<(), String> {
+    use engines::router::LaunchPlan;
+    use ot_telemetry::propagation::{inject_env, ChildKind};
 
     match plan {
         LaunchPlan::InProcessWebview { url, title } => {
@@ -371,6 +406,7 @@ async fn execute_plan(
             if let Some(folder) = runtime_folder {
                 cmd.env("WEBVIEW2_BROWSER_EXECUTABLE_FOLDER", folder);
             }
+            inject_env(&mut cmd, ChildKind::LogsOnly);
             cmd.spawn()
                 .map(|_| ())
                 .map_err(|e| format!("Failed to spawn {}: {e}", host_bin.display()))
@@ -385,7 +421,14 @@ async fn execute_plan(
             // and the Electron binary (OT_ELECTRON_BIN, catalog cache, or
             // the shell's own node_modules from `npm install`).
             let cache_root = ot_core::engine::default_cache_root();
-            ot_core::electron_host::spawn_electron_app(&binding, &cache_root, label, &url, &title)
+            ot_core::electron_host::spawn_electron_app_with(
+                &binding,
+                &cache_root,
+                label,
+                &url,
+                &title,
+                |cmd| inject_env(cmd, ChildKind::LogsOnly),
+            )
         }
         LaunchPlan::SpawnBinary {
             binary_name,
@@ -395,6 +438,8 @@ async fn execute_plan(
             for (k, v) in env_vars {
                 cmd.env(k, v);
             }
+            // Third-party code: trace context only, no telemetry credentials.
+            inject_env(&mut cmd, ChildKind::Untrusted);
             cmd.spawn()
                 .map(|_| ())
                 .map_err(|e| format!("Failed to spawn plugin binary '{binary_name}': {e}"))
@@ -529,6 +574,10 @@ impl TerminalRegistry {
 fn wm_command(bin: &std::path::Path) -> std::process::Command {
     let mut cmd = std::process::Command::new(bin);
     cmd.env("OT_SPAWNED_BY_AGENT", "1");
+    ot_telemetry::propagation::inject_env(
+        &mut cmd,
+        ot_telemetry::propagation::ChildKind::Exporting,
+    );
     cmd
 }
 
@@ -795,211 +844,224 @@ pub fn run() {
     let app_dir_cache = AppDirectoryCache::new(&cfg.app_directory_url);
     let engine_catalog = EngineCatalogClient::new(&cfg.engine_catalog_url);
 
-    tauri::Builder::default()
-        .manage(app_dir_cache.clone())
-        .manage(engine_catalog.clone())
-        .manage(cfg.clone())
-        .manage(TerminalRegistry::default())
-        .setup(|app| {
-            let adc = app.state::<AppDirectoryCache>().inner().clone();
-            let app_handle = app.handle().clone();
-            let ports = app.state::<AgentConfig>().ports.clone();
+    // `process.startup` covers `build` and `setup`: Tauri runs `setup` inside
+    // `App::run`, so the setup closure holds a clone; the span ends when setup
+    // returns. Anything setup spawns (e.g. restored Terminals) gets it as
+    // TRACEPARENT.
+    let startup = telemetry.startup_span();
+    let startup_setup = startup.clone();
+    let app = startup.in_scope(|| {
+        tauri::Builder::default()
+            .manage(app_dir_cache.clone())
+            .manage(engine_catalog.clone())
+            .manage(cfg.clone())
+            .manage(TerminalRegistry::default())
+            .setup(move |app| {
+                let _startup = startup_setup.enter();
+                let adc = app.state::<AppDirectoryCache>().inner().clone();
+                let app_handle = app.handle().clone();
+                let ports = app.state::<AgentConfig>().ports.clone();
 
-            // Engine runtime cache lives at the shared cross-process location
-            // so the one-terminal can find runtimes installed by desktop-agent.
-            let engine_root = ot_core::engine::default_cache_root();
-            std::fs::create_dir_all(&engine_root)
-                .map_err(|e| format!("create engine root {}: {e}", engine_root.display()))?;
-            app.manage(EngineRuntimeStore::new(engine_root));
+                // Engine runtime cache lives at the shared cross-process location
+                // so the one-terminal can find runtimes installed by desktop-agent.
+                let engine_root = ot_core::engine::default_cache_root();
+                std::fs::create_dir_all(&engine_root)
+                    .map_err(|e| format!("create engine root {}: {e}", engine_root.display()))?;
+                app.manage(EngineRuntimeStore::new(engine_root));
 
-            let ec = app.state::<EngineCatalogClient>().inner().clone();
+                let ec = app.state::<EngineCatalogClient>().inner().clone();
 
-            // In-process App Directory server. Bound to app_directory_url's port so
-            // the existing AppDirectoryCache/EngineCatalogClient reqwest clients
-            // below talk to it over loopback exactly as they would to a remote
-            // instance. Skipped
-            // when OT_APPD_EMBEDDED=0 (pointing OT_APP_DIR_URL at a remote/hosted
-            // App Directory instead) or when the port is already taken by
-            // something else (e.g. a dev-mode `npm run dev:app-directory`).
-            let appd_cfg = app.state::<AgentConfig>().inner().clone();
-            if appd_cfg.appd_embedded {
-                let port = config::port_from_url(&appd_cfg.app_directory_url);
-                tauri::async_runtime::spawn(async move {
-                    match tokio::net::TcpListener::bind(("127.0.0.1", port)).await {
-                        Ok(listener) => {
-                            tracing::info!(
-                                "App Directory (embedded) listening on 127.0.0.1:{port}"
-                            );
-                            let router =
-                                ot_appdirectory::router_with_ui(ot_appdirectory::AppStore::new());
-                            if let Err(e) = axum::serve(listener, router).await {
-                                tracing::error!("App Directory server error: {e}");
+                // In-process App Directory server. Bound to app_directory_url's port so
+                // the existing AppDirectoryCache/EngineCatalogClient reqwest clients
+                // below talk to it over loopback exactly as they would to a remote
+                // instance. Skipped
+                // when OT_APPD_EMBEDDED=0 (pointing OT_APP_DIR_URL at a remote/hosted
+                // App Directory instead) or when the port is already taken by
+                // something else (e.g. a dev-mode `npm run dev:app-directory`).
+                let appd_cfg = app.state::<AgentConfig>().inner().clone();
+                if appd_cfg.appd_embedded {
+                    let port = config::port_from_url(&appd_cfg.app_directory_url);
+                    tauri::async_runtime::spawn(async move {
+                        match tokio::net::TcpListener::bind(("127.0.0.1", port)).await {
+                            Ok(listener) => {
+                                tracing::info!(
+                                    "App Directory (embedded) listening on 127.0.0.1:{port}"
+                                );
+                                let router = ot_appdirectory::router_with_ui(
+                                    ot_appdirectory::AppStore::new(),
+                                );
+                                if let Err(e) = axum::serve(listener, router).await {
+                                    tracing::error!("App Directory server error: {e}");
+                                }
                             }
-                        }
-                        Err(e) => {
-                            tracing::warn!(
+                            Err(e) => {
+                                tracing::warn!(
                                 "App Directory (embedded) skipped — port {port} unavailable: {e}"
                             );
-                        }
-                    }
-                });
-            }
-
-            // FDC3 broker, seeded with user channels from config, and the
-            // WebSocket server browser apps reach it through.
-            let broker = Broker::new(Arc::new(TauriEvents(app_handle.clone())));
-            for ch in &app.state::<AgentConfig>().user_channels {
-                broker.add_user_channel(&ch.id, &ch.display_name, &ch.color);
-            }
-            app.manage(broker.clone());
-            tauri::async_runtime::spawn(fdc3_bus::start(
-                ports.fdc3_bus,
-                broker,
-                Arc::new(TauriBusHost(app_handle.clone())),
-            ));
-
-            let app_handle_tray = app_handle;
-
-            // Initial App Directory fetch (non-fatal if the service is not running).
-            tauri::async_runtime::spawn(async move {
-                match adc.refresh().await {
-                    Ok(n) => {
-                        tracing::info!("App Directory: {n} app(s) loaded at startup");
-                        if let Ok(menu) = build_tray_menu(&app_handle_tray).await {
-                            if let Some(tray) = app_handle_tray.tray_by_id("main") {
-                                let _ = tray.set_menu(Some(menu));
                             }
                         }
-                    }
-                    Err(e) => tracing::warn!("App Directory unavailable at startup: {e}"),
+                    });
                 }
-            });
 
-            // Initial engine catalog fetch (same non-fatal policy).
-            tauri::async_runtime::spawn(async move {
-                match ec.refresh().await {
-                    Ok(n) => tracing::info!("Engine catalog: {n} entry/entries loaded at startup"),
-                    Err(e) => tracing::warn!("Engine catalog unavailable at startup: {e}"),
+                // FDC3 broker, seeded with user channels from config, and the
+                // WebSocket server browser apps reach it through.
+                let broker = Broker::new(Arc::new(TauriEvents(app_handle.clone())));
+                for ch in &app.state::<AgentConfig>().user_channels {
+                    broker.add_user_channel(&ch.id, &ch.display_name, &ch.color);
                 }
-            });
+                app.manage(broker.clone());
+                tauri::async_runtime::spawn(fdc3_bus::start(
+                    ports.fdc3_bus,
+                    broker,
+                    Arc::new(TauriBusHost(app_handle.clone())),
+                ));
 
-            // Restore the Terminal windows that were open when the Desktop
-            // Agent last quit (each window's session is deleted when the user
-            // closes it, and "Quit and discard" deletes them all). With none
-            // saved, no Terminal opens until the user clicks "Open" on the
-            // launcher's Terminal card (cda_open_terminal) or "Open New
-            // Terminal" in the tray menu, both of which open a blank one.
-            if has_saved_terminals(app.handle()) {
-                spawn_wm_restore(app.state::<TerminalRegistry>().inner());
-            }
+                let app_handle_tray = app_handle;
 
-            // ── System tray ────────────────────────────────────────────────────
-            // Initial menu: apps list is empty until the App Directory fetch completes.
-            let open_item = MenuItemBuilder::with_id("open", "Open CDA").build(app)?;
-            let terminal_item =
-                MenuItemBuilder::with_id("terminal", "Open New Terminal").build(app)?;
-            let exit_item = MenuItemBuilder::with_id("exit", "Exit").build(app)?;
-            let placeholder = MenuItemBuilder::with_id("no-apps", "No apps available")
-                .enabled(false)
-                .build(app)?;
-            let apps_sub = SubmenuBuilder::new(app, "Launch App")
-                .item(&placeholder)
-                .build()?;
-            let init_menu = MenuBuilder::new(app)
-                .item(&open_item)
-                .item(&terminal_item)
-                .item(&apps_sub)
-                .separator()
-                .item(&exit_item)
-                .build()?;
-
-            let _tray = TrayIconBuilder::with_id("main")
-                .icon(app.default_window_icon().unwrap().clone())
-                .icon_as_template(true)
-                .menu(&init_menu)
-                .tooltip("<%= displayName %> Desktop Agent")
-                .on_menu_event(|app, event| match event.id.as_ref() {
-                    "open" => {
-                        if let Some(w) = app.get_webview_window("desktop-agent-dashboard") {
-                            let _ = w.show();
-                            let _ = w.set_focus();
+                // Initial App Directory fetch (non-fatal if the service is not running).
+                tauri::async_runtime::spawn(async move {
+                    match adc.refresh().await {
+                        Ok(n) => {
+                            tracing::info!("App Directory: {n} app(s) loaded at startup");
+                            if let Ok(menu) = build_tray_menu(&app_handle_tray).await {
+                                if let Some(tray) = app_handle_tray.tray_by_id("main") {
+                                    let _ = tray.set_menu(Some(menu));
+                                }
+                            }
                         }
+                        Err(e) => tracing::warn!("App Directory unavailable at startup: {e}"),
                     }
-                    "terminal" => {
-                        spawn_wm_new_terminal(app.state::<TerminalRegistry>().inner());
-                    }
-                    "exit" => {
-                        // Show the dashboard window and ask the user whether to
-                        // save or discard Terminal state before quitting.
-                        if let Some(w) = app.get_webview_window("desktop-agent-dashboard") {
-                            let _ = w.show();
-                            let _ = w.unminimize();
-                            let _ = w.set_focus();
-                            let _ = tauri::Emitter::emit(app, "cda:quit-requested", ());
-                        } else {
-                            // No dashboard window (shouldn't happen), fall back.
-                            app.exit(0);
-                        }
-                    }
-                    id if id.starts_with("launch:") => {
-                        let app_id = id.trim_start_matches("launch:").to_string();
-                        let app_clone = app.clone();
-                        tauri::async_runtime::spawn(launch_app_from_tray(app_clone, app_id));
-                    }
-                    _ => {}
-                })
-                .on_tray_icon_event(|tray, event| {
-                    if let TrayIconEvent::Click {
-                        button: MouseButton::Left,
-                        button_state: MouseButtonState::Up,
-                        ..
-                    } = event
-                    {
-                        let app = tray.app_handle();
-                        if let Some(w) = app.get_webview_window("desktop-agent-dashboard") {
-                            let _ = w.show();
-                            let _ = w.set_focus();
-                        }
-                    }
-                })
-                .build(app)?;
+                });
 
-            Ok(())
-        })
-        .on_window_event(|window, event| {
-            if window.label() == "desktop-agent-dashboard" {
-                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                    api.prevent_close();
-                    let _ = window.hide();
+                // Initial engine catalog fetch (same non-fatal policy).
+                tauri::async_runtime::spawn(async move {
+                    match ec.refresh().await {
+                        Ok(n) => {
+                            tracing::info!("Engine catalog: {n} entry/entries loaded at startup");
+                        }
+                        Err(e) => tracing::warn!("Engine catalog unavailable at startup: {e}"),
+                    }
+                });
+
+                // Restore the Terminal windows that were open when the Desktop
+                // Agent last quit (each window's session is deleted when the user
+                // closes it, and "Quit and discard" deletes them all). With none
+                // saved, no Terminal opens until the user clicks "Open" on the
+                // launcher's Terminal card (cda_open_terminal) or "Open New
+                // Terminal" in the tray menu, both of which open a blank one.
+                if has_saved_terminals(app.handle()) {
+                    spawn_wm_restore(app.state::<TerminalRegistry>().inner());
                 }
-            }
-        })
-        .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![
-            cda_list_connections,
-            cda_list_channels,
-            cda_disconnect_spoke,
-            cda_broadcast_from_dashboard,
-            cda_list_intent_handlers,
-            cda_raise_intent_from_dashboard,
-            cda_open_terminal,
-            cda_get_app_dir_url,
-            cda_open_app_directory,
-            cda_quit,
-            cda_quit_discard,
-            cda_list_app_directory,
-            cda_refresh_app_directory,
-            cda_launch_app,
-            engines::commands::engine_catalog,
-            engines::commands::engine_refresh_catalog,
-            engines::commands::engine_list_installed,
-            engines::commands::engine_ensure,
-        ])
-        .build(tauri::generate_context!())
-        .expect("error while building <%= displayName %> Desktop Agent")
-        .run(move |_app, event| {
-            if let tauri::RunEvent::Exit = event {
-                telemetry.shutdown();
-            }
-        });
+
+                // ── System tray ────────────────────────────────────────────────────
+                // Initial menu: apps list is empty until the App Directory fetch completes.
+                let open_item = MenuItemBuilder::with_id("open", "Open CDA").build(app)?;
+                let terminal_item =
+                    MenuItemBuilder::with_id("terminal", "Open New Terminal").build(app)?;
+                let exit_item = MenuItemBuilder::with_id("exit", "Exit").build(app)?;
+                let placeholder = MenuItemBuilder::with_id("no-apps", "No apps available")
+                    .enabled(false)
+                    .build(app)?;
+                let apps_sub = SubmenuBuilder::new(app, "Launch App")
+                    .item(&placeholder)
+                    .build()?;
+                let init_menu = MenuBuilder::new(app)
+                    .item(&open_item)
+                    .item(&terminal_item)
+                    .item(&apps_sub)
+                    .separator()
+                    .item(&exit_item)
+                    .build()?;
+
+                let _tray = TrayIconBuilder::with_id("main")
+                    .icon(app.default_window_icon().unwrap().clone())
+                    .icon_as_template(true)
+                    .menu(&init_menu)
+                    .tooltip("<%= displayName %> Desktop Agent")
+                    .on_menu_event(|app, event| match event.id.as_ref() {
+                        "open" => {
+                            if let Some(w) = app.get_webview_window("desktop-agent-dashboard") {
+                                let _ = w.show();
+                                let _ = w.set_focus();
+                            }
+                        }
+                        "terminal" => {
+                            spawn_wm_new_terminal(app.state::<TerminalRegistry>().inner());
+                        }
+                        "exit" => {
+                            // Show the dashboard window and ask the user whether to
+                            // save or discard Terminal state before quitting.
+                            if let Some(w) = app.get_webview_window("desktop-agent-dashboard") {
+                                let _ = w.show();
+                                let _ = w.unminimize();
+                                let _ = w.set_focus();
+                                let _ = tauri::Emitter::emit(app, "cda:quit-requested", ());
+                            } else {
+                                // No dashboard window (shouldn't happen), fall back.
+                                app.exit(0);
+                            }
+                        }
+                        id if id.starts_with("launch:") => {
+                            let app_id = id.trim_start_matches("launch:").to_string();
+                            let app_clone = app.clone();
+                            tauri::async_runtime::spawn(launch_app_from_tray(app_clone, app_id));
+                        }
+                        _ => {}
+                    })
+                    .on_tray_icon_event(|tray, event| {
+                        if let TrayIconEvent::Click {
+                            button: MouseButton::Left,
+                            button_state: MouseButtonState::Up,
+                            ..
+                        } = event
+                        {
+                            let app = tray.app_handle();
+                            if let Some(w) = app.get_webview_window("desktop-agent-dashboard") {
+                                let _ = w.show();
+                                let _ = w.set_focus();
+                            }
+                        }
+                    })
+                    .build(app)?;
+
+                Ok(())
+            })
+            .on_window_event(|window, event| {
+                if window.label() == "desktop-agent-dashboard" {
+                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                        api.prevent_close();
+                        let _ = window.hide();
+                    }
+                }
+            })
+            .plugin(tauri_plugin_opener::init())
+            .invoke_handler(tauri::generate_handler![
+                cda_list_connections,
+                cda_list_channels,
+                cda_disconnect_spoke,
+                cda_broadcast_from_dashboard,
+                cda_list_intent_handlers,
+                cda_raise_intent_from_dashboard,
+                cda_open_terminal,
+                cda_get_app_dir_url,
+                cda_open_app_directory,
+                cda_quit,
+                cda_quit_discard,
+                cda_list_app_directory,
+                cda_refresh_app_directory,
+                cda_launch_app,
+                engines::commands::engine_catalog,
+                engines::commands::engine_refresh_catalog,
+                engines::commands::engine_list_installed,
+                engines::commands::engine_ensure,
+            ])
+            .build(tauri::generate_context!())
+            .expect("error while building <%= displayName %> Desktop Agent")
+    });
+    drop(startup);
+    app.run(move |_app, event| {
+        if let tauri::RunEvent::Exit = event {
+            telemetry.shutdown();
+        }
+    });
 }
