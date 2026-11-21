@@ -3,7 +3,7 @@
 //! minors, so upgrades should only touch this file.
 
 use crate::config::{Resolved, ResolvedOtlp};
-use opentelemetry::{InstrumentationScope, KeyValue};
+use opentelemetry::KeyValue;
 use opentelemetry_http::{Bytes, HttpClient, HttpError, Request, Response};
 use opentelemetry_otlp::{Protocol, WithExportConfig, WithHttpConfig};
 use opentelemetry_sdk::logs::SdkLoggerProvider;
@@ -171,15 +171,6 @@ impl Providers {
             layers.push(Box::new(bridge));
         }
         layers
-    }
-
-    pub fn meter(&self, scope: &'static str) -> opentelemetry::metrics::Meter {
-        use opentelemetry::metrics::MeterProvider as _;
-        let scope = InstrumentationScope::builder(scope).build();
-        match &self.meter {
-            Some(provider) => provider.meter_with_scope(scope),
-            None => opentelemetry::global::meter_provider().meter_with_scope(scope),
-        }
     }
 
     /// One flush job per provider, logs first: they're usually the most

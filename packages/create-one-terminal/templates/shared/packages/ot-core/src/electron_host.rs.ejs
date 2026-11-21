@@ -140,6 +140,22 @@ pub fn spawn_electron_app(
     url: &str,
     title: &str,
 ) -> Result<(), String> {
+    spawn_electron_app_with(binding, cache_root, app_id, url, title, |_| {})
+}
+
+/// [`spawn_electron_app`], letting the caller adjust each command it runs —
+/// e.g. to set trace context and strip credentials from the environment —
+/// without this crate knowing about telemetry. `configure` is applied to the
+/// Electron command and, in dev mode, to the `npm install` that fetches it
+/// (npm runs third-party install scripts).
+pub fn spawn_electron_app_with(
+    binding: &EngineBinding,
+    cache_root: &Path,
+    app_id: &str,
+    url: &str,
+    title: &str,
+    configure: impl Fn(&mut std::process::Command),
+) -> Result<(), String> {
     let shell = locate_electron_shell()?;
     let bin = match locate_electron_binary(binding, cache_root, &shell) {
         Ok(b) => b,
@@ -148,7 +164,7 @@ pub fn spawn_electron_app(
             // In release builds the binary must ship alongside the app.
             if std::env::var("OT_ELECTRON_HOST_OVERRIDE").is_ok() {
                 tracing::warn!("{e}");
-                auto_install_binary(&shell)?;
+                auto_install_binary(&shell, &configure)?;
                 locate_electron_binary(binding, cache_root, &shell)?
             } else {
                 return Err(e);
@@ -160,6 +176,7 @@ pub fn spawn_electron_app(
         .env("OT_APP_ID", app_id)
         .env("OT_URL", url)
         .env("OT_TITLE", title);
+    configure(&mut cmd);
     cmd.spawn()
         .map(|_| ())
         .map_err(|e| format!("spawn electron {}: {e}", bin.display()))
@@ -167,7 +184,10 @@ pub fn spawn_electron_app(
 
 /// Run `npm install -w @<%= orgScope %>/electron-host` from the workspace root
 /// derived from the shell directory (`shell_dir/../../`).
-fn auto_install_binary(shell_dir: &Path) -> Result<(), String> {
+fn auto_install_binary(
+    shell_dir: &Path,
+    configure: &dyn Fn(&mut std::process::Command),
+) -> Result<(), String> {
     let workspace_root = shell_dir
         .parent() // apps/
         .and_then(|p| p.parent()) // workspace root
@@ -187,9 +207,11 @@ fn auto_install_binary(shell_dir: &Path) -> Result<(), String> {
     );
 
     let npm = if cfg!(windows) { "npm.cmd" } else { "npm" };
-    let status = std::process::Command::new(npm)
-        .args(["install", "-w", "@<%= orgScope %>/electron-host"])
-        .current_dir(workspace_root)
+    let mut cmd = std::process::Command::new(npm);
+    cmd.args(["install", "-w", "@<%= orgScope %>/electron-host"])
+        .current_dir(workspace_root);
+    configure(&mut cmd);
+    let status = cmd
         .status()
         .map_err(|e| format!("failed to run npm: {e}"))?;
 

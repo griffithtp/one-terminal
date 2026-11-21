@@ -30,6 +30,9 @@ Logging, tracing and opt-in OpenTelemetry export for every OneTerminal binary. R
 | `logs.rs`        | Daily JSON-lines file per service + stderr text; trace ids on every line                     |
 | `otlp.rs`        | Feature `otlp`: providers, OTLP/HTTP exporters, the reqwest 0.12 HTTP client                 |
 | `propagation.rs` | `TRACEPARENT` parse/inject for child processes (works without `otlp`)                        |
+| `metrics.rs`     | Feature `otlp`: `meter(scope)` and instrument re-exports for app code                        |
+| `trace.rs`       | Feature `otlp`: span trace ids, FDC3/UUID trace-id normalising, joining an external trace    |
+| `testing.rs`     | Feature `testing`: in-memory span and metric capture for app-crate tests                     |
 | `paths.rs`       | Per-OS default log directory                                                                 |
 | `redact.rs`      | `redact::url`, `Redacted<T>`                                                                 |
 | `lib.rs`         | `init`, `Telemetry` (`shutdown` capped at `FLUSH_CAP`), panic hook, startup span             |
@@ -38,6 +41,7 @@ Logging, tracing and opt-in OpenTelemetry export for every OneTerminal binary. R
 
 - `otlp` (default): export. `desktop-agent`, `one-terminal` and `app-directory-server`
   enable it.
+- `testing` (dev-dependencies only): `ot_telemetry::testing::Capture`.
 - Without `otlp` (`tauri-webview-host`): local logs only, no network or TLS code, no
   export threads. Log lines still carry the `TRACEPARENT` trace id.
 

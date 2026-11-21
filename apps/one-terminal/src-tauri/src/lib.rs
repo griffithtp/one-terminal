@@ -3,6 +3,7 @@ mod config;
 mod engine;
 mod engines;
 mod layout;
+mod metrics;
 mod sample_widget;
 mod terminal;
 mod webview_pool;
@@ -87,6 +88,18 @@ fn spawn_external_host(
     title: &str,
 ) -> Result<(), String> {
     use ot_core::engine::{binding_path, is_installed};
+    use ot_telemetry::propagation::{inject_env, ChildKind};
+
+    // Spawned hosts get this span as TRACEPARENT: the launch and the host's
+    // startup and logs form one trace.
+    let _span = tracing::info_span!(
+        target: ot_telemetry::SPAN_TARGET,
+        "app.launch",
+        ot.launch.kind = %binding.family.as_dir(),
+        // App ids come from the App Directory (unauthenticated writes).
+        ot.window = %ot_telemetry::redact::clip(app_id, 128)
+    )
+    .entered();
 
     match &binding.family {
         EngineFamily::Electron => {
@@ -98,12 +111,13 @@ fn spawn_external_host(
             if needs_install {
                 let _ = app.emit("wm:electron-installing", serde_json::json!(null));
             }
-            let result = ot_core::electron_host::spawn_electron_app(
+            let result = ot_core::electron_host::spawn_electron_app_with(
                 binding,
                 &identity.cache_root,
                 app_id,
                 url,
                 title,
+                |cmd| inject_env(cmd, ChildKind::LogsOnly),
             );
             if needs_install {
                 match &result {
@@ -153,6 +167,7 @@ fn spawn_external_host(
             if let Some(path) = runtime_dir {
                 cmd.env("WEBVIEW2_BROWSER_EXECUTABLE_FOLDER", &path);
             }
+            inject_env(&mut cmd, ChildKind::LogsOnly);
             cmd.spawn()
                 .map(|_| ())
                 .map_err(|e| format!("spawn tauri-webview-host {}: {e}", host_bin.display()))?;
@@ -164,11 +179,12 @@ fn spawn_external_host(
             // something rather than a hard error.
             tracing::warn!("custom engine '{name}' — plugin launch not supported in Terminal; falling back to system webview");
             let host_bin = locate_host_binary()?;
-            std::process::Command::new(&host_bin)
-                .env("OT_APP_ID", app_id)
+            let mut cmd = std::process::Command::new(&host_bin);
+            cmd.env("OT_APP_ID", app_id)
                 .env("OT_URL", url)
-                .env("OT_TITLE", title)
-                .spawn()
+                .env("OT_TITLE", title);
+            inject_env(&mut cmd, ChildKind::LogsOnly);
+            cmd.spawn()
                 .map(|_| ())
                 .map_err(|e| format!("spawn tauri-webview-host {}: {e}", host_bin.display()))?;
         }
@@ -1691,449 +1707,466 @@ pub fn run() {
     );
     tracing::info!("webview pool size: {pool_size}");
 
-    tauri::Builder::default()
-        .plugin(
-            tauri_plugin_global_shortcut::Builder::new()
-                .with_shortcut("CmdOrCtrl+K")
-                .expect("CmdOrCtrl+K is a valid shortcut")
-                .with_handler(|app, _shortcut, event| {
-                    if event.state == tauri_plugin_global_shortcut::ShortcutState::Pressed {
-                        let _ = app.emit("global-shortcut", "CmdOrCtrl+K");
-                    }
-                })
-                .build(),
-        )
-        .register_uri_scheme_protocol("sample-widget", sample_widget::handle)
-        .manage(identity.clone())
-        .manage(manager.clone())
-        .manage(cfg.clone())
-        .manage(InstanceId(instance_id.clone()))
-        .setup(move |app| {
-            // ── Resolve the FDC3 Desktop Agent (docs/fdc3.md) ───────────────
-            // Needs app_data_dir for the user's saved choice, so it runs here
-            // rather than before the builder. Must be managed before any panel
-            // webview is created below.
-            let agent_selection =
-                agent::AgentSelection::load(&cfg.fdc3, app.path().app_data_dir().ok().as_deref());
-            app.manage(agent_selection);
-            let panel_init_script = agent::panel_init_script(app.handle());
+    // `process.startup` covers `build` and `setup`: Tauri runs `setup` inside
+    // `App::run`, so the setup closure holds a clone; the span ends when setup
+    // returns. Anything setup spawns (e.g. restored widget hosts) gets it as
+    // TRACEPARENT.
+    // Parented on the TRACEPARENT the Desktop Agent spawned this process with.
+    let startup = telemetry.startup_span();
+    let startup_setup = startup.clone();
+    let app = startup.in_scope(|| {
+        tauri::Builder::default()
+            .plugin(
+                tauri_plugin_global_shortcut::Builder::new()
+                    .with_shortcut("CmdOrCtrl+K")
+                    .expect("CmdOrCtrl+K is a valid shortcut")
+                    .with_handler(|app, _shortcut, event| {
+                        if event.state == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                            let _ = app.emit("global-shortcut", "CmdOrCtrl+K");
+                        }
+                    })
+                    .build(),
+            )
+            .register_uri_scheme_protocol("sample-widget", sample_widget::handle)
+            .manage(identity.clone())
+            .manage(manager.clone())
+            .manage(cfg.clone())
+            .manage(InstanceId(instance_id.clone()))
+            .setup(move |app| {
+                let _startup = startup_setup.enter();
+                // ── Resolve the FDC3 Desktop Agent (docs/fdc3.md) ───────────────
+                // Needs app_data_dir for the user's saved choice, so it runs here
+                // rather than before the builder. Must be managed before any panel
+                // webview is created below.
+                let agent_selection = agent::AgentSelection::load(
+                    &cfg.fdc3,
+                    app.path().app_data_dir().ok().as_deref(),
+                );
+                app.manage(agent_selection);
+                let panel_init_script = agent::panel_init_script(app.handle());
 
-            // ── Pick this process's main window session ─────────────────────
-            if !new_terminal {
-                if let Ok(data_dir) = app.path().app_data_dir() {
-                    layout_persist::adopt_saved_terminal_as_main(&data_dir);
-                }
-            }
-
-            // ── Load the shared dashboard registry ──────────────────────────
-            // Must happen before any `LayoutTree::init` below, which resolves
-            // its terminal's `active_dashboard` against this registry. Runs
-            // the one-time format migrations on first launch after
-            // upgrading. Loaded for a new Terminal too: it opens no tabs,
-            // but lists every dashboard so the user can open one.
-            if let Ok(data_dir) = app.path().app_data_dir() {
-                manager.load_dashboards_registry(&data_dir);
-            }
-
-            // ── Cross-instance discovery ────────────────────────────────────
-            // Lets another running instance find this one to pull a
-            // dashboard copy from it (wm_duplicate_from_instance) — see
-            // `terminal::instances`'s doc comment for why instances stay
-            // independent rather than sharing one process.
-            if let Ok(data_dir) = app.path().app_data_dir() {
-                start_instance_discovery(manager.clone(), instance_id.clone(), data_dir);
-            }
-
-            // ── Load persisted layout state ───────────────────────────────
-            // A new Terminal starts empty; it only needs the AppHandle so
-            // its own changes are saved.
-            if new_terminal {
-                tree.register_app_handle(app.handle());
-                // Save the (empty) session now, so this Terminal comes back
-                // on the next restore even if nothing in it changes.
-                if let Ok(data_dir) = app.path().app_data_dir() {
-                    let persist = layout_persist::TerminalPersist::default();
-                    if let Err(e) =
-                        layout_persist::save_terminal_dashboards(WIN, &persist, &data_dir)
-                    {
-                        tracing::warn!("save new Terminal session: {e}");
+                // ── Pick this process's main window session ─────────────────────
+                if !new_terminal {
+                    if let Ok(data_dir) = app.path().app_data_dir() {
+                        layout_persist::adopt_saved_terminal_as_main(&data_dir);
                     }
                 }
-            } else {
-                tree.init(app.handle())?;
 
-                // A terminal implicitly holds a lock on its own active
-                // dashboard at all times (Issue 15-D) — acquire it here as
-                // part of restore, not just on explicit wm_switch_dashboard
-                // calls, so a second terminal restored later in this same
-                // launch can't also claim the same dashboard.
-                let active_id = tree.active_dashboard_id();
-                if !active_id.is_empty() {
-                    if let Err(owner) = manager.acquire_dashboard_lock(&active_id, WIN) {
-                        tracing::warn!(
-                            "'{WIN}' startup: dashboard already locked by '{owner}', \
+                // ── Load the shared dashboard registry ──────────────────────────
+                // Must happen before any `LayoutTree::init` below, which resolves
+                // its terminal's `active_dashboard` against this registry. Runs
+                // the one-time format migrations on first launch after
+                // upgrading. Loaded for a new Terminal too: it opens no tabs,
+                // but lists every dashboard so the user can open one.
+                if let Ok(data_dir) = app.path().app_data_dir() {
+                    manager.load_dashboards_registry(&data_dir);
+                }
+
+                // ── Cross-instance discovery ────────────────────────────────────
+                // Lets another running instance find this one to pull a
+                // dashboard copy from it (wm_duplicate_from_instance) — see
+                // `terminal::instances`'s doc comment for why instances stay
+                // independent rather than sharing one process.
+                if let Ok(data_dir) = app.path().app_data_dir() {
+                    start_instance_discovery(manager.clone(), instance_id.clone(), data_dir);
+                }
+
+                // ── Load persisted layout state ───────────────────────────────
+                // A new Terminal starts empty; it only needs the AppHandle so
+                // its own changes are saved.
+                if new_terminal {
+                    tree.register_app_handle(app.handle());
+                    // Save the (empty) session now, so this Terminal comes back
+                    // on the next restore even if nothing in it changes.
+                    if let Ok(data_dir) = app.path().app_data_dir() {
+                        let persist = layout_persist::TerminalPersist::default();
+                        if let Err(e) =
+                            layout_persist::save_terminal_dashboards(WIN, &persist, &data_dir)
+                        {
+                            tracing::warn!("save new Terminal session: {e}");
+                        }
+                    }
+                } else {
+                    tree.init(app.handle())?;
+
+                    // A terminal implicitly holds a lock on its own active
+                    // dashboard at all times (Issue 15-D) — acquire it here as
+                    // part of restore, not just on explicit wm_switch_dashboard
+                    // calls, so a second terminal restored later in this same
+                    // launch can't also claim the same dashboard.
+                    let active_id = tree.active_dashboard_id();
+                    if !active_id.is_empty() {
+                        if let Err(owner) = manager.acquire_dashboard_lock(&active_id, WIN) {
+                            tracing::warn!(
+                                "'{WIN}' startup: dashboard already locked by '{owner}', \
                              falling back to no active dashboard"
-                        );
-                        tree.clear_active_for_lock_conflict();
-                    }
-                }
-            }
-
-            // ── Load saved window position for terminal-main ──────────────
-            let saved_window_config: PersistedWindowConfig = app
-                .path()
-                .app_data_dir()
-                .ok()
-                .and_then(|d| layout_persist::load_terminal_for("terminal-main", &d))
-                .map(|p| p.window)
-                .unwrap_or_default();
-
-            // ── Create the bare container window (no default webview) ──────
-            let win = tauri::WindowBuilder::new(app.handle(), WIN)
-                .title(&cfg.title)
-                .inner_size(cfg.window.width, cfg.window.height)
-                .min_inner_size(cfg.window.min_width, cfg.window.min_height)
-                .resizable(true)
-                .decorations(false)
-                .build()?;
-
-            // Apply saved position if the window rect is reachable on screen.
-            if saved_window_config.width > 0.0
-                && saved_window_config.height > 0.0
-                && is_rect_on_any_monitor(
-                    app.handle(),
-                    saved_window_config.x,
-                    saved_window_config.y,
-                    saved_window_config.width,
-                    saved_window_config.height,
-                )
-            {
-                let _ = win.set_size(tauri::Size::Logical(LogicalSize::new(
-                    saved_window_config.width,
-                    saved_window_config.height,
-                )));
-                let _ = win.set_position(tauri::Position::Logical(LogicalPosition::new(
-                    saved_window_config.x,
-                    saved_window_config.y,
-                )));
-            }
-
-            // Sync layout manager with the actual initial logical size.
-            if let (Ok(sz), Ok(sf)) = (win.inner_size(), win.scale_factor()) {
-                let lw = sz.width as f64 / sf;
-                let lh = sz.height as f64 / sf;
-                tree.set_size(lw, lh);
-            }
-
-            // ── Chrome webview — full window, transparent background ───────
-            // Added FIRST → lowest z-order.  Panel webviews added later sit
-            // on top, leaving the header and splitter gaps exposed.
-            let (init_w, init_h) = {
-                let sz = win.inner_size().unwrap_or(tauri::PhysicalSize {
-                    width: cfg.window.width as u32,
-                    height: cfg.window.height as u32,
-                });
-                let sf = win.scale_factor().unwrap_or(1.0);
-                (sz.width as f64 / sf, sz.height as f64 / sf)
-            };
-
-            win.add_child(
-                WebviewBuilder::new(CHROME, WebviewUrl::App("index.html".into()))
-                    // macOS: the click that activates an inactive Terminal
-                    // also reaches the header, so it drags straight away
-                    // instead of needing a second press.
-                    .accept_first_mouse(true),
-                LogicalPosition::new(0.0, 0.0),
-                LogicalSize::new(init_w, init_h),
-            )?;
-
-            // Overlay webview — added second so it's initially above chrome
-            // but below any content panels (which are added later via wm_open).
-            // wm_ctx_menu_open recreates it as the last child whenever it has
-            // become stale, ensuring it is always topmost when shown.
-            // `.transparent(true)` is required so the WebView2/WKWebView
-            // control itself is transparent; CSS `background: transparent`
-            // alone only removes the HTML layer.
-            win.add_child(
-                WebviewBuilder::new(OVERLAY, WebviewUrl::App("index.html#overlay".into()))
-                    .transparent(true),
-                LogicalPosition::new(-20000.0, -20000.0),
-                LogicalSize::new(init_w, init_h),
-            )?;
-
-            // ── Webview pool — pre-create blank hidden webviews ───────────
-            // Created after the overlay so they land above it in z-order,
-            // matching the position of panels added via the cold path. The
-            // overlay stale flag is set when each pool webview is first
-            // activated in wm_open (same flow as cold panel creation).
-            if pool.target_size > 0 {
-                for _ in 0..pool.target_size {
-                    let label = webview_pool::pool_label(WIN);
-                    match win.add_child(
-                        WebviewBuilder::new(
-                            &label,
-                            WebviewUrl::External(
-                                "about:blank".parse().expect("about:blank is a valid URL"),
-                            ),
-                        )
-                        .initialization_script(&panel_init_script)
-                        .on_navigation(address_bar_navigation_handler(
-                            app.handle().clone(),
-                            WIN.to_string(),
-                            label.clone(),
-                            tree.clone(),
-                        ))
-                        .on_page_load(channel_sync_page_load_handler(label.clone(), tree.clone())),
-                        LogicalPosition::new(-20000.0, -20000.0),
-                        LogicalSize::new(init_w, init_h),
-                    ) {
-                        Ok(_) => {
-                            tracing::debug!("pre-warmed: {label}");
-                            pool.push(label);
+                            );
+                            tree.clear_active_for_lock_conflict();
                         }
-                        Err(e) => tracing::warn!("pre-warm failed: {e}"),
                     }
                 }
-            }
 
-            // ── Restore persisted panel webviews ──────────────────────────
-            // Re-create webview children for every leaf in the hydrated tree.
-            // The overlay must be marked stale if any panels are added so
-            // wm_ctx_menu_open knows to push it to the back of the z-order.
-            let panels_to_restore = tree.panels_for_restore();
-            if !panels_to_restore.is_empty() {
-                for (label, url, channel) in &panels_to_restore {
-                    if let Ok(parsed_url) = url.parse::<tauri::Url>() {
-                        let script =
-                            config::append_initial_channel(&panel_init_script, channel.as_deref());
-                        if let Err(e) = win.add_child(
-                            WebviewBuilder::new(label, WebviewUrl::External(parsed_url))
-                                .initialization_script(&script)
-                                .on_navigation(address_bar_navigation_handler(
-                                    app.handle().clone(),
-                                    WIN.to_string(),
-                                    label.clone(),
-                                    tree.clone(),
-                                ))
-                                .on_page_load(channel_sync_page_load_handler(
-                                    label.clone(),
-                                    tree.clone(),
-                                )),
-                            LogicalPosition::new(0.0, 0.0),
-                            LogicalSize::new(1.0, 1.0),
-                        ) {
-                            tracing::warn!("restore panel '{label}': {e}");
-                        }
-                    } else {
-                        tracing::warn!(
-                            "restore panel '{label}': invalid url '{}'",
-                            ot_telemetry::redact::url(url)
-                        );
-                    }
-                }
+                // ── Load saved window position for terminal-main ──────────────
+                let saved_window_config: PersistedWindowConfig = app
+                    .path()
+                    .app_data_dir()
+                    .ok()
+                    .and_then(|d| layout_persist::load_terminal_for("terminal-main", &d))
+                    .map(|p| p.window)
+                    .unwrap_or_default();
+
+                // ── Create the bare container window (no default webview) ──────
+                let win = tauri::WindowBuilder::new(app.handle(), WIN)
+                    .title(&cfg.title)
+                    .inner_size(cfg.window.width, cfg.window.height)
+                    .min_inner_size(cfg.window.min_width, cfg.window.min_height)
+                    .resizable(true)
+                    .decorations(false)
+                    .build()?;
+
+                // Apply saved position if the window rect is reachable on screen.
+                if saved_window_config.width > 0.0
+                    && saved_window_config.height > 0.0
+                    && is_rect_on_any_monitor(
+                        app.handle(),
+                        saved_window_config.x,
+                        saved_window_config.y,
+                        saved_window_config.width,
+                        saved_window_config.height,
+                    )
                 {
-                    let mut inner = overlay_state.lock().unwrap();
-                    inner.stale = true;
-                    inner.is_ready = false;
+                    let _ = win.set_size(tauri::Size::Logical(LogicalSize::new(
+                        saved_window_config.width,
+                        saved_window_config.height,
+                    )));
+                    let _ = win.set_position(tauri::Position::Logical(LogicalPosition::new(
+                        saved_window_config.x,
+                        saved_window_config.y,
+                    )));
                 }
-                overlay_prewarm_in_background(Arc::clone(&overlay_state), WIN, app.handle());
-                tree.reflow(app.handle());
-                tree.emit_host(app.handle());
-                if let Some(snap) = tree.snapshot() {
-                    if let Some(wv) = app.handle().get_webview(CHROME) {
-                        let _ = wv.emit("wm:layout", &snap);
+
+                // Sync layout manager with the actual initial logical size.
+                if let (Ok(sz), Ok(sf)) = (win.inner_size(), win.scale_factor()) {
+                    let lw = sz.width as f64 / sf;
+                    let lh = sz.height as f64 / sf;
+                    tree.set_size(lw, lh);
+                }
+
+                // ── Chrome webview — full window, transparent background ───────
+                // Added FIRST → lowest z-order.  Panel webviews added later sit
+                // on top, leaving the header and splitter gaps exposed.
+                let (init_w, init_h) = {
+                    let sz = win.inner_size().unwrap_or(tauri::PhysicalSize {
+                        width: cfg.window.width as u32,
+                        height: cfg.window.height as u32,
+                    });
+                    let sf = win.scale_factor().unwrap_or(1.0);
+                    (sz.width as f64 / sf, sz.height as f64 / sf)
+                };
+
+                win.add_child(
+                    WebviewBuilder::new(CHROME, WebviewUrl::App("index.html".into()))
+                        // macOS: the click that activates an inactive Terminal
+                        // also reaches the header, so it drags straight away
+                        // instead of needing a second press.
+                        .accept_first_mouse(true),
+                    LogicalPosition::new(0.0, 0.0),
+                    LogicalSize::new(init_w, init_h),
+                )?;
+
+                // Overlay webview — added second so it's initially above chrome
+                // but below any content panels (which are added later via wm_open).
+                // wm_ctx_menu_open recreates it as the last child whenever it has
+                // become stale, ensuring it is always topmost when shown.
+                // `.transparent(true)` is required so the WebView2/WKWebView
+                // control itself is transparent; CSS `background: transparent`
+                // alone only removes the HTML layer.
+                win.add_child(
+                    WebviewBuilder::new(OVERLAY, WebviewUrl::App("index.html#overlay".into()))
+                        .transparent(true),
+                    LogicalPosition::new(-20000.0, -20000.0),
+                    LogicalSize::new(init_w, init_h),
+                )?;
+
+                // ── Webview pool — pre-create blank hidden webviews ───────────
+                // Created after the overlay so they land above it in z-order,
+                // matching the position of panels added via the cold path. The
+                // overlay stale flag is set when each pool webview is first
+                // activated in wm_open (same flow as cold panel creation).
+                if pool.target_size > 0 {
+                    for _ in 0..pool.target_size {
+                        let label = webview_pool::pool_label(WIN);
+                        match win.add_child(
+                            WebviewBuilder::new(
+                                &label,
+                                WebviewUrl::External(
+                                    "about:blank".parse().expect("about:blank is a valid URL"),
+                                ),
+                            )
+                            .initialization_script(&panel_init_script)
+                            .on_navigation(address_bar_navigation_handler(
+                                app.handle().clone(),
+                                WIN.to_string(),
+                                label.clone(),
+                                tree.clone(),
+                            ))
+                            .on_page_load(
+                                channel_sync_page_load_handler(label.clone(), tree.clone()),
+                            ),
+                            LogicalPosition::new(-20000.0, -20000.0),
+                            LogicalSize::new(init_w, init_h),
+                        ) {
+                            Ok(_) => {
+                                tracing::debug!("pre-warmed: {label}");
+                                pool.push(label);
+                            }
+                            Err(e) => tracing::warn!("pre-warm failed: {e}"),
+                        }
                     }
                 }
-            }
 
-            // ── Register main terminal in TerminalManager ─────────────────
-            let main_window_config = Arc::new(std::sync::RwLock::new(saved_window_config));
-            {
-                let main_state = Arc::new(TerminalState {
-                    id: WIN.to_string(),
-                    name: std::sync::RwLock::new(cfg.title.clone()),
-                    layout_tree: tree.clone(),
-                    overlay: Arc::clone(&overlay_state),
-                    pool: pool.clone(),
-                    window_config: Arc::clone(&main_window_config),
-                });
-                manager.register(main_state);
-            }
-
-            // ── Restore saved non-main terminals ──────────────────────────
-            // Each saved terminal/<id>/dashboards.json becomes a new OS window
-            // with its own layout and panel webviews. Skipped for a new Terminal.
-            if !new_terminal {
-                terminal::spawn::load_persisted_terminals(&manager, app.handle(), pool_size);
-            }
-
-            // Emit the initial terminal list to all chrome webviews.
-            manager.emit_terminals(app.handle());
-
-            // ── Restore popped-out widgets ────────────────────────────────
-            // Deferred off the setup closure: opening a popout dispatches to
-            // the main thread and waits, which would deadlock here — and it
-            // keeps popouts from delaying the Terminals' first paint.
-            {
-                let app_h = app.handle().clone();
-                tauri::async_runtime::spawn(async move {
-                    let manager = app_h.state::<TerminalManager>();
-                    for t in manager.list() {
-                        terminal::popout::restore_popouts(&app_h, &manager, &t);
+                // ── Restore persisted panel webviews ──────────────────────────
+                // Re-create webview children for every leaf in the hydrated tree.
+                // The overlay must be marked stale if any panels are added so
+                // wm_ctx_menu_open knows to push it to the back of the z-order.
+                let panels_to_restore = tree.panels_for_restore();
+                if !panels_to_restore.is_empty() {
+                    for (label, url, channel) in &panels_to_restore {
+                        if let Ok(parsed_url) = url.parse::<tauri::Url>() {
+                            let script = config::append_initial_channel(
+                                &panel_init_script,
+                                channel.as_deref(),
+                            );
+                            if let Err(e) = win.add_child(
+                                WebviewBuilder::new(label, WebviewUrl::External(parsed_url))
+                                    .initialization_script(&script)
+                                    .on_navigation(address_bar_navigation_handler(
+                                        app.handle().clone(),
+                                        WIN.to_string(),
+                                        label.clone(),
+                                        tree.clone(),
+                                    ))
+                                    .on_page_load(channel_sync_page_load_handler(
+                                        label.clone(),
+                                        tree.clone(),
+                                    )),
+                                LogicalPosition::new(0.0, 0.0),
+                                LogicalSize::new(1.0, 1.0),
+                            ) {
+                                tracing::warn!("restore panel '{label}': {e}");
+                            }
+                        } else {
+                            tracing::warn!(
+                                "restore panel '{label}': invalid url '{}'",
+                                ot_telemetry::redact::url(url)
+                            );
+                        }
                     }
-                });
-            }
+                    {
+                        let mut inner = overlay_state.lock().unwrap();
+                        inner.stale = true;
+                        inner.is_ready = false;
+                    }
+                    overlay_prewarm_in_background(Arc::clone(&overlay_state), WIN, app.handle());
+                    tree.reflow(app.handle());
+                    tree.emit_host(app.handle());
+                    if let Some(snap) = tree.snapshot() {
+                        if let Some(wv) = app.handle().get_webview(CHROME) {
+                            let _ = wv.emit("wm:layout", &snap);
+                        }
+                    }
+                }
 
-            // ── Resize + move listener for terminal-main ──────────────────
-            install_window_listeners(
-                WIN,
-                &win,
-                &tree,
-                app.handle(),
-                Arc::clone(&main_window_config),
-            );
+                // ── Register main terminal in TerminalManager ─────────────────
+                let main_window_config = Arc::new(std::sync::RwLock::new(saved_window_config));
+                {
+                    let main_state = Arc::new(TerminalState {
+                        id: WIN.to_string(),
+                        name: std::sync::RwLock::new(cfg.title.clone()),
+                        layout_tree: tree.clone(),
+                        overlay: Arc::clone(&overlay_state),
+                        pool: pool.clone(),
+                        window_config: Arc::clone(&main_window_config),
+                    });
+                    manager.register(main_state);
+                }
 
-            Ok(())
-        })
-        .invoke_handler(tauri::generate_handler![
-            wm_config,
-            agent::wm_agent_list,
-            agent::wm_agent_select,
-            agent::wm_agent_probe,
-            widgets::wm_list_apps,
-            wm_snapshot,
-            wm_host_snapshot,
-            wm_open,
-            wm_close,
-            wm_drag_move,
-            update_layout,
-            wm_splitter_drag,
-            wm_begin_tab_drag,
-            wm_end_tab_drag,
-            wm_set_active_tab,
-            wm_close_leaf,
-            wm_close_stack,
-            wm_rename_tab,
-            wm_toggle_maximize_stack,
-            close_tab,
-            terminal::popout::wm_popout_panel,
-            terminal::popout::wm_dock_panel,
-            terminal::popout::wm_focus_popout,
-            terminal::popout::wm_popout_ready,
-            terminal::popout::wm_popout_menu,
-            terminal::popout::wm_popout_background,
-            terminal::popout::wm_popout_drag_start,
-            terminal::popout::wm_popout_drag_move,
-            terminal::popout::wm_popout_drag_end,
-            terminal::popout::wm_popout_unglue,
-            terminal::popout::wm_popout_minimize,
-            terminal::popout::wm_popout_toggle_maximize,
-            wm_engine_status,
-            wm_engine_install,
-            wm_rename_panel,
-            wm_set_zoom,
-            wm_get_panel_fdc3_channel,
-            wm_set_panel_fdc3_channel,
-            wm_get_panel_keep_alive,
-            wm_set_panel_keep_alive,
-            wm_set_panel_show_address_bar,
-            wm_park_panels,
-            wm_unpark_panels,
-            wm_overlay_ready,
-            wm_ctx_menu_open,
-            wm_ctx_menu_close,
-            wm_palette_open,
-            wm_overflow_menu_open,
-            wm_engine_picker_open,
-            wm_menu_open,
-            wm_dashboard_create_open,
-            wm_dashboard_confirm_open,
-            wm_dashboard_confirm_delete_open,
-            wm_dashboard_confirm_close_open,
-            wm_dashboard_ctx_menu_open,
-            wm_dashboard_request_rename,
-            wm_request_rename,
-            wm_list_dashboards,
-            wm_switch_dashboard,
-            wm_move_dashboard,
-            wm_create_dashboard,
-            wm_save_dashboard,
-            wm_discard_dashboard,
-            wm_rename_dashboard,
-            wm_delete_dashboard,
-            wm_close_dashboard,
-            wm_reopen_dashboard,
-            wm_reorder_dashboards,
-            wm_set_auto_save,
-            wm_duplicate_dashboard_to,
-            wm_duplicate_dashboard,
-            wm_list_other_instances,
-            wm_list_remote_dashboards,
-            wm_duplicate_from_instance,
-            wm_set_dashboard_default_channel,
-            wm_set_dashboard_keep_alive_all,
-            wm_spawn_terminal,
-            wm_list_saved_terminals,
-            wm_close_terminal,
-        ])
-        .build(tauri::generate_context!())
-        .expect("error while building one-terminal")
-        .run(move |app, event| {
-            if let tauri::RunEvent::Exit = event {
-                telemetry.shutdown();
+                // ── Restore saved non-main terminals ──────────────────────────
+                // Each saved terminal/<id>/dashboards.json becomes a new OS window
+                // with its own layout and panel webviews. Skipped for a new Terminal.
+                if !new_terminal {
+                    terminal::spawn::load_persisted_terminals(&manager, app.handle(), pool_size);
+                }
+
+                // Emit the initial terminal list to all chrome webviews.
+                manager.emit_terminals(app.handle());
+
+                // ── Restore popped-out widgets ────────────────────────────────
+                // Deferred off the setup closure: opening a popout dispatches to
+                // the main thread and waits, which would deadlock here — and it
+                // keeps popouts from delaying the Terminals' first paint.
+                {
+                    let app_h = app.handle().clone();
+                    tauri::async_runtime::spawn(async move {
+                        let manager = app_h.state::<TerminalManager>();
+                        for t in manager.list() {
+                            terminal::popout::restore_popouts(&app_h, &manager, &t);
+                        }
+                    });
+                }
+
+                // ── Resize + move listener for terminal-main ──────────────────
+                install_window_listeners(
+                    WIN,
+                    &win,
+                    &tree,
+                    app.handle(),
+                    Arc::clone(&main_window_config),
+                );
+
+                Ok(())
+            })
+            .invoke_handler(tauri::generate_handler![
+                wm_config,
+                agent::wm_agent_list,
+                agent::wm_agent_select,
+                agent::wm_agent_probe,
+                widgets::wm_list_apps,
+                wm_snapshot,
+                wm_host_snapshot,
+                wm_open,
+                wm_close,
+                wm_drag_move,
+                update_layout,
+                wm_splitter_drag,
+                wm_begin_tab_drag,
+                wm_end_tab_drag,
+                wm_set_active_tab,
+                wm_close_leaf,
+                wm_close_stack,
+                wm_rename_tab,
+                wm_toggle_maximize_stack,
+                close_tab,
+                terminal::popout::wm_popout_panel,
+                terminal::popout::wm_dock_panel,
+                terminal::popout::wm_focus_popout,
+                terminal::popout::wm_popout_ready,
+                terminal::popout::wm_popout_menu,
+                terminal::popout::wm_popout_background,
+                terminal::popout::wm_popout_drag_start,
+                terminal::popout::wm_popout_drag_move,
+                terminal::popout::wm_popout_drag_end,
+                terminal::popout::wm_popout_unglue,
+                terminal::popout::wm_popout_minimize,
+                terminal::popout::wm_popout_toggle_maximize,
+                wm_engine_status,
+                wm_engine_install,
+                wm_rename_panel,
+                wm_set_zoom,
+                wm_get_panel_fdc3_channel,
+                wm_set_panel_fdc3_channel,
+                wm_get_panel_keep_alive,
+                wm_set_panel_keep_alive,
+                wm_set_panel_show_address_bar,
+                wm_park_panels,
+                wm_unpark_panels,
+                wm_overlay_ready,
+                wm_ctx_menu_open,
+                wm_ctx_menu_close,
+                wm_palette_open,
+                wm_overflow_menu_open,
+                wm_engine_picker_open,
+                wm_menu_open,
+                wm_dashboard_create_open,
+                wm_dashboard_confirm_open,
+                wm_dashboard_confirm_delete_open,
+                wm_dashboard_confirm_close_open,
+                wm_dashboard_ctx_menu_open,
+                wm_dashboard_request_rename,
+                wm_request_rename,
+                wm_list_dashboards,
+                wm_switch_dashboard,
+                wm_move_dashboard,
+                wm_create_dashboard,
+                wm_save_dashboard,
+                wm_discard_dashboard,
+                wm_rename_dashboard,
+                wm_delete_dashboard,
+                wm_close_dashboard,
+                wm_reopen_dashboard,
+                wm_reorder_dashboards,
+                wm_set_auto_save,
+                wm_duplicate_dashboard_to,
+                wm_duplicate_dashboard,
+                wm_list_other_instances,
+                wm_list_remote_dashboards,
+                wm_duplicate_from_instance,
+                wm_set_dashboard_default_channel,
+                wm_set_dashboard_keep_alive_all,
+                wm_spawn_terminal,
+                wm_list_saved_terminals,
+                wm_close_terminal,
+            ])
+            .build(tauri::generate_context!())
+            .expect("error while building one-terminal")
+    });
+    drop(startup);
+    app.run(move |app, event| {
+        if let tauri::RunEvent::Exit = event {
+            telemetry.shutdown();
+            return;
+        }
+
+        // Closing the last window normally ends the process (each
+        // Terminal the Desktop Agent opens is its own process). Under
+        // `npm run dev:terminal` that also stops `tauri dev` and its Vite
+        // server, so keep that process running with no windows; Ctrl+C
+        // still stops it. `code: None` is the "last window closed"
+        // request — an explicit `app.exit(code)` still exits.
+        if keep_running_when_empty {
+            if let tauri::RunEvent::ExitRequested {
+                code: None, api, ..
+            } = &event
+            {
+                api.prevent_exit();
+                tracing::info!(
+                    "dev: last Terminal window closed; process kept running \
+                         (Ctrl+C to stop{})",
+                    if cfg!(target_os = "macos") {
+                        ", click the Dock icon for a new Terminal"
+                    } else {
+                        ""
+                    }
+                );
                 return;
             }
+        }
 
-            // Closing the last window normally ends the process (each
-            // Terminal the Desktop Agent opens is its own process). Under
-            // `npm run dev:terminal` that also stops `tauri dev` and its Vite
-            // server, so keep that process running with no windows; Ctrl+C
-            // still stops it. `code: None` is the "last window closed"
-            // request — an explicit `app.exit(code)` still exits.
-            if keep_running_when_empty {
-                if let tauri::RunEvent::ExitRequested {
-                    code: None, api, ..
-                } = &event
-                {
-                    api.prevent_exit();
-                    tracing::info!(
-                        "dev: last Terminal window closed; process kept running \
-                         (Ctrl+C to stop{})",
-                        if cfg!(target_os = "macos") {
-                            ", click the Dock icon for a new Terminal"
-                        } else {
-                            ""
-                        }
-                    );
-                    return;
+        // Clicking the Dock icon only deminiaturises a window when the
+        // app has none visible — so with a widget popped out, a
+        // minimised Terminal could never be brought back. Restore every
+        // minimised Terminal ourselves.
+        #[cfg(target_os = "macos")]
+        if let tauri::RunEvent::Reopen { .. } = event {
+            let manager = app.state::<TerminalManager>();
+            let terminals = manager.list();
+            // Only reachable in the dev case above: every window closed.
+            if terminals.is_empty() && keep_running_when_empty {
+                if let Err(e) = open_new_window(&manager, app) {
+                    tracing::warn!("dev: open new Terminal: {e}");
                 }
+                return;
             }
-
-            // Clicking the Dock icon only deminiaturises a window when the
-            // app has none visible — so with a widget popped out, a
-            // minimised Terminal could never be brought back. Restore every
-            // minimised Terminal ourselves.
-            #[cfg(target_os = "macos")]
-            if let tauri::RunEvent::Reopen { .. } = event {
-                let manager = app.state::<TerminalManager>();
-                let terminals = manager.list();
-                // Only reachable in the dev case above: every window closed.
-                if terminals.is_empty() && keep_running_when_empty {
-                    if let Err(e) = open_new_window(&manager, app) {
-                        tracing::warn!("dev: open new Terminal: {e}");
-                    }
-                    return;
-                }
-                for terminal in terminals {
-                    if let Some(w) = app.get_window(&terminal.id) {
-                        if w.is_minimized().unwrap_or(false) {
-                            let _ = w.unminimize();
-                            let _ = w.set_focus();
-                        }
+            for terminal in terminals {
+                if let Some(w) = app.get_window(&terminal.id) {
+                    if w.is_minimized().unwrap_or(false) {
+                        let _ = w.unminimize();
+                        let _ = w.set_focus();
                     }
                 }
             }
-            #[cfg(not(target_os = "macos"))]
-            let _ = (app, event);
-        });
+        }
+        #[cfg(not(target_os = "macos"))]
+        let _ = (app, event);
+    });
 }

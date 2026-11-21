@@ -145,6 +145,23 @@ describe("user channels", () => {
     expect(hit).not.toHaveBeenCalled();
   });
 
+  it("gives broadcasts without a traceId a W3C trace id (the bus span's)", async () => {
+    const [sender, app] = await Promise.all([connect("s"), connect("a")]);
+    await sender.joinUserChannel("Red");
+    await app.joinUserChannel("Red");
+    // Unique context: joining replays the channel's last broadcast first.
+    const fresh = { type: "fdc3.instrument", id: { ticker: "TRACE-ID" } };
+    const delivered = new Promise<{ traceId: string }>((resolve) => {
+      void app.addContextListener(null, (c, m) => {
+        if (c.id?.ticker === "TRACE-ID") resolve(m as { traceId: string });
+      });
+    });
+
+    await sender.broadcast(fresh);
+
+    expect((await delivered).traceId).toMatch(/^[0-9a-f]{32}$/);
+  });
+
   it("filters by context type, including the array form", async () => {
     const [sender, app] = await Promise.all([connect("s"), connect("a")]);
     await sender.joinUserChannel("Red");

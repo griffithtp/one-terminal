@@ -32,5 +32,8 @@ tauri-plugin-global-shortcut = "2"
 indexmap = { workspace = true }
 rust-embed = { version = "8", features = ["mime-guess", "include-exclude"] }
 
+[dev-dependencies]
+ot-telemetry = { workspace = true, features = ["otlp", "testing"] }
+
 [lints]
 workspace = true

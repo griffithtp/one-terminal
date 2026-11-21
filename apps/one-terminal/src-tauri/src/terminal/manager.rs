@@ -137,11 +137,15 @@ impl TerminalManager {
     /// Register a freshly-spawned terminal. Replaces any existing entry with
     /// the same id (should not occur in normal usage).
     pub fn register(&self, state: Arc<TerminalState>) {
-        self.inner
+        let replaced = self
+            .inner
             .write()
             .unwrap()
             .terminals
             .insert(state.id.clone(), state);
+        if replaced.is_none() {
+            crate::metrics::wm().terminal_opened();
+        }
     }
 
     /// Look up a terminal by its window label. Returns `None` if the label is
@@ -175,18 +179,25 @@ impl TerminalManager {
 
     /// Record an open popout window for `panel`, owned by Terminal `owner`.
     pub fn register_popout(&self, popout: &str, owner: &str, panel: &str) {
-        self.inner.write().unwrap().popouts.insert(
+        let replaced = self.inner.write().unwrap().popouts.insert(
             popout.to_string(),
             PopoutState {
                 owner: owner.to_string(),
                 panel: panel.to_string(),
             },
         );
+        if replaced.is_none() {
+            crate::metrics::wm().popout_opened();
+        }
     }
 
     /// Forget a popout window. Returns its state if it was registered.
     pub fn remove_popout(&self, popout: &str) -> Option<PopoutState> {
-        self.inner.write().unwrap().popouts.remove(popout)
+        let removed = self.inner.write().unwrap().popouts.remove(popout);
+        if removed.is_some() {
+            crate::metrics::wm().popout_closed();
+        }
+        removed
     }
 
     /// Label of the popout window currently hosting `panel`, if any.
@@ -235,7 +246,11 @@ impl TerminalManager {
 
     /// Remove and return a terminal entry. Used when a Terminal window closes.
     pub fn remove(&self, id: &str) -> Option<Arc<TerminalState>> {
-        self.inner.write().unwrap().terminals.shift_remove(id)
+        let removed = self.inner.write().unwrap().terminals.shift_remove(id);
+        if removed.is_some() {
+            crate::metrics::wm().terminal_closed();
+        }
+        removed
     }
 
     /// All registered terminals in creation order.

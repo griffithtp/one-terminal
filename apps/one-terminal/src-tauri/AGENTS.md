@@ -15,6 +15,7 @@ panel webviews added on top with `add_child`. Rules:
 | `src/terminal/`                      | Multiple Terminal instances (`manager.rs`, `instances.rs`), spawn, popout windows + magnetic glue (`popout.rs`, `popout_snap.rs`) |
 | `src/agent.rs`                       | Which FDC3 Desktop Agent widgets connect to; injects `window.OT_FDC3_AGENT_URL`                                                   |
 | `src/webview_pool.rs`                | Pre-warmed blank webviews (`OT_WEBVIEW_POOL_SIZE`)                                                                                |
+| `src/metrics.rs`                     | Terminal metrics: open windows/popouts, popout open/dock latency                                                                  |
 | `src/engine.rs`, `engines.rs`        | Engine selection / spawning out-of-process hosts                                                                                  |
 | `src/widgets.rs`, `sample_widget.rs` | Local widgets from `widgets.config.json`; embedded sample widget                                                                  |
 

@@ -109,7 +109,15 @@
       "overlay": "enterprise"
     },
     {
+      "path": "apps/desktop-agent/src-tauri/src/fdc3_bus/instrument.rs",
+      "overlay": "enterprise"
+    },
+    {
       "path": "apps/desktop-agent/src-tauri/src/fdc3_bus/mod.rs",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/desktop-agent/src-tauri/src/metrics.rs",
       "overlay": "enterprise"
     },
     {
@@ -246,6 +254,10 @@
     },
     {
       "path": "apps/one-terminal/src-tauri/src/lib.rs",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src-tauri/src/metrics.rs",
       "overlay": "shared"
     },
     {
@@ -757,6 +769,10 @@
       "overlay": "shared"
     },
     {
+      "path": "packages/ot-telemetry/src/metrics.rs",
+      "overlay": "shared"
+    },
+    {
       "path": "packages/ot-telemetry/src/otlp.rs",
       "overlay": "shared"
     },
@@ -770,6 +786,14 @@
     },
     {
       "path": "packages/ot-telemetry/src/redact.rs",
+      "overlay": "shared"
+    },
+    {
+      "path": "packages/ot-telemetry/src/testing.rs",
+      "overlay": "shared"
+    },
+    {
+      "path": "packages/ot-telemetry/src/trace.rs",
       "overlay": "shared"
     }
   ]
