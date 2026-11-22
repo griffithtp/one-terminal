@@ -45,7 +45,7 @@ apps/app-directory-server/    — standalone App Directory binary (hosted / Dock
 packages/ot-core/             — shared Rust crate (no Tauri deps)            (AGENTS.md)
 packages/ot-appdirectory/     — Rust (axum) FDC3 AppD REST API; mounted in-process by desktop-agent
 packages/ot-telemetry/        — shared Rust crate: logging, tracing, opt-in OTLP export (no Tauri/FDC3) (AGENTS.md)
-packages/telemetry-client/    — browser client relaying UI errors/logs to Rust (`@one-terminal/telemetry`) (AGENTS.md)
+packages/telemetry-client/    — browser client relaying UI and widget errors/logs to Rust (`@one-terminal/telemetry`; src/ → ot-telemetry.js) (AGENTS.md)
 packages/fdc3-plugin/         — browser FDC3 3.0 client (src/ → fdc3-plugin.js)   (AGENTS.md)
 packages/create-one-terminal/ — the scaffolder (`create-one-terminal`)     (AGENTS.md)
 apps/sample-ticker/           — demo browser app, port 3010
@@ -105,6 +105,7 @@ Cloud agents (Copilot coding agent, Devin, Codex, Cursor): machine setup is
 | ------------------------------------------------------------------- | ----------------------------------------------------------- |
 | `packages/create-one-terminal/templates/**`, `static-manifest.json` | `npm run create-migration` (or `npm run extract-templates`) |
 | `packages/fdc3-plugin/fdc3-plugin.js`                               | `npm run build:fdc3-plugin`                                 |
+| `packages/telemetry-client/ot-telemetry.js`                         | `npm run build:telemetry-client`                            |
 | `CLAUDE.md` (every one)                                             | `npm run sync:ai`                                           |
 | `.claude/agents/*`                                                  | `npm run sync:ai` (from `.ai/agents/`)                      |
 | `.claude/skills/*`                                                  | `npm run sync:ai` (from `.ai/skills/`)                      |
@@ -122,15 +123,16 @@ changing those, templates drift and CI's template-drift check fails until you ru
 
 ## Key port defaults (all overridable via env vars)
 
-| Service              | Port                    | Env var                                               |
-| -------------------- | ----------------------- | ----------------------------------------------------- |
-| App Directory        | 3005                    | `OT_APP_DIR_URL` (agent) / `PORT` (standalone server) |
-| FDC3 Bus WS          | 7891                    | `OT_FDC3_BUS_PORT`                                    |
-| Instance discovery   | ephemeral (OS-assigned) | —                                                     |
-| sample-ticker        | 3010                    | —                                                     |
-| sample-chart         | 3011                    | —                                                     |
-| sample-widget        | 3012                    | —                                                     |
-| App Directory UI dev | 5174                    | — (`npm run dev:app-directory`, proxies to 3005)      |
+| Service              | Port                    | Env var                                                        |
+| -------------------- | ----------------------- | -------------------------------------------------------------- |
+| App Directory        | 3005                    | `OT_APP_DIR_URL` (agent) / `PORT` (standalone server)          |
+| FDC3 Bus WS          | 7891                    | `OT_FDC3_BUS_PORT`                                             |
+| Instance discovery   | ephemeral (OS-assigned) | —                                                              |
+| Widget telemetry     | ephemeral (OS-assigned) | — (one per Terminal / Desktop Agent process, `127.0.0.1` only) |
+| sample-ticker        | 3010                    | —                                                              |
+| sample-chart         | 3011                    | —                                                              |
+| sample-widget        | 3012                    | —                                                              |
+| App Directory UI dev | 5174                    | — (`npm run dev:app-directory`, proxies to 3005)               |
 
 ## Environment variables
 
@@ -180,6 +182,8 @@ Set by OneTerminal for its own child processes. Don't set them by hand.
 | `OT_URL`              | Terminal, Desktop Agent → `tauri-webview-host`, `electron-host` | URL the engine host window opens                                                                                                                                                           |
 | `OT_APP_ID`           | Terminal, Desktop Agent → `tauri-webview-host`, `electron-host` | App id / window label of that host window                                                                                                                                                  |
 | `TRACEPARENT`         | Desktop Agent, Terminal → every spawned process                 | W3C trace context of the span that spawned the process, so its startup and logs join that trace (with `OT_LOG`/`OT_LOG_DIR` and, for the Terminal only, the parent's OTLP export settings) |
+| `OT_TELEMETRY_URL`    | Terminal, Desktop Agent → `tauri-webview-host`, `electron-host` | Widget telemetry endpoint of the spawning process (`http://127.0.0.1:<port>/v1/records`); the host injects it into its page as `window.OT_TELEMETRY`                                       |
+| `OT_TELEMETRY_TOKEN`  | Terminal, Desktop Agent → `tauri-webview-host`, `electron-host` | The host window's token for that endpoint (HMAC-signed by the spawning process; never the key). Never passed to plugin binaries                                                            |
 | `OT_SPAWNED_BY_AGENT` | Desktop Agent → one-terminal                                    | Marks a Terminal the Desktop Agent spawned. Under `tauri dev`, a Terminal without it keeps running with no windows                                                                         |
 
 Not yet implemented (planned): `OT_NATIVE_APP_ALLOW_PATHS`, `APPD_DB_PATH`, `APPD_JWT_SECRET`, `APPD_ALLOW_ANONYMOUS_READ`, `APPD_AUTH_PLUGIN_URL` (Auth Provider plugin on 4477, OIDC redirect on 4476). The App Directory store is in-memory, seeded from `packages/ot-appdirectory/src/data.rs`.
@@ -204,6 +208,7 @@ npm run build:fdc3-plugin        # regenerates packages/fdc3-plugin/fdc3-plugin.
 npm run test:fdc3-plugin         # contract tests: the official proxy against the real Rust bus
 npm run test:terminal            # Terminal UI unit/component tests (Vitest + RTL, jsdom)
 npm run test:telemetry-client    # @one-terminal/telemetry unit tests (Vitest, jsdom)
+npm run build:telemetry-client   # regenerates packages/telemetry-client/ot-telemetry.js after editing src/
 npm run build:app-directory      # rebuilds apps/app-directory/dist
 npm run build:samples            # production builds of sample-ticker + sample-chart (planned; not in package.json yet)
 npm run build:all                # all Tauri apps

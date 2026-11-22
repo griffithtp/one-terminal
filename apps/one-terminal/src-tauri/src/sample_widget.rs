@@ -7,8 +7,9 @@
 //! just via Tauri's custom-protocol mechanism instead of an HTTP server,
 //! since one-terminal (unlike desktop-agent) doesn't run one.
 //!
-//! `fdc3-plugin.js` is pulled from the shared `packages/fdc3-plugin`
-//! package, mirroring the special-case in `apps/sample-widget/server.js`.
+//! `fdc3-plugin.js` and `ot-telemetry.js` are pulled from the shared
+//! `packages/fdc3-plugin` and `packages/telemetry-client` packages, mirroring
+//! the special cases in `apps/sample-widget/server.js`.
 
 use rust_embed::RustEmbed;
 use tauri::http::{header, Request, Response, StatusCode};
@@ -24,6 +25,11 @@ struct WidgetAssets;
 #[include = "fdc3-plugin.js"]
 struct Fdc3PluginAsset;
 
+#[derive(RustEmbed)]
+#[folder = "../../../packages/telemetry-client"]
+#[include = "ot-telemetry.js"]
+struct TelemetryAsset;
+
 /// Handler for `register_uri_scheme_protocol("sample-widget", ...)`.
 pub fn handle<R: tauri::Runtime>(
     _ctx: UriSchemeContext<'_, R>,
@@ -34,6 +40,8 @@ pub fn handle<R: tauri::Runtime>(
 
     let asset = if path == "fdc3-plugin.js" {
         Fdc3PluginAsset::get("fdc3-plugin.js")
+    } else if path == "ot-telemetry.js" {
+        TelemetryAsset::get("ot-telemetry.js")
     } else {
         WidgetAssets::get(path)
     };

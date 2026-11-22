@@ -154,7 +154,11 @@
       // The plugin connects once per page. Using its shared connection lets the
       // Terminal's "Set channel" menu control this widget's channel.
       import { getAgent } from "/fdc3-plugin.js";
+      // In a OneTerminal window, report this page's errors to OneTerminal's
+      // logs (`undefined` elsewhere, hence `telemetry?.`).
+      import { startWidgetTelemetry } from "/ot-telemetry.js";
 
+      const telemetry = startWidgetTelemetry({ captureConsole: true });
       const statusEl = document.getElementById("status");
       const channelEl = document.getElementById("channel");
       const lastEl = document.getElementById("last");
@@ -202,8 +206,10 @@
         }
         showChannel((await fdc3.getCurrentChannel())?.id ?? null);
 
-        await fdc3.addContextListener("fdc3.instrument", (ctx) => {
+        await fdc3.addContextListener("fdc3.instrument", (ctx, meta) => {
           lastEl.textContent = JSON.stringify(ctx, null, 2);
+          // `traceId` relates this record to the broadcast that delivered it.
+          telemetry?.log("info", "instrument received", { traceId: meta?.traceId });
           log(`Received instrument: <strong>${ctx.id?.ticker ?? ctx.name ?? "?"}</strong>`);
         });
       } catch (e) {
@@ -211,6 +217,7 @@
           window.OT_FDC3_AGENT_URL === "" ? "No FDC3 agent configured" : "Agent unavailable";
         statusEl.className = "err";
         log(`Connection failed: ${e.cause?.message ?? e.message}`);
+        telemetry?.error(e, { attributes: { "fdc3.op": "connect" } });
       }
 
       broadcastBtn.addEventListener("click", async () => {
@@ -230,6 +237,7 @@
           log(`Broadcast <strong>${ticker}</strong>`);
         } catch (e) {
           log(`Broadcast failed: ${e.message}`);
+          telemetry?.error(e, { attributes: { "fdc3.op": "broadcast" } });
         }
       });
     </script>

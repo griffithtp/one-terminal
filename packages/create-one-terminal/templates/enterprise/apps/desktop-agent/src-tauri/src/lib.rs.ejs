@@ -99,7 +99,7 @@ async fn launch_new_instance(
         &manifests,
     )?;
     let closeable = matches!(plan, LaunchPlan::InProcessWebview { .. });
-    execute_plan(&app_handle, &label, plan).await?;
+    execute_plan(&app_handle, &label, &app.app_id, plan).await?;
     Ok(closeable.then_some(label))
 }
 
@@ -338,7 +338,7 @@ async fn cda_launch_app(
         installed.as_ref(),
         &manifests,
     )?;
-    execute_plan(&app, &label, plan).await
+    execute_plan(&app, &label, &app_id, plan).await
 }
 
 /// Longest app-derived string (window label) recorded on a span: app ids come
@@ -351,6 +351,7 @@ const UNTRUSTED_ATTR_CHARS: usize = 128;
 async fn execute_plan(
     app: &AppHandle,
     label: &str,
+    app_id: &str,
     plan: engines::router::LaunchPlan,
 ) -> Result<(), String> {
     use engines::router::LaunchPlan;
@@ -369,25 +370,31 @@ async fn execute_plan(
         ot.window = %ot_telemetry::redact::clip(label, UNTRUSTED_ATTR_CHARS)
     );
     let started = std::time::Instant::now();
-    let result = run_plan(app, label, plan).instrument(span).await;
+    let result = run_plan(app, label, app_id, plan).instrument(span).await;
     metrics::launches().record(kind, result.is_ok(), started);
     result
 }
 
 /// Open in-process, spawn the pinned-WebView2 host, the Electron host or a
-/// plugin binary.
+/// plugin binary. Framework windows and hosts get a widget telemetry token
+/// for `label`; plugin binaries don't.
 async fn run_plan(
     app: &AppHandle,
     label: &str,
+    app_id: &str,
     plan: engines::router::LaunchPlan,
 ) -> Result<(), String> {
     use engines::router::LaunchPlan;
+    use ot_core::electron_host::ElectronCommand;
     use ot_telemetry::propagation::{inject_env, ChildKind};
+
+    let endpoint = app.state::<ot_telemetry::ingress::WidgetEndpoint>();
 
     match plan {
         LaunchPlan::InProcessWebview { url, title } => {
             let parsed: tauri::Url = url.parse().map_err(|e| format!("Invalid URL: {e}"))?;
             tauri::WebviewWindowBuilder::new(app, label, tauri::WebviewUrl::External(parsed))
+                .initialization_script(endpoint.init_script(label, Some(app_id)))
                 .title(title)
                 .inner_size(1280.0, 800.0)
                 .build()
@@ -408,6 +415,7 @@ async fn run_plan(
                 cmd.env("WEBVIEW2_BROWSER_EXECUTABLE_FOLDER", folder);
             }
             inject_env(&mut cmd, ChildKind::LogsOnly);
+            endpoint.configure_host(&mut cmd, label, Some(app_id));
             cmd.spawn()
                 .map(|_| ())
                 .map_err(|e| format!("Failed to spawn {}: {e}", host_bin.display()))
@@ -428,7 +436,12 @@ async fn run_plan(
                 label,
                 &url,
                 &title,
-                |cmd| inject_env(cmd, ChildKind::LogsOnly),
+                |cmd, step| {
+                    inject_env(cmd, ChildKind::LogsOnly);
+                    if step == ElectronCommand::Host {
+                        endpoint.configure_host(cmd, label, Some(app_id));
+                    }
+                },
             )
         }
         LaunchPlan::SpawnBinary {
@@ -780,7 +793,7 @@ async fn launch_app_from_tray(app: AppHandle, app_id: String) {
         &manifests,
     ) {
         Ok(plan) => {
-            if let Err(e) = execute_plan(&app, &label, plan).await {
+            if let Err(e) = execute_plan(&app, &label, &app_id, plan).await {
                 tracing::error!("Launch failed for '{app_id}': {e}");
             }
         }
@@ -849,6 +862,11 @@ pub fn run() {
     // `App::run`, so the setup closure holds a clone; the span ends when setup
     // returns. Anything setup spawns (e.g. restored Terminals) gets it as
     // TRACEPARENT.
+    // Widget telemetry endpoint for the windows and hosts this agent opens:
+    // bound now so its URL is known before any launch; served from setup.
+    let (widget_endpoint, widget_server) =
+        ot_telemetry::ingress::WidgetEndpoint::start(cfg.telemetry.widgets.enabled);
+
     let startup = telemetry.startup_span();
     let startup_setup = startup.clone();
     let app = startup.in_scope(|| {
@@ -856,11 +874,15 @@ pub fn run() {
             .manage(app_dir_cache.clone())
             // After telemetry init, so the relay's drop counter uses the real meter.
             .manage(ot_telemetry::relay::Relay::new())
+            .manage(widget_endpoint)
             .manage(engine_catalog.clone())
             .manage(cfg.clone())
             .manage(TerminalRegistry::default())
             .setup(move |app| {
                 let _startup = startup_setup.enter();
+                if let Some(server) = widget_server {
+                    tauri::async_runtime::spawn(server.run());
+                }
                 let adc = app.state::<AppDirectoryCache>().inner().clone();
                 let app_handle = app.handle().clone();
                 let ports = app.state::<AgentConfig>().ports.clone();

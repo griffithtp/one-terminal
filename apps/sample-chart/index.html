@@ -256,6 +256,11 @@
 // The plugin connects once per page. Using its shared connection lets the
 // Terminal's "Set channel" menu control this widget's channel.
 import { getAgent } from './fdc3-plugin.js';
+// In a OneTerminal window, report this page's errors to OneTerminal's logs
+// (`undefined` elsewhere, hence `telemetry?.`).
+import { startWidgetTelemetry } from './ot-telemetry.js';
+
+const telemetry = startWidgetTelemetry({ captureConsole: true });
 
 // ── DOM refs ─────────────────────────────────────────────────────────────────
 const channelBadge = document.getElementById('channel-badge');
@@ -463,6 +468,8 @@ try {
     const src    = meta?.source?.appId ?? 'unknown';
     updateInstrument(context, src, 'fdc3.instrument broadcast');
     addLog('context', 'fdc3.instrument', ticker, src);
+    // `traceId` relates this record to the broadcast that delivered it.
+    telemetry?.log('info', 'instrument received', { traceId: meta?.traceId });
   });
 
   // Draw empty placeholder chart
@@ -475,6 +482,7 @@ try {
   el.className = 'log-entry';
   el.innerHTML = `<span class="ts">${new Date().toTimeString().slice(0,8)}</span><span style="color:var(--red)">✗ ${e.message}</span>`;
   logEl.prepend(el);
+  telemetry?.error(e, { attributes: { 'fdc3.op': 'connect' } });
 }
 
 // Redraw chart on resize

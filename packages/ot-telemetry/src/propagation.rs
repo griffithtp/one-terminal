@@ -212,7 +212,8 @@ fn encode_header_value(s: &str) -> String {
 /// Prepare `cmd`'s environment for a child process of the given `kind`:
 /// - `TRACEPARENT` set to the current span, so the child's startup joins this
 ///   trace (or removed, outside a span, so it doesn't inherit ours);
-/// - `OTEL_SERVICE_NAME` removed — it would rename every child;
+/// - `OTEL_SERVICE_NAME` removed — it would rename every child — and the
+///   widget endpoint variables, which name one window;
 /// - log and export settings per [`ChildKind`].
 pub fn inject_env(cmd: &mut Command, kind: ChildKind) {
     apply(cmd, kind, current(), CHILD_SETTINGS.get());
@@ -224,9 +225,13 @@ fn apply(
     parent: Option<TraceParent>,
     settings: Option<&ChildSettings>,
 ) {
+    // A widget token names one window: a child never inherits its parent's
+    // (`ingress::Ingress::configure_host` sets a host's own).
     cmd.env_remove(TRACEPARENT)
         .env_remove(TRACESTATE)
-        .env_remove("OTEL_SERVICE_NAME");
+        .env_remove("OTEL_SERVICE_NAME")
+        .env_remove(crate::widget::URL_ENV)
+        .env_remove(crate::widget::TOKEN_ENV);
     if let Some(parent) = parent {
         cmd.env(TRACEPARENT, parent.header_value());
     }
@@ -342,6 +347,7 @@ mod tests {
         assert!(env.contains(&(TRACEPARENT.to_string(), None)));
         assert!(env.contains(&("OTEL_SERVICE_NAME".to_string(), None)));
         assert!(env.contains(&("OTEL_EXPORTER_OTLP_HEADERS".to_string(), None)));
+        assert!(env.contains(&(crate::widget::TOKEN_ENV.to_string(), None)));
     }
 
     fn resolved_with_export() -> Resolved {

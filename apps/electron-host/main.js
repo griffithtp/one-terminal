@@ -8,6 +8,7 @@
  * an app requests the Electron engine.
  */
 
+const path = require("path");
 const { app, BrowserWindow, globalShortcut } = require("electron");
 
 const OT_URL = process.env.OT_URL;
@@ -31,9 +32,12 @@ app.whenReady().then(() => {
     title: OT_TITLE,
     webPreferences: {
       // Loaded URL is treated as untrusted web content — same posture as
-      // tauri-webview-host. No node integration / no preload.
+      // tauri-webview-host. No node integration; the sandboxed preload only
+      // exposes the widget telemetry endpoint and token (preload.js).
       nodeIntegration: false,
       contextIsolation: true,
+      sandbox: true,
+      preload: path.join(__dirname, "preload.js"),
     },
   });
   win.setTitle(OT_TITLE);

@@ -105,6 +105,10 @@ impl WebviewPool {
                                 ),
                             )
                             .initialization_script(&init_script_main)
+                            .initialization_script(crate::telemetry_cmd::widget_script(
+                                &app_main,
+                                &label_main,
+                            ))
                             .on_navigation(crate::address_bar_navigation_handler(
                                 app_main.clone(),
                                 terminal_id_main.clone(),

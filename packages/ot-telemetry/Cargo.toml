@@ -20,6 +20,10 @@ otlp = [
     "dep:async-trait",
     "dep:reqwest",
 ]
+# `ot_telemetry::ingress`: the loopback HTTP endpoint widget pages send logs
+# to, authenticated by per-window HMAC tokens. Only the processes that host
+# widgets (Terminal, Desktop Agent) enable it.
+ingress = ["dep:axum", "dep:tokio", "dep:hmac", "dep:sha2", "dep:hex", "dep:rand"]
 # `ot_telemetry::testing`: in-memory span and metric capture for app-crate tests.
 testing = ["otlp", "opentelemetry_sdk/testing"]
 
@@ -42,10 +46,19 @@ async-trait                    = { workspace = true, optional = true }
 # the whole workspace; reuse the workspace's reqwest 0.12 (ring) instead.
 reqwest = { workspace = true, optional = true, features = ["blocking"] }
 
+axum  = { workspace = true, optional = true }
+tokio = { workspace = true, optional = true }
+hmac  = { workspace = true, optional = true }
+sha2  = { workspace = true, optional = true }
+hex   = { workspace = true, optional = true }
+rand  = { workspace = true, optional = true }
+
 [dev-dependencies]
 opentelemetry_sdk = { workspace = true, features = ["testing"] }
 # Emit `log`-crate records in tests (tao/wry/tauri log through it).
 log = "0.4"
+tower = { version = "0.4", features = ["util"] }
+tokio = { workspace = true }
 
 [lints]
 workspace = true

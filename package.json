@@ -25,6 +25,7 @@
     "build:fdc3-plugin": "npm -w @one-terminal/fdc3-plugin run build",
     "test:fdc3-plugin": "npm -w @one-terminal/fdc3-plugin test",
     "test:terminal": "npm -w @one-terminal/one-terminal test",
+    "build:telemetry-client": "npm -w @one-terminal/telemetry run build",
     "test:telemetry-client": "npm -w @one-terminal/telemetry test",
     "build:app-directory": "npm -w @one-terminal/app-directory run build",
     "build:tauri-webview-host": "cargo build -p tauri-webview-host",

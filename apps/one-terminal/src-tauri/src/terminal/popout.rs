@@ -350,6 +350,9 @@ pub fn open_popout(
                         win.add_child(
                             WebviewBuilder::new(&panel_m, WebviewUrl::External(parsed))
                                 .initialization_script(&init_script)
+                                .initialization_script(crate::telemetry_cmd::widget_script(
+                                    &app_m, &panel_m,
+                                ))
                                 .on_navigation(crate::address_bar_navigation_handler(
                                     app_m.clone(),
                                     owner_m.clone(),

@@ -11,6 +11,8 @@
 //!   `TRACEPARENT`.
 
 pub mod config;
+#[cfg(feature = "ingress")]
+pub mod ingress;
 mod logs;
 #[cfg(feature = "otlp")]
 pub mod metrics;
@@ -24,6 +26,7 @@ pub mod relay;
 pub mod testing;
 #[cfg(feature = "otlp")]
 pub mod trace;
+pub mod widget;
 
 pub use config::{resolve, Resolved, TelemetryConfig};
 

@@ -120,8 +120,11 @@ fn run_external_host(
     url: &str,
     title: &str,
 ) -> Result<(), String> {
+    use ot_core::electron_host::ElectronCommand;
     use ot_core::engine::{binding_path, is_installed};
     use ot_telemetry::propagation::{inject_env, ChildKind};
+
+    let endpoint = app.state::<ot_telemetry::ingress::WidgetEndpoint>();
 
     match &binding.family {
         EngineFamily::Electron => {
@@ -139,7 +142,12 @@ fn run_external_host(
                 app_id,
                 url,
                 title,
-                |cmd| inject_env(cmd, ChildKind::LogsOnly),
+                |cmd, step| {
+                    inject_env(cmd, ChildKind::LogsOnly);
+                    if step == ElectronCommand::Host {
+                        endpoint.configure_host(cmd, app_id, Some(app_id));
+                    }
+                },
             );
             if needs_install {
                 match &result {
@@ -190,6 +198,7 @@ fn run_external_host(
                 cmd.env("WEBVIEW2_BROWSER_EXECUTABLE_FOLDER", &path);
             }
             inject_env(&mut cmd, ChildKind::LogsOnly);
+            endpoint.configure_host(&mut cmd, app_id, Some(app_id));
             cmd.spawn()
                 .map(|_| ())
                 .map_err(|e| format!("spawn tauri-webview-host {}: {e}", host_bin.display()))?;
@@ -206,6 +215,7 @@ fn run_external_host(
                 .env("OT_URL", url)
                 .env("OT_TITLE", title);
             inject_env(&mut cmd, ChildKind::LogsOnly);
+            endpoint.configure_host(&mut cmd, app_id, Some(app_id));
             cmd.spawn()
                 .map(|_| ())
                 .map_err(|e| format!("spawn tauri-webview-host {}: {e}", host_bin.display()))?;
@@ -435,6 +445,10 @@ async fn wm_open(
                 win.add_child(
                     WebviewBuilder::new(&panel_id_for_main, WebviewUrl::External(parsed_url))
                         .initialization_script(&panel_init_script)
+                        .initialization_script(crate::telemetry_cmd::widget_script(
+                            &app_for_main,
+                            &panel_id_for_main,
+                        ))
                         .on_navigation(address_bar_navigation_handler(
                             app_for_main.clone(),
                             terminal_id_for_main.clone(),
@@ -1734,6 +1748,20 @@ pub fn run() {
     // returns. Anything setup spawns (e.g. restored widget hosts) gets it as
     // TRACEPARENT.
     // Parented on the TRACEPARENT the Desktop Agent spawned this process with.
+    // Widget telemetry endpoint: bound now so its URL is known before any
+    // panel webview exists; served once the async runtime is up (setup).
+    let (widget_endpoint, widget_server) =
+        ot_telemetry::ingress::WidgetEndpoint::start(cfg.telemetry.widgets.enabled);
+    widget_endpoint.resolve_app_ids_with({
+        let manager = manager.clone();
+        move |label| {
+            manager
+                .owner_of_panel(label)?
+                .layout_tree
+                .panel_app_id(label)
+        }
+    });
+
     let startup = telemetry.startup_span();
     let startup_setup = startup.clone();
     let app = startup.in_scope(|| {
@@ -1752,12 +1780,16 @@ pub fn run() {
             .register_uri_scheme_protocol("sample-widget", sample_widget::handle)
             // After telemetry init, so the relay's drop counter uses the real meter.
             .manage(ot_telemetry::relay::Relay::new())
+            .manage(widget_endpoint)
             .manage(identity.clone())
             .manage(manager.clone())
             .manage(cfg.clone())
             .manage(InstanceId(instance_id.clone()))
             .setup(move |app| {
                 let _startup = startup_setup.enter();
+                if let Some(server) = widget_server {
+                    tauri::async_runtime::spawn(server.run());
+                }
                 // ── Resolve the FDC3 Desktop Agent (docs/fdc3.md) ───────────────
                 // Needs app_data_dir for the user's saved choice, so it runs here
                 // rather than before the builder. Must be managed before any panel
@@ -1928,6 +1960,10 @@ pub fn run() {
                                 ),
                             )
                             .initialization_script(&panel_init_script)
+                            .initialization_script(crate::telemetry_cmd::widget_script(
+                                app.handle(),
+                                &label,
+                            ))
                             .on_navigation(address_bar_navigation_handler(
                                 app.handle().clone(),
                                 WIN.to_string(),
@@ -1964,6 +2000,10 @@ pub fn run() {
                             if let Err(e) = win.add_child(
                                 WebviewBuilder::new(label, WebviewUrl::External(parsed_url))
                                     .initialization_script(&script)
+                                    .initialization_script(crate::telemetry_cmd::widget_script(
+                                        app.handle(),
+                                        label,
+                                    ))
                                     .on_navigation(address_bar_navigation_handler(
                                         app.handle().clone(),
                                         WIN.to_string(),

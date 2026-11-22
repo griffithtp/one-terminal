@@ -19,6 +19,10 @@ Logging, tracing and opt-in OpenTelemetry export for every OneTerminal binary. R
   feature switches the whole workspace to `aws-lc-rs` (a C/CMake build). `otlp.rs` plugs
   in the workspace's reqwest 0.12 blocking client instead. `cargo tree -i aws-lc-rs` must
   stay empty.
+- **Widget tokens stay per process.** The ingress key never leaves the process that
+  generated it; hosts get a minted token (`Ingress::configure_host`), and
+  `propagation::inject_env` strips inherited `OT_TELEMETRY_*` from every child. Token
+  claims, not the payload, name the sender.
 - **Secrets never print.** Endpoint URLs go through `redact::url`; headers are
   `Redacted<…>`. Keep the `summary_never_contains_secrets` test passing.
 
@@ -30,6 +34,9 @@ Logging, tracing and opt-in OpenTelemetry export for every OneTerminal binary. R
 | `logs.rs`        | Daily JSON-lines file per service + stderr text; trace ids on every line                     |
 | `otlp.rs`        | Feature `otlp`: providers, OTLP/HTTP exporters, the reqwest 0.12 HTTP client                 |
 | `propagation.rs` | `TRACEPARENT` parse/inject for child processes (works without `otlp`)                        |
+| `relay.rs`       | The rules for relayed browser records: limits, per-sender rate limit, sanitising, emit       |
+| `ingress.rs`     | Feature `ingress`: the widget endpoint (loopback axum), HMAC tokens, `WidgetEndpoint`        |
+| `widget.rs`      | `window.OT_TELEMETRY` script and the `OT_TELEMETRY_URL`/`_TOKEN` host variables (no network) |
 | `metrics.rs`     | Feature `otlp`: `meter(scope)` and instrument re-exports for app code                        |
 | `trace.rs`       | Feature `otlp`: span trace ids, FDC3/UUID trace-id normalising, joining an external trace    |
 | `testing.rs`     | Feature `testing`: in-memory span and metric capture for app-crate tests                     |
@@ -41,6 +48,8 @@ Logging, tracing and opt-in OpenTelemetry export for every OneTerminal binary. R
 
 - `otlp` (default): export. `desktop-agent`, `one-terminal` and `app-directory-server`
   enable it.
+- `ingress`: the widget endpoint (axum, tokio, `hmac`). `desktop-agent` and `one-terminal`
+  enable it; each runs its own endpoint for the windows it hosts.
 - `testing` (dev-dependencies only): `ot_telemetry::testing::Capture`.
 - Without `otlp` (`tauri-webview-host`): local logs only, no network or TLS code, no
   export threads. Log lines still carry the `TRACEPARENT` trace id.

@@ -34,8 +34,16 @@ export interface TelemetryBatch {
 /** Delivers one batch. A rejection is reported (rate-limited) and the batch dropped. */
 export type Transport = (batch: TelemetryBatch) => Promise<unknown>;
 
+/**
+ * Delivers one batch synchronously as the page unloads (`navigator.sendBeacon`).
+ * Returns false when it couldn't; the batch then goes through `transport`.
+ */
+export type UnloadTransport = (batch: TelemetryBatch) => boolean;
+
 export interface TelemetryOptions {
   transport: Transport;
+  /** Used on `pagehide`, when an async send may not finish. Default: `transport`. */
+  unloadTransport?: UnloadTransport;
   /** Longest a record waits before being sent. Default 1000 ms. */
   flushIntervalMs?: number;
   /** Records per batch; a full batch is sent at once. Default 20 (the relay's cap). */
@@ -189,8 +197,19 @@ export function createTelemetry(options: TelemetryOptions): Telemetry {
         attributes: { "error.unhandled_rejection": true },
       });
     };
-    // Best effort: an async transport may not finish before the page unloads.
-    const onPageHide = () => void flush();
+    // An async transport may not finish before the page unloads: hand what's
+    // queued to `unloadTransport` synchronously when there is one.
+    const onPageHide = () => {
+      const unload = options.unloadTransport;
+      if (unload && !inFlight) {
+        while (queue.length > 0) {
+          const records = queue.slice(0, maxBatch);
+          if (!unload({ records })) break;
+          queue = queue.slice(records.length);
+        }
+      }
+      void flush();
+    };
     target.addEventListener("error", onError);
     target.addEventListener("unhandledrejection", onRejection);
     target.addEventListener("pagehide", onPageHide);

@@ -490,6 +490,16 @@ impl LayoutTree {
         Some(tab)
     }
 
+    /// The app id of panel `label`, tiled or floating.
+    pub fn panel_app_id(&self, label: &str) -> Option<String> {
+        self.inner
+            .read()
+            .unwrap()
+            .meta
+            .get(label)
+            .map(|m| m.app_id.clone())
+    }
+
     /// `true` if `label` is a panel of this Terminal, tiled or floating.
     pub fn has_panel(&self, label: &str) -> bool {
         self.inner.read().unwrap().meta.contains_key(label)
@@ -1979,6 +1989,10 @@ impl LayoutTree {
                             .add_child(
                                 WebviewBuilder::new(label, WebviewUrl::External(parsed))
                                     .initialization_script(&script)
+                                    .initialization_script(crate::telemetry_cmd::widget_script(
+                                        &app_for_main,
+                                        label,
+                                    ))
                                     .on_navigation(crate::address_bar_navigation_handler(
                                         app_for_main.clone(),
                                         terminal_id_for_main.clone(),

@@ -19,6 +19,7 @@ export default tseslint.config(
       "**/target/**",
       "packages/create-one-terminal/templates/**",
       "packages/fdc3-plugin/**",
+      "packages/telemetry-client/ot-telemetry.js",
       "apps/sample-ticker/**",
       "apps/sample-chart/**",
       "apps/electron-host/**",

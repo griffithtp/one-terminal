@@ -8,6 +8,7 @@
  * Routes:
  *   /                → index.html
  *   /fdc3-plugin.js  → ../../packages/fdc3-plugin/fdc3-plugin.js
+ *   /ot-telemetry.js → ../../packages/telemetry-client/ot-telemetry.js
  */
 import fs from "fs";
 import http from "http";
@@ -17,6 +18,7 @@ import { fileURLToPath } from "url";
 const PORT = 3012;
 const __dir = path.dirname(fileURLToPath(import.meta.url));
 const PLUGIN = path.resolve(__dir, "../../packages/fdc3-plugin/fdc3-plugin.js");
+const TELEMETRY = path.resolve(__dir, "../../packages/telemetry-client/ot-telemetry.js");
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -30,6 +32,8 @@ http
     let filePath;
     if (req.url === "/fdc3-plugin.js") {
       filePath = PLUGIN;
+    } else if (req.url === "/ot-telemetry.js") {
+      filePath = TELEMETRY;
     } else {
       // Strip the query string, decode, then confine the resolved path to __dir
       // so crafted requests (e.g. `/../../etc/passwd`) cannot escape the web root.

@@ -40,6 +40,22 @@ pub struct TelemetryConfig {
     /// `OTEL_RESOURCE_ATTRIBUTES`.
     pub resource_attributes: BTreeMap<String, String>,
     pub otlp: OtlpConfig,
+    pub widgets: WidgetsConfig,
+}
+
+/// The widget telemetry endpoint (`ot_telemetry::ingress`).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct WidgetsConfig {
+    /// Accept log records from widget pages. Records go to the local log
+    /// file, and to OTLP only when export is on.
+    pub enabled: bool,
+}
+
+impl Default for WidgetsConfig {
+    fn default() -> Self {
+        Self { enabled: true }
+    }
 }
 
 impl Default for TelemetryConfig {
@@ -51,6 +67,7 @@ impl Default for TelemetryConfig {
             service_namespace: "one-terminal".to_string(),
             resource_attributes: BTreeMap::new(),
             otlp: OtlpConfig::default(),
+            widgets: WidgetsConfig::default(),
         }
     }
 }

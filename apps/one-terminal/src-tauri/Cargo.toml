@@ -26,7 +26,7 @@ futures-util = { workspace = true }
 url          = "2"
 uuid         = { version = "1", features = ["v4"] }
 ot-core                    = { workspace = true }
-ot-telemetry               = { workspace = true, features = ["otlp"] }
+ot-telemetry               = { workspace = true, features = ["otlp", "ingress"] }
 tracing                    = { workspace = true }
 tauri-plugin-global-shortcut = "2"
 indexmap = { workspace = true }
