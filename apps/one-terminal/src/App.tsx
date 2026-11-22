@@ -110,7 +110,7 @@ function ChromeApp() {
   const { layout, openPanel } = useLayout();
   const { host: hostLayout } = useHostLayout();
   const tabDrag = useTabDrag();
-  const dashboards = useDashboards();
+  const dashboards = useDashboards({ syncWindowTitle: true });
 
   // ── App menu drawer state ─────────────────────────────────────────────────
   // The drawer is rendered inside the overlay webview (above panels in
