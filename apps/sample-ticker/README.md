@@ -18,7 +18,7 @@ Served at **http://localhost:3010** via `npm run dev:sample-ticker`.
 npm run dev:sample-ticker
 ```
 
-The app proxies `/fdc3-plugin.js` from `packages/fdc3-plugin/fdc3-plugin.js` so no separate build step is needed.
+The app proxies `/fdc3-plugin.js` from `packages/fdc3-plugin/fdc3-plugin.js` and `/ot-telemetry.js` (widget error reporting, see [docs/telemetry.md](../../docs/telemetry.md#widgets)) from `packages/telemetry-client/ot-telemetry.js`, so no separate build step is needed.
 
 ## FDC3 integration points
 

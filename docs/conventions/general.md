@@ -115,7 +115,7 @@ Everything crossing IPC is a typed contract; both sides change in the same commi
   `debug!`), never `println!`/`eprintln!` — each binary installs the subscriber through
   `ot-telemetry`, which writes the log file and (opt-in) exports. No secrets, tokens or
   full FDC3 context payloads; pass URLs through `ot_telemetry::redact::url`. Details:
-  [rust.md](rust.md#logging).
+  [rust.md](rust.md#logging); what users see and configure: [docs/telemetry.md](../telemetry.md).
 - **Telemetry depends on nothing domain-specific.** `ot-telemetry` never depends on FDC3
   or Tauri. App code logs and creates spans with `tracing`, and records metrics or links
   traces through `ot_telemetry::metrics` / `ot_telemetry::trace` only from a dedicated

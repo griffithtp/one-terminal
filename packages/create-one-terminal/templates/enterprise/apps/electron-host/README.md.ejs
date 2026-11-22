@@ -22,6 +22,10 @@ electron <path-to-electron-host/>
 
 The shell quits as soon as its window is closed.
 
+### Widget telemetry
+
+When the spawner also sets `OT_TELEMETRY_URL` and `OT_TELEMETRY_TOKEN` (the address of its widget telemetry endpoint and this window's token), the sandboxed `preload.js` exposes exactly those two values to the page as `window.OT_TELEMETRY`, so the page can report its errors and logs with `ot-telemetry.js`. The page gets nothing else from the preload: no Node APIs and no IPC; `contextIsolation` and `sandbox` stay on. Without the variables nothing is exposed. See [Telemetry → Widgets](https://github.com/griffithtp/one-terminal/blob/main/docs/telemetry.md#widgets) in the OneTerminal repo.
+
 ---
 
 ## Getting started
@@ -108,5 +112,6 @@ Both shells receive the same `OT_URL` / `OT_TITLE` / `OT_APP_ID` contract and bo
 ```
 apps/electron-host/
 ├── main.js          entry point — reads env vars, opens BrowserWindow, registers DevTools shortcuts
+├── preload.js       sandboxed preload — exposes window.OT_TELEMETRY (widget telemetry endpoint and token) only
 └── package.json     declares electron as a devDependency; "start" script for smoke tests
 ```
