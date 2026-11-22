@@ -19,6 +19,7 @@ mod otlp;
 pub mod paths;
 pub mod propagation;
 pub mod redact;
+pub mod relay;
 #[cfg(feature = "testing")]
 pub mod testing;
 #[cfg(feature = "otlp")]

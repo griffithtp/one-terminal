@@ -79,6 +79,12 @@ const SOURCES: Array<{ src: string; templateBase: string; overlay: Overlay }> = 
     templateBase: "packages/ot-telemetry",
     overlay: "shared",
   },
+  // Imported by the Terminal UI (relays UI errors and logs).
+  {
+    src: join(ROOT, "packages/telemetry-client"),
+    templateBase: "packages/telemetry-client",
+    overlay: "shared",
+  },
   {
     src: join(ROOT, "packages/fdc3-plugin"),
     templateBase: "packages/fdc3-plugin",

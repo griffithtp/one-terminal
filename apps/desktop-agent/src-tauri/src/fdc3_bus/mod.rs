@@ -38,7 +38,7 @@ use crate::app_dir::AppRecord;
 use crate::broker::{Broker, Effect};
 
 mod instrument;
-use instrument::BusMetrics;
+use instrument::{BusMetrics, HandshakeEnd};
 
 const HEARTBEAT_INTERVAL: Duration = Duration::from_secs(30);
 
@@ -103,9 +103,19 @@ async fn handle_connection(socket: WebSocket, app_id: String, state: BusState) {
     let (tx, mut rx) = mpsc::unbounded_channel::<String>();
 
     // ── Phase 1: identity handshake ───────────────────────────────────────────
+    // Opened on the first text frame, not on accept: a page opening and
+    // closing sockets in a loop must not flood the trace backend (the
+    // handshake-failure counter still counts it).
+    let mut connect_span: Option<tracing::Span> = None;
+    let ended = |span: &Option<tracing::Span>, outcome: &str| {
+        if let Some(span) = span {
+            instrument::handshake_ended(span, outcome);
+        }
+    };
     let instance_id = loop {
         match stream.next().await {
             Some(Ok(Message::Text(txt))) => {
+                let span = connect_span.get_or_insert_with(|| instrument::connect_span(&app_id));
                 let Ok(msg) = serde_json::from_str::<Value>(&txt) else {
                     continue;
                 };
@@ -118,17 +128,27 @@ async fn handle_connection(socket: WebSocket, app_id: String, state: BusState) {
                 let directory = state.host.directory().await;
                 // `tx` moves into the broker so that a forced disconnect drops
                 // the only sender and ends the message loop below.
-                break state.broker.connect(&app_id, attempt, &directory, tx);
+                break span.in_scope(|| state.broker.connect(&app_id, attempt, &directory, tx));
             }
             Some(Ok(Message::Ping(d))) => {
                 let _ = sink.send(Message::Pong(d)).await;
             }
+            Some(Ok(Message::Close(_))) | None => {
+                ended(&connect_span, "closed");
+                state.metrics.handshake_failed(HandshakeEnd::Closed);
+                return;
+            }
             _ => {
-                state.metrics.handshake_failed();
+                ended(&connect_span, "invalid");
+                state.metrics.handshake_failed(HandshakeEnd::Invalid);
                 return;
             }
         }
     };
+    if let Some(span) = connect_span.take() {
+        span.record("ot.instance_id", instance_id.as_str());
+        instrument::handshake_ended(&span, "ok");
+    }
     state.metrics.connected();
     tracing::info!(
         app_id = %crate::broker::clip_untrusted(&app_id),
@@ -155,11 +175,13 @@ async fn handle_connection(socket: WebSocket, app_id: String, state: BusState) {
                             instrument::link_trace(&span, &mut msg);
                             let started = Instant::now();
                             // Synchronous: no guard is held across an await.
-                            span.in_scope(|| {
-                                let effects = state.broker.handle(&instance_id, &msg, &directory);
+                            let outcome = span.in_scope(|| {
+                                let (effects, outcome) =
+                                    state.broker.handle_with_outcome(&instance_id, &msg, &directory);
                                 perform(effects, &state);
+                                outcome
                             });
-                            state.metrics.handled(label, started);
+                            state.metrics.handled(label, outcome, started);
                         }
                         None => {
                             let effects = state.broker.handle(&instance_id, &msg, &directory);

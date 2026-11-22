@@ -18,6 +18,7 @@ mod types;
 pub use types::*;
 
 use serde_json::{json, Value};
+use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
@@ -39,13 +40,24 @@ const DASHBOARD_INSTANCE_ID: &str = "__dashboard__";
 /// Longest peer-supplied string (message type, app id) written to a log line.
 const UNTRUSTED_LOG_CHARS: usize = 128;
 
-/// A peer-controlled string (message `type`, self-asserted `appId`) cut for
-/// logging, so one frame can't write megabytes to the log file.
+/// A peer-controlled string (message `type`, self-asserted `appId`) made safe
+/// for logging: cut so one frame can't write megabytes to the log file, and
+/// with control characters replaced (`?appId=` is percent-decoded, so `%0A`
+/// would otherwise put a raw newline on stderr).
 pub(crate) fn clip_untrusted(s: &str) -> std::borrow::Cow<'_, str> {
-    match s.char_indices().nth(UNTRUSTED_LOG_CHARS) {
-        None => std::borrow::Cow::Borrowed(s),
-        Some((cut, _)) => std::borrow::Cow::Owned(format!("{}… ({} bytes)", &s[..cut], s.len())),
+    let has_control = s.chars().take(UNTRUSTED_LOG_CHARS).any(char::is_control);
+    let cut = s.char_indices().nth(UNTRUSTED_LOG_CHARS).map(|(i, _)| i);
+    if !has_control && cut.is_none() {
+        return std::borrow::Cow::Borrowed(s);
     }
+    let head: String = s[..cut.unwrap_or(s.len())]
+        .chars()
+        .map(|c| if c.is_control() { '?' } else { c })
+        .collect();
+    std::borrow::Cow::Owned(match cut {
+        Some(_) => format!("{head}… ({} bytes)", s.len()),
+        None => head,
+    })
 }
 
 /// Side effects [`Broker::handle`] can't perform itself.
@@ -180,6 +192,29 @@ struct State {
     pending_results: HashMap<String, PendingResult>,
     /// Windows opened for an app that hasn't connected yet: `(app_id, label)`.
     launched_windows: Vec<(String, String)>,
+    /// Outcome of the request being handled; reset by `handle_with_outcome`.
+    outcome: Cell<Outcome>,
+}
+
+/// How a request was handled, for metrics: `Error` means it was answered with
+/// an error response. Failures reported later (an intent resolved after a
+/// launch, say) aren't counted here.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Outcome {
+    Ok,
+    Error,
+    /// Unknown message type.
+    Unhandled,
+}
+
+impl Outcome {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Outcome::Ok => "ok",
+            Outcome::Error => "error",
+            Outcome::Unhandled => "unhandled",
+        }
+    }
 }
 
 impl State {
@@ -206,6 +241,9 @@ impl State {
     }
 
     fn respond_error(&self, to: &str, request_uuid: &str, resp_type: &str, error: &str) {
+        if self.outcome.get() == Outcome::Ok {
+            self.outcome.set(Outcome::Error);
+        }
         self.respond(to, request_uuid, resp_type, json!({ "error": error }));
     }
 
@@ -299,6 +337,7 @@ impl Broker {
                 pending_opens: Vec::new(),
                 pending_results: HashMap::new(),
                 launched_windows: Vec::new(),
+                outcome: Cell::new(Outcome::Ok),
             })),
             events,
         }
@@ -410,13 +449,38 @@ impl Broker {
     /// Apply one DACP message from `instance_id`. `directory` is a current
     /// snapshot of the App Directory.
     pub fn handle(&self, instance_id: &str, msg: &Value, directory: &[AppRecord]) -> Vec<Effect> {
+        self.handle_with_outcome(instance_id, msg, directory).0
+    }
+
+    /// [`Broker::handle`], also reporting the [`Outcome`] of the immediate
+    /// handling (for metrics). The outcome is read under the same lock as the
+    /// dispatch, so concurrent connections can't mix them up.
+    pub fn handle_with_outcome(
+        &self,
+        instance_id: &str,
+        msg: &Value,
+        directory: &[AppRecord],
+    ) -> (Vec<Effect>, Outcome) {
         let Some(msg_type) = msg.get("type").and_then(Value::as_str) else {
-            return Vec::new();
+            return (Vec::new(), Outcome::Unhandled);
         };
         let mut st = self.lock();
         if !st.instances.contains_key(instance_id) {
-            return Vec::new();
+            return (Vec::new(), Outcome::Error);
         }
+        st.outcome.set(Outcome::Ok);
+        let effects = self.dispatch(&mut st, instance_id, msg_type, msg, directory);
+        (effects, st.outcome.get())
+    }
+
+    fn dispatch(
+        &self,
+        st: &mut State,
+        instance_id: &str,
+        msg_type: &str,
+        msg: &Value,
+        directory: &[AppRecord],
+    ) -> Vec<Effect> {
         let request_uuid = msg["meta"]["requestUuid"].as_str().unwrap_or_default();
         let req = Request {
             from: instance_id,
@@ -426,45 +490,45 @@ impl Broker {
         let events = self.events.as_ref();
 
         match msg_type {
-            "getUserChannelsRequest" => channels::get_user_channels(&st, &req),
-            "getOrCreateChannelRequest" => channels::get_or_create(&mut st, &req),
-            "getCurrentChannelRequest" => channels::get_current_channel(&st, &req),
-            "joinUserChannelRequest" => channels::join(&mut st, &req, events),
-            "leaveCurrentChannelRequest" => channels::leave(&mut st, &req, events),
-            "createPrivateChannelRequest" => channels::create_private(&mut st, &req),
-            "privateChannelDisconnectRequest" => channels::private_disconnect(&mut st, &req),
+            "getUserChannelsRequest" => channels::get_user_channels(st, &req),
+            "getOrCreateChannelRequest" => channels::get_or_create(st, &req),
+            "getCurrentChannelRequest" => channels::get_current_channel(st, &req),
+            "joinUserChannelRequest" => channels::join(st, &req, events),
+            "leaveCurrentChannelRequest" => channels::leave(st, &req, events),
+            "createPrivateChannelRequest" => channels::create_private(st, &req),
+            "privateChannelDisconnectRequest" => channels::private_disconnect(st, &req),
             "privateChannelAddEventListenerRequest" => {
-                channels::add_private_event_listener(&mut st, &req);
+                channels::add_private_event_listener(st, &req);
             }
             "privateChannelUnsubscribeEventListenerRequest" => {
-                channels::remove_private_event_listener(&mut st, &req);
+                channels::remove_private_event_listener(st, &req);
             }
-            "broadcastRequest" => channels::broadcast(&mut st, &req, events),
-            "getCurrentContextRequest" => channels::get_current_context(&st, &req),
-            "clearContextRequest" => channels::clear_context(&mut st, &req),
+            "broadcastRequest" => channels::broadcast(st, &req, events),
+            "getCurrentContextRequest" => channels::get_current_context(st, &req),
+            "clearContextRequest" => channels::clear_context(st, &req),
             "addContextListenerRequest" => {
-                channels::add_context_listener(&mut st, &req);
-                apps::deliver_open_context(&mut st, instance_id, req.payload);
+                channels::add_context_listener(st, &req);
+                apps::deliver_open_context(st, instance_id, req.payload);
             }
-            "contextListenerUnsubscribeRequest" => channels::remove_context_listener(&mut st, &req),
-            "addEventListenerRequest" => channels::add_event_listener(&mut st, &req),
-            "eventListenerUnsubscribeRequest" => channels::remove_event_listener(&mut st, &req),
+            "contextListenerUnsubscribeRequest" => channels::remove_context_listener(st, &req),
+            "addEventListenerRequest" => channels::add_event_listener(st, &req),
+            "eventListenerUnsubscribeRequest" => channels::remove_event_listener(st, &req),
 
-            "findIntentRequest" => intents::find_intent(&st, &req, directory),
-            "findIntentsByContextRequest" => intents::find_intents_by_context(&st, &req, directory),
-            "addIntentListenerRequest" => intents::add_listener(&mut st, &req, events),
-            "intentListenerUnsubscribeRequest" => intents::remove_listener(&mut st, &req),
-            "raiseIntentRequest" => return intents::raise_intent(&mut st, &req, directory, events),
+            "findIntentRequest" => intents::find_intent(st, &req, directory),
+            "findIntentsByContextRequest" => intents::find_intents_by_context(st, &req, directory),
+            "addIntentListenerRequest" => intents::add_listener(st, &req, events),
+            "intentListenerUnsubscribeRequest" => intents::remove_listener(st, &req),
+            "raiseIntentRequest" => return intents::raise_intent(st, &req, directory, events),
             "raiseIntentForContextRequest" => {
-                return intents::raise_intent_for_context(&mut st, &req, directory, events)
+                return intents::raise_intent_for_context(st, &req, directory, events)
             }
-            "intentResultRequest" => intents::intent_result(&mut st, &req),
+            "intentResultRequest" => intents::intent_result(st, &req),
 
-            "openRequest" => return apps::open(&mut st, &req, directory),
-            "closeRequest" => return apps::close(&st, &req),
-            "findInstancesRequest" => apps::find_instances(&st, &req),
-            "getAppMetadataRequest" => apps::get_app_metadata(&st, &req, directory),
-            "getInfoRequest" => apps::get_info(&st, &req, directory),
+            "openRequest" => return apps::open(st, &req, directory),
+            "closeRequest" => return apps::close(st, &req),
+            "findInstancesRequest" => apps::find_instances(st, &req),
+            "getAppMetadataRequest" => apps::get_app_metadata(st, &req, directory),
+            "getInfoRequest" => apps::get_info(st, &req, directory),
 
             // Liveness is tracked by the socket itself. Webviews on hidden
             // dashboards can be suspended, so a missed heartbeat proves nothing.
@@ -479,6 +543,7 @@ impl Broker {
                         "InvalidArguments",
                     );
                 }
+                st.outcome.set(Outcome::Unhandled);
                 // `other` is peer-controlled: clip it so a frame can't bloat the log.
                 tracing::warn!("unhandled message type: {}", clip_untrusted(other));
             }

@@ -66,6 +66,17 @@ compiler auto-memoisation.
 - Type every `invoke<T>` / `listen<T>` with the shared types in `src/types.ts`; keep them
   in step with the Rust `serde` structs (field names are camelCase on the wire).
 
+## Errors and telemetry
+
+- Each UI entry point (`main.tsx`, `popout.tsx`) calls `startTelemetry()` (from
+  `src/lib/telemetry.ts`) **first** and wraps its root in `TelemetryErrorBoundary`
+  (`@one-terminal/telemetry/react`). A new entry point must do the same.
+- Uncaught errors, unhandled rejections and `console.error` / `console.warn` reach the
+  owning process's log file (and OTLP when configured), so `.catch(console.error)` stays
+  the minimum for IPC promises — it is reported, not lost.
+- For an explicit event, `telemetry.log(level, message, { attributes })`. Attribute keys
+  are `a-z0-9_.`; never log secrets, tokens or FDC3 context payloads.
+
 ## Performance
 
 The chrome webview re-renders on every layout emit, so render cost there is user-visible

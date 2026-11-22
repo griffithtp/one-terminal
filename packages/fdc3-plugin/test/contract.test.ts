@@ -317,6 +317,22 @@ describe("intents", () => {
     expect(metadata.timestamp).toBeInstanceOf(Date);
   });
 
+  it("forwards an app-supplied traceId on raiseIntent and generates a W3C one otherwise", async () => {
+    const [raiser, handler] = await Promise.all([connect("raiser"), connect("handler")]);
+    const traceIds: (string | undefined)[] = [];
+    await handler.addIntentListener("TraceThing", (_context, metadata) => {
+      traceIds.push(metadata?.traceId);
+    });
+
+    await (
+      await raiser.raiseIntent("TraceThing", instrument, null, undefined, { traceId: "raise-1" })
+    ).getResult();
+    await (await raiser.raiseIntent("TraceThing", instrument)).getResult();
+
+    expect(traceIds[0]).toBe("raise-1");
+    expect(traceIds[1]).toMatch(/^[0-9a-f]{32}$/);
+  });
+
   it("supports void results and fdc3.nothing for an omitted context", async () => {
     const [raiser, handler] = await Promise.all([connect("raiser"), connect("handler")]);
     const seen = vi.fn();
@@ -450,6 +466,22 @@ describe("apps", () => {
     const identifier = await pending;
     expect(identifier.appId).toBe("plain");
     expect(identifier.instanceId).toBe((await opened.getInfo()).appMetadata.instanceId);
+  });
+
+  it("forwards an app-supplied traceId with the context it opens an app with", async () => {
+    const opener = await connect("opener");
+    const pending = opener.open({ appId: "plain" }, instrument, { traceId: "open-1" });
+    await settle();
+
+    const opened = await connect("plain");
+    const traceId = new Promise<string | undefined>((resolve) => {
+      void opened.addContextListener("fdc3.instrument", (_context, metadata) =>
+        resolve(metadata?.traceId)
+      );
+    });
+
+    expect(await traceId).toBe("open-1");
+    await pending;
   });
 
   it("opens an app without context as soon as it connects", async () => {

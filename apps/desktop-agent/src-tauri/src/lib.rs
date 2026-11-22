@@ -4,6 +4,7 @@ mod config;
 mod engines;
 pub mod fdc3_bus;
 mod metrics;
+mod telemetry_cmd;
 
 use app_dir::{AppDirectoryCache, AppRecord};
 use broker::{Broker, BrokerEvent, BrokerEvents, ChannelInfo, IntentHandlerInfo, WindowHandle};
@@ -853,6 +854,8 @@ pub fn run() {
     let app = startup.in_scope(|| {
         tauri::Builder::default()
             .manage(app_dir_cache.clone())
+            // After telemetry init, so the relay's drop counter uses the real meter.
+            .manage(ot_telemetry::relay::Relay::new())
             .manage(engine_catalog.clone())
             .manage(cfg.clone())
             .manage(TerminalRegistry::default())
@@ -1054,6 +1057,7 @@ pub fn run() {
                 engines::commands::engine_refresh_catalog,
                 engines::commands::engine_list_installed,
                 engines::commands::engine_ensure,
+                telemetry_cmd::cda_telemetry_log,
             ])
             .build(tauri::generate_context!())
             .expect("error while building OneTerminal Desktop Agent")

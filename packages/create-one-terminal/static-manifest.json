@@ -121,6 +121,10 @@
       "overlay": "enterprise"
     },
     {
+      "path": "apps/desktop-agent/src-tauri/src/telemetry_cmd.rs",
+      "overlay": "enterprise"
+    },
+    {
       "path": "apps/desktop-agent/src/components/ActivityFeed.tsx",
       "overlay": "enterprise"
     },
@@ -158,10 +162,6 @@
     },
     {
       "path": "apps/desktop-agent/src/hooks/useEngineOverride.ts",
-      "overlay": "enterprise"
-    },
-    {
-      "path": "apps/desktop-agent/src/main.tsx",
       "overlay": "enterprise"
     },
     {
@@ -262,6 +262,10 @@
     },
     {
       "path": "apps/one-terminal/src-tauri/src/sample_widget.rs",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src-tauri/src/telemetry_cmd.rs",
       "overlay": "shared"
     },
     {
@@ -573,19 +577,15 @@
       "overlay": "shared"
     },
     {
+      "path": "apps/one-terminal/src/lib/telemetry.test.ts",
+      "overlay": "shared"
+    },
+    {
       "path": "apps/one-terminal/src/lib/terminalConfig.ts",
       "overlay": "shared"
     },
     {
       "path": "apps/one-terminal/src/lib/widgetRegistry.ts",
-      "overlay": "shared"
-    },
-    {
-      "path": "apps/one-terminal/src/main.tsx",
-      "overlay": "shared"
-    },
-    {
-      "path": "apps/one-terminal/src/popout.tsx",
       "overlay": "shared"
     },
     {
@@ -789,11 +789,39 @@
       "overlay": "shared"
     },
     {
+      "path": "packages/ot-telemetry/src/relay.rs",
+      "overlay": "shared"
+    },
+    {
       "path": "packages/ot-telemetry/src/testing.rs",
       "overlay": "shared"
     },
     {
       "path": "packages/ot-telemetry/src/trace.rs",
+      "overlay": "shared"
+    },
+    {
+      "path": "packages/telemetry-client/src/index.test.ts",
+      "overlay": "shared"
+    },
+    {
+      "path": "packages/telemetry-client/src/index.ts",
+      "overlay": "shared"
+    },
+    {
+      "path": "packages/telemetry-client/src/react.test.tsx",
+      "overlay": "shared"
+    },
+    {
+      "path": "packages/telemetry-client/src/react.tsx",
+      "overlay": "shared"
+    },
+    {
+      "path": "packages/telemetry-client/tsconfig.json",
+      "overlay": "shared"
+    },
+    {
+      "path": "packages/telemetry-client/vitest.config.ts",
       "overlay": "shared"
     }
   ]

@@ -1,5 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import { TelemetryErrorBoundary } from "@one-terminal/telemetry/react";
+import { startTelemetry } from "./lib/telemetry";
 import App from "./App";
 import "./registerWidgetExtensions";
 import { initWidgetInstanceCommands } from "./commands/widgetInstanceCommands";
@@ -12,6 +14,9 @@ import {
   loadTheme,
 } from "./theme/themeStore";
 import { listen } from "@tauri-apps/api/event";
+
+// First, so errors from everything below are reported.
+const telemetry = startTelemetry();
 
 // Apply persisted theme before the first React render so the first paint
 // matches the user's choice (no flash from default → preferred).
@@ -41,11 +46,22 @@ if (isChrome) {
   initKeybindingsBridge();
 }
 
+/** Shown in the chrome after a render error; the transparent overlay shows nothing. */
+function CrashNotice() {
+  return (
+    <p role="alert" style={{ padding: 16, color: "var(--ot-text-primary)" }}>
+      Something went wrong in this window. Details are in the Terminal&apos;s log file.
+    </p>
+  );
+}
+
 const rootElement = document.getElementById("root");
 if (!rootElement) throw new Error("index.html is missing the #root element");
 
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
-    <App />
+    <TelemetryErrorBoundary telemetry={telemetry} fallback={isChrome ? <CrashNotice /> : null}>
+      <App />
+    </TelemetryErrorBoundary>
   </React.StrictMode>
 );

@@ -1032,4 +1032,39 @@ fn untrusted_strings_are_clipped_for_logging() {
     let clipped = super::clip_untrusted(&huge);
     assert!(clipped.len() < 200, "{} bytes", clipped.len());
     assert!(clipped.ends_with("(1000000 bytes)"));
+    assert_eq!(super::clip_untrusted("chart\nINFO fake"), "chart?INFO fake");
+}
+
+#[test]
+fn reports_the_outcome_of_each_request() {
+    let h = harness(vec![]);
+    let app = h.connect("a");
+    let outcome = |msg_type: &str, payload: Value| {
+        let msg = json!({
+            "type": msg_type,
+            "payload": payload,
+            "meta": { "requestUuid": "r", "timestamp": iso_timestamp() },
+        });
+        h.broker.handle_with_outcome(&app.id, &msg, &h.directory).1
+    };
+    assert_eq!(outcome("getUserChannelsRequest", json!({})), Outcome::Ok);
+    assert_eq!(
+        outcome("joinUserChannelRequest", json!({ "channelId": "Nope" })),
+        Outcome::Error
+    );
+    assert_eq!(outcome("madeUpRequest", json!({})), Outcome::Unhandled);
+    assert_eq!(
+        outcome("getUserChannelsRequest", json!({})),
+        Outcome::Ok,
+        "reset per request"
+    );
+    let unknown = h
+        .broker
+        .handle_with_outcome(
+            "no-such-instance",
+            &json!({ "type": "getInfoRequest" }),
+            &[],
+        )
+        .1;
+    assert_eq!(unknown, Outcome::Error);
 }
