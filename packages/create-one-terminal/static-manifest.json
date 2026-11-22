@@ -53,6 +53,10 @@
       "overlay": "enterprise"
     },
     {
+      "path": "apps/desktop-agent/scripts/dev.mjs",
+      "overlay": "enterprise"
+    },
+    {
       "path": "apps/desktop-agent/src-tauri/capabilities/default.json",
       "overlay": "enterprise"
     },
@@ -546,6 +550,10 @@
     },
     {
       "path": "apps/one-terminal/src/hooks/useAppLaunch.tsx",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src/hooks/useDashboards.test.ts",
       "overlay": "shared"
     },
     {

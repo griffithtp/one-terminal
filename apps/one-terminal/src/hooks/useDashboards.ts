@@ -122,7 +122,17 @@ export interface UseDashboardsResult {
 
 // ── Hook ──────────────────────────────────────────────────────────────────────
 
-export function useDashboards(): UseDashboardsResult {
+export interface UseDashboardsOptions {
+  /**
+   * Keep the window title in step with the active dashboard. Only the chrome
+   * webview sets it; the overlay shares the window and would set it again.
+   */
+  syncWindowTitle?: boolean;
+}
+
+export function useDashboards({
+  syncWindowTitle = false,
+}: UseDashboardsOptions = {}): UseDashboardsResult {
   const [payload, setPayload] = useState<DashboardsPayload | null>(null);
   const [lockConflict, setLockConflict] = useState<LockConflict | null>(null);
   const clearLockConflict = useCallback(() => setLockConflict(null), []);
@@ -145,10 +155,10 @@ export function useDashboards(): UseDashboardsResult {
 
   // ── Window title ──────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!payload?.active) return;
+    if (!syncWindowTitle || !payload?.active) return;
     const suffix = payload.dirty && !payload.autoSave ? " *" : "";
     getCurrentWindow().setTitle(`OneTerminal — ${payload.active}${suffix}`).catch(console.error);
-  }, [payload]);
+  }, [payload, syncWindowTitle]);
 
   // ── Actions ───────────────────────────────────────────────────────────────
   // Keep a ref to the latest active name so switchTo can pass it to the
