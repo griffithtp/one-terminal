@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite --port 1422",
+    "dev:tauri": "node scripts/dev-ui.mjs",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri",

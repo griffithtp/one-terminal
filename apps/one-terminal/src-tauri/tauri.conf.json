@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "identifier": "com.one-terminal.one-terminal",
   "build": {
-    "beforeDevCommand": "npm -w @one-terminal/one-terminal run dev",
+    "beforeDevCommand": "npm -w @one-terminal/one-terminal run dev:tauri",
     "devUrl": "http://localhost:1422",
     "beforeBuildCommand": "npm -w @one-terminal/one-terminal run build",
     "frontendDist": "../dist"

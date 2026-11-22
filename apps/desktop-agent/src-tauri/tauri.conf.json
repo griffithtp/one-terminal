@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "identifier": "com.one-terminal.desktop-agent",
   "build": {
-    "beforeDevCommand": "npm -w @one-terminal/desktop-agent run dev",
+    "beforeDevCommand": "npm -w @one-terminal/desktop-agent run dev:tauri",
     "devUrl": "http://localhost:1421",
     "beforeBuildCommand": "npm -w @one-terminal/desktop-agent run build",
     "frontendDist": "../dist"

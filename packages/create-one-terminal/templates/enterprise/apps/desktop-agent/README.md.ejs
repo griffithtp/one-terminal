@@ -24,6 +24,8 @@ npm run build:desktop-agent
 
 Start order for a full session: `dev:app-directory` → `dev:desktop-agent` → `dev:terminal`.
 
+`dev:desktop-agent` also builds the Terminal (`cargo build -p one-terminal`) and keeps the Terminal UI served on `:1422`, so a Terminal you open from the Desktop Agent runs the current code. When `dev:terminal` is running too, both share its UI server. Changed Terminal code while the agent runs? Restart `dev:desktop-agent`, or keep `dev:terminal` running alongside it.
+
 ---
 
 ## Configuration
