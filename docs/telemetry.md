@@ -174,9 +174,9 @@ So a Terminal started by the Desktop Agent uses the **agent's** `logLevel` and `
 | _message type_    | Desktop Agent           | One FDC3 request, named after its type (`broadcastRequest`, `raiseIntentRequest`, …; `other` for unknown types), with `fdc3.message.type` and `fdc3.request_uuid`. Heartbeats aren't traced |
 | `fdc3.launch`     | Desktop Agent           | Opening an app for `fdc3.open` or an intent                                                                                                                                                 |
 | `app.launch`      | Desktop Agent, Terminal | Starting an app: in-process, in `tauri-webview-host`, in Electron or as a plugin binary. The Terminal records it only for out-of-process hosts                                              |
-| `process.startup` | Desktop Agent, Terminal | Startup up to the end of setup. A Terminal started by the Desktop Agent is a child of the span that started it                                                                              |
+| `process.startup` | Desktop Agent, Terminal | Startup up to the end of setup. A Terminal the Desktop Agent restores at its own startup is a child of the agent's `process.startup`                                                        |
 
-An app opened through FDC3 therefore shows up as **one trace**: the request span (`openRequest`, `raiseIntentRequest`) → `fdc3.launch` → `app.launch`. Terminals the Desktop Agent starts — including those restored at startup — add their own `process.startup` under the span that started them. A `tauri-webview-host` window doesn't appear as a span; its log lines carry the same `trace_id`.
+An app opened through FDC3 therefore shows up as **one trace**: the request span (`openRequest`, `raiseIntentRequest`) → `fdc3.launch` → `app.launch`. `app.launch` follows only for apps that open in a OneTerminal window or engine host (`onlineNative`); the Desktop Agent opens `web` apps in the default browser, and their trace ends at `fdc3.launch`. A `tauri-webview-host` window doesn't appear as a span; its log lines carry the same `trace_id`. Terminals restored when the Desktop Agent starts appear under the agent's `process.startup`; a Terminal opened later from its window or tray starts its own trace.
 
 **FDC3 `traceId`.** Contexts delivered to widgets carry `metadata.traceId`. When the sending app didn't supply one, it is the trace id of the request span, so you can search for it in your tracing backend. An app-supplied `traceId` is passed on unchanged and recorded as the `fdc3.trace_id` attribute — never used as a span parent, because any local page can connect to the bus and must not be able to join or steer other apps' traces.
 
@@ -283,15 +283,18 @@ This walkthrough sends everything to Grafana's all-in-one OpenTelemetry image (a
 docker run --rm -p 3000:3000 -p 4318:4318 grafana/otel-lgtm
 ```
 
-**2. Start the Desktop Agent with export on**, in another terminal. The Terminals it opens export too, and its built-in App Directory serves the sample apps:
+**2. Start the Desktop Agent and a Terminal with export on**, each in its own terminal:
 
 ```sh
 OT_OTLP_ENDPOINT=http://localhost:4318 OTEL_METRIC_EXPORT_INTERVAL=5000 npm run dev:desktop-agent
+OT_OTLP_ENDPOINT=http://localhost:4318 OTEL_METRIC_EXPORT_INTERVAL=5000 npm run dev:terminal
 ```
 
-`OTEL_METRIC_EXPORT_INTERVAL=5000` sends metrics every 5 seconds instead of every 60, which is handy while experimenting. To export from a Terminal you start on its own, prefix `npm run dev:terminal` the same way.
+`OTEL_METRIC_EXPORT_INTERVAL=5000` sends metrics every 5 seconds instead of every 60, which is handy while experimenting. The Desktop Agent's built-in App Directory serves the sample apps.
 
-**3. Check that export is on.** Among the Desktop Agent's first lines (in the terminal or its [log file](#watching-the-logs)):
+> In development, a Terminal you open **from the Desktop Agent** runs the `one-terminal` binary already in `target/debug/` and loads its UI from the Terminal's Vite server. `npm run dev:desktop-agent` builds neither, so run `npm run dev:terminal` as above (it does both), or first run `cargo build -p one-terminal` and `npm -w @one-terminal/one-terminal run dev`. Otherwise you get an old Terminal without telemetry, or a blank window.
+
+**3. Check that export is on.** Among each process's first lines (in its terminal or [log file](#watching-the-logs)):
 
 ```
 config telemetry.otlp.traces = http://localhost:4318/v1/traces (env OT_OTLP_ENDPOINT)
@@ -300,22 +303,28 @@ widget telemetry endpoint on http://127.0.0.1:<port>/v1/records
 
 `telemetry.otlp = off` means the endpoint wasn't picked up.
 
-**4. Make something happen:**
+**4. Make something happen in the Terminal:**
 
-- Open the ticker from the Desktop Agent window (an app launch).
-- In the ticker, click **ViewChart** for an instrument. With no chart open, the Desktop Agent starts one for the intent, which gives the full FDC3 trace.
-- Broadcast an instrument from the ticker. The chart logs each instrument it receives, with its `traceId`.
-- For a widget error, open the chart's DevTools (right-click → **Inspect**) and run `setTimeout(() => { throw new Error("telemetry test"); })`. An uncaught error is reported; one thrown directly at the console prompt isn't, because browsers don't treat it as a page error.
+- Add **Ticker Plant** and **Chart Viewer** as panels from the Terminal's launcher, and put both on the same channel. (Opening them from the Desktop Agent window opens them in your default browser instead — they are `web` apps — where they get no widget telemetry.)
+- In the ticker, broadcast an instrument and click **ViewChart**. The chart logs each instrument it receives, with its FDC3 `traceId`.
+- In the chart panel, right-click → **Inspect** → Console. `window.OT_TELEMETRY` should show `{ url, token }`. For a widget error, run `setTimeout(() => { throw new Error("telemetry test"); })`; an error thrown directly at the console prompt isn't reported, because browsers don't treat it as a page error.
+
+The widget records appear in the Terminal's log straight away (`ot_relay::widget` lines in `one-terminal.<date>.log`).
 
 **5. Look at it in Grafana** at <http://localhost:3000>, under **Explore**:
 
-| Data source | What to look for                                                                                                                                                                                                                                                                                         |
-| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Tempo       | Service `desktop-agent`: an `app.launch` trace for the app you opened from its window; `raiseIntentRequest` → `fdc3.launch` → `app.launch` for the chart the intent started; `broadcastRequest` spans. A Terminal the Desktop Agent started has its own `process.startup` under the span that started it |
-| Loki        | Service `desktop-agent` or `one-terminal`. Widget records have `ot.origin` `widget`, with `ot.app_id` and `fdc3.trace_id`; copy a `fdc3.trace_id` into Tempo to find the FDC3 request it belongs to                                                                                                      |
-| Prometheus  | `ot_fdc3_messages_total`, `ot_app_launches_total`, `ot_fdc3_message_duration_seconds_bucket`                                                                                                                                                                                                             |
+| Data source | What to look for                                                                                                                                                                                                                                                     |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Loki        | `{service_name="one-terminal"} \| ot_origin="widget"` for widget records, with `ot_app_id`, `fdc3_trace_id` and, for errors, `exception_type` / `exception_message`. Loki stores the record's attributes with `_` for `.`, after the `\|` (they aren't index labels) |
+| Tempo       | Service `desktop-agent`: `broadcastRequest`, `raiseIntentRequest` and the other request spans, and `fdc3.connect` for each widget's handshake. Paste a widget record's `fdc3_trace_id` into Tempo's trace search to open the request that delivered that context     |
+| Prometheus  | `ot_fdc3_messages_total`, `ot_fdc3_message_duration_seconds_bucket`, `ot_fdc3_connections`, `ot_terminal_windows`, `ot_terminal_popouts`                                                                                                                             |
 
-Label and metric names depend on how your backend maps OTLP (Loki may show `ot.origin` as `ot_origin`; Prometheus adds `_total` and unit suffixes), so adjust a query that returns nothing. If nothing arrives at all, see [Troubleshooting](#troubleshooting).
+What to expect in Tempo:
+
+- An app the Desktop Agent opens for an intent or `fdc3.open` shows as `raiseIntentRequest` (or `openRequest`) → `fdc3.launch`. The trace continues with `app.launch` only for apps that run in a OneTerminal window or engine host (`onlineNative` apps); `web` apps open in the default browser, so the trace ends at `fdc3.launch`.
+- A Terminal opened from the Desktop Agent window or tray starts its own trace (`process.startup`, service `one-terminal`). Terminals restored when the Desktop Agent starts appear under the agent's `process.startup`.
+
+`ot_app_launches_total` appears once something has gone through `app.launch`.
 
 ---
 
