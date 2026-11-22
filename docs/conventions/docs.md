@@ -8,15 +8,15 @@ links, index tables, plan references); the `docs-steward` agent handles the rest
 
 Write for the reader of that doc, not for whoever is reading the diff.
 
-| Doc                                                | Reader                                         | How to write it                                                                                                                                  |
-| -------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Root and nested `AGENTS.md`                        | AI agents, every session                       | Terse facts, tables and paths. No tutorials or history: every line costs context in every session. Add rows, not paragraphs                      |
-| `docs/conventions/*.md`                            | Framework contributors (human and AI)          | Rules with the reason and a link to the code. Mark direction-of-travel rules **(new code)**                                                      |
-| `CONTRIBUTING.md`, `SCAFFOLDING.md`                | Framework contributors                         | Setup and workflows, step by step                                                                                                                |
-| App and package `README.md`                        | Widget developers, scaffolded-workspace users  | What it does, how to run and configure it, with working examples. Five of these ship into workspaces (see [Template READMEs](#template-readmes)) |
-| Root `README.md`                                   | People evaluating or starting with OneTerminal | Overview, quick start, features. Workspaces get their own README instead                                                                         |
-| `docs/fdc3.md`, `docs/signing.md`, release notes   | Widget developers, release managers, end users | Task-focused guides                                                                                                                              |
-| Plans and design notes (`.work/`, never committed) | Approvers and implementers                     | See [AGENTS.md → Plans](../../AGENTS.md#plans). Committed files never link to or name them                                                       |
+| Doc                                                                   | Reader                                         | How to write it                                                                                                                                  |
+| --------------------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Root and nested `AGENTS.md`                                           | AI agents, every session                       | Terse facts, tables and paths. No tutorials or history: every line costs context in every session. Add rows, not paragraphs                      |
+| `docs/conventions/*.md`                                               | Framework contributors (human and AI)          | Rules with the reason and a link to the code. Mark direction-of-travel rules **(new code)**                                                      |
+| `CONTRIBUTING.md`, `SCAFFOLDING.md`                                   | Framework contributors                         | Setup and workflows, step by step                                                                                                                |
+| App and package `README.md`                                           | Widget developers, scaffolded-workspace users  | What it does, how to run and configure it, with working examples. Five of these ship into workspaces (see [Template READMEs](#template-readmes)) |
+| Root `README.md`                                                      | People evaluating or starting with OneTerminal | Overview, quick start, features. Workspaces get their own README instead                                                                         |
+| `docs/fdc3.md`, `docs/telemetry.md`, `docs/signing.md`, release notes | Widget developers, release managers, end users | Task-focused guides                                                                                                                              |
+| Plans and design notes (`.work/`, never committed)                    | Approvers and implementers                     | See [AGENTS.md → Plans](../../AGENTS.md#plans). Committed files never link to or name them                                                       |
 
 ## Where a fact lives
 

@@ -140,7 +140,7 @@ changing those, templates drift and CI's template-drift check fails until you ru
 Telemetry also honours the standard OpenTelemetry variables (`OTEL_EXPORTER_OTLP_ENDPOINT`,
 `OTEL_EXPORTER_OTLP_<SIGNAL>_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_SERVICE_NAME`,
 `OTEL_RESOURCE_ATTRIBUTES`, `OTEL_TRACES_SAMPLER_ARG`, `OTEL_SDK_DISABLED`); nothing is
-exported unless an endpoint is set.
+exported unless an endpoint is set. What is recorded, log locations and the widget API: [docs/telemetry.md](docs/telemetry.md).
 The standalone App Directory server (`apps/app-directory-server`) reads its vars from the process environment (Docker, shell, or `.env`).
 
 | Variable                     | Component     | Purpose                                                                                                                                                                |
