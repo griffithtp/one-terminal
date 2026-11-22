@@ -18,7 +18,7 @@ This page explains what OneTerminal records, where it goes, and how to send it t
 
 ## What is recorded
 
-Every OneTerminal process — Desktop Agent, Terminal, `tauri-webview-host`, `app-directory-server` — records three signals:
+The Desktop Agent, the Terminal and `app-directory-server` record three signals. `tauri-webview-host` only writes local logs (see [Processes and child processes](#processes-and-child-processes)):
 
 | Signal  | What                                                                                                | Where it goes                                      |
 | ------- | --------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
@@ -40,7 +40,7 @@ Each process writes one JSON-lines file per day:
 | Windows | `%LOCALAPPDATA%\one-terminal\logs\`                                           |
 | Linux   | `$XDG_STATE_HOME/one-terminal/logs/` (or `~/.local/state/one-terminal/logs/`) |
 
-Files are named `<service>.<YYYY-MM-DD>.log` (`desktop-agent.2026-11-21.log`) and the last 7 days are kept (`telemetry.logRetentionDays`). Every process also prints readable text to stderr — except Windows release builds, which have no console, so the file is the only record there.
+Files are named `<service>.<YYYY-MM-DD>.log` (`desktop-agent.2026-11-21.log`) and the last 7 days are kept (`telemetry.logRetentionDays`). Every process with a console also prints readable text to stderr. Windows release builds have no console, so there the file is the only record.
 
 One line looks like this:
 
@@ -56,7 +56,7 @@ One line looks like this:
 }
 ```
 
-`trace_id` and `span_id` appear when the line was written inside a span, so a log line can be looked up next to its trace.
+`trace_id` and `span_id` appear when the line was written inside a span, so a log line can be looked up next to its trace. A process started by another one (with `TRACEPARENT`) writes `trace_id` and `parent_span_id` on lines outside any span of its own, linking them to the span that launched it.
 
 The file is written by a background thread with a bounded buffer. A process that is force-killed (`taskkill /F`, `kill -9`) loses its last buffered lines; a normal quit flushes them.
 
@@ -64,7 +64,7 @@ The file is written by a background thread with a bounded buffer. A process that
 
 ## Sending telemetry to a collector
 
-Set an OTLP/HTTP endpoint and every process exports all three signals:
+Set an OTLP/HTTP endpoint and the Desktop Agent, the Terminal and `app-directory-server` export all three signals:
 
 ```sh
 OT_OTLP_ENDPOINT=http://localhost:4318 npm run dev:desktop-agent
@@ -79,7 +79,7 @@ The endpoint is the collector's base URL: `/v1/traces`, `/v1/metrics` and `/v1/l
 3. `OTEL_EXPORTER_OTLP_ENDPOINT`
 4. `telemetry.otlp.endpoint`
 
-`OTEL_SDK_DISABLED=true` turns export off whatever else is set. The standard `OTEL_EXPORTER_OTLP_HEADERS`, `OTEL_SERVICE_NAME`, `OTEL_RESOURCE_ATTRIBUTES` and `OTEL_TRACES_SAMPLER` / `OTEL_TRACES_SAMPLER_ARG` variables are honoured. Every variable and its precedence is listed in [AGENTS.md → Environment variables](../AGENTS.md#environment-variables).
+`OTEL_SDK_DISABLED=true` turns export off whatever else is set. The other standard `OTEL_*` variables that are honoured are listed in [AGENTS.md → Environment variables](../AGENTS.md#environment-variables). Also read are `OTEL_EXPORTER_OTLP_TIMEOUT`, `OTEL_METRIC_EXPORT_INTERVAL` (ms, minimum 1000) and `OTEL_EXPORTER_OTLP_PROTOCOL`. `OTEL_TRACES_SAMPLER` accepts `always_on`, `always_off`, `traceidratio` and their `parentbased_` forms.
 
 Only `http/protobuf` is supported (no gRPC). An `http://` endpoint on another host logs a warning: use `https://` for anything that isn't on this machine.
 
@@ -139,23 +139,23 @@ When a process starts another, it passes down what that child needs and nothing 
 
 So a Terminal started by the Desktop Agent uses the **agent's** `logLevel` and `logDir`, not its own config file's. Start the Terminal on its own (`npm run dev:terminal`) to use its own settings.
 
-`tauri-webview-host` writes local logs but never exports. Its lines carry the trace id of the launch that started it; to get them into a collector, point the collector's [`filelog` receiver](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/receiver/filelogreceiver) at `tauri-webview-host.*.log` in the log directory (JSON parser, `timestamp` field). The Electron host and plugin binaries don't write OneTerminal log files.
+`tauri-webview-host` writes local logs but never exports. Its lines carry `trace_id` and `parent_span_id` of the launch that started it; to get them into a collector, you can for example point the collector's [`filelog` receiver](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/receiver/filelogreceiver) at `tauri-webview-host.*.log` in the log directory (JSON parser, `timestamp` field). The Electron host and plugin binaries don't write OneTerminal log files.
 
 ---
 
 ## Traces
 
-| Span              | Process                 | Covers                                                                                   |
-| ----------------- | ----------------------- | ---------------------------------------------------------------------------------------- |
-| `fdc3.connect`    | Desktop Agent           | A widget's FDC3 handshake, with its app id and outcome                                   |
-| `fdc3.request`    | Desktop Agent           | One FDC3 request (`broadcastRequest`, `raiseIntentRequest`, …); heartbeats aren't traced |
-| `fdc3.launch`     | Desktop Agent           | Opening an app for `fdc3.open` or an intent                                              |
-| `app.launch`      | Desktop Agent, Terminal | Starting an app in-process, in `tauri-webview-host`, in Electron or as a plugin binary   |
-| `process.startup` | every process           | Startup up to the end of setup; a child's is a child of the span that launched it        |
+| Span              | Process                 | Covers                                                                                                                                                                                      |
+| ----------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `fdc3.connect`    | Desktop Agent           | A widget's FDC3 handshake, with its app id and outcome                                                                                                                                      |
+| _message type_    | Desktop Agent           | One FDC3 request, named after its type (`broadcastRequest`, `raiseIntentRequest`, …; `other` for unknown types), with `fdc3.message.type` and `fdc3.request_uuid`. Heartbeats aren't traced |
+| `fdc3.launch`     | Desktop Agent           | Opening an app for `fdc3.open` or an intent                                                                                                                                                 |
+| `app.launch`      | Desktop Agent, Terminal | Starting an app: in-process, in `tauri-webview-host`, in Electron or as a plugin binary. The Terminal records it only for out-of-process hosts                                              |
+| `process.startup` | Desktop Agent, Terminal | Startup up to the end of setup. A Terminal started by the Desktop Agent is a child of the span that started it                                                                              |
 
-A widget launch therefore shows up as **one trace** across processes: `fdc3.request` → `fdc3.launch` → `app.launch` → `process.startup` (host). Restoring Terminals at Desktop Agent startup appears under the agent's `process.startup`.
+An app opened through FDC3 therefore shows up as **one trace**: the request span (`openRequest`, `raiseIntentRequest`) → `fdc3.launch` → `app.launch`. Terminals the Desktop Agent starts — including those restored at startup — add their own `process.startup` under the span that started them. A `tauri-webview-host` window doesn't appear as a span; its log lines carry the same `trace_id`.
 
-**FDC3 `traceId`.** Contexts delivered to widgets carry `metadata.traceId`. When the sending app didn't supply one, it is the trace id of the `fdc3.request` span, so you can search for it in your tracing backend. An app-supplied `traceId` is passed on unchanged and recorded as the `fdc3.trace_id` attribute — never used as a span parent, because any local page can connect to the bus and must not be able to join or steer other apps' traces.
+**FDC3 `traceId`.** Contexts delivered to widgets carry `metadata.traceId`. When the sending app didn't supply one, it is the trace id of the request span, so you can search for it in your tracing backend. An app-supplied `traceId` is passed on unchanged and recorded as the `fdc3.trace_id` attribute — never used as a span parent, because any local page can connect to the bus and must not be able to join or steer other apps' traces.
 
 ---
 
@@ -188,11 +188,13 @@ Browser code can't write to the log file itself; it sends records to the process
 | Field                                                         | Value                                         |
 | ------------------------------------------------------------- | --------------------------------------------- |
 | `ot.origin`                                                   | `ui` or `widget`                              |
-| `ot.window`, `ot.app_id`                                      | Set by the hosting process, never by the page |
+| `ot.window`, `ot.app_id`, `ot.instance_id`                    | Set by the hosting process, never by the page |
+| `client.timestamp`                                            | The page's own clock                          |
+| `attributes`                                                  | The record's attributes, as one JSON string   |
 | `fdc3.trace_id`                                               | The FDC3 `traceId` the page passed, if any    |
 | `exception.type`, `exception.message`, `exception.stacktrace` | For errors                                    |
 
-Limits per sender: 20 records per batch, 10 records a second (bursts of 50), messages up to 2,048 characters and stacks up to 8,192. Records over the limits are dropped and counted (`ot.telemetry.relay.dropped`).
+Limits per sender: 20 records per batch and 10 records a second (bursts of 50). Records beyond either limit are dropped and counted (`ot.telemetry.relay.dropped`). Messages are cut at 2,048 characters, stacks at 8,192 and attribute values at 256, with `…` added; control characters are removed, and credentials and query strings in URLs are stripped. Widget requests over 16 KiB are refused (HTTP 413).
 
 ### The Terminal and Desktop Agent UIs
 
@@ -229,8 +231,9 @@ telemetry?.log("info", "chart ready", { attributes: { "chart.series": 3 } });
 | `log(level, message, { traceId?, attributes? })` | `level` is `error`, `warn`, `info` or `debug`; up to 8 attributes, keys `a-z0-9_.` |
 | `error(err, { traceId?, attributes? })`          | Reports an `Error` (with its stack) or any thrown value                            |
 | `flush()`                                        | Sends what is queued now (records otherwise go within a second)                    |
+| `dispose()`                                      | Removes the hooks and sends what is queued                                         |
 
-Records are batched, sent with `fetch`, and handed to `navigator.sendBeacon` when the page is closed. The page needs nothing else: no IPC access, no CSP change beyond allowing `connect-src http://127.0.0.1:*` if your page sets a strict `connect-src`.
+Records are batched, sent with `fetch`, and handed to `navigator.sendBeacon` when the page is closed. The page needs nothing else: no IPC access, no CSP change beyond allowing `connect-src http://127.0.0.1:*` if your page sets a strict `connect-src` (the port is random per process, so a fixed port won't do).
 
 The endpoint is set by `telemetry.widgets.enabled` (on by default). Each Terminal and Desktop Agent process runs its own, on a random `127.0.0.1` port, and accepts a request only with a token it issued for one of its windows. A widget's records therefore appear in the log of the process that hosts it, named by its window and app — whatever the page claims.
 
@@ -243,7 +246,7 @@ The endpoint is set by `telemetry.widgets.enabled` (on by default). Each Termina
 - **Opt-in.** Without an endpoint nothing is sent anywhere; logs stay in the per-user log directory.
 - **Redaction.** URLs in OneTerminal's own log lines and spans have credentials and query strings removed; OTLP headers and widget tokens are never logged; FDC3 context payloads aren't logged.
 - **Relayed records are what the page wrote.** A widget's `log` or `error` message can contain anything the widget puts in it. Treat widget records like application logs, and don't log personal data from widgets.
-- **`OT_LOG=trace`** turns on trace-level logs from dependencies, which can include FDC3 message bodies. Use it for local debugging only, never with export on.
+- **`OT_LOG=trace`** turns on trace-level logs from dependencies, which may include message bodies. Use it for local debugging only, never with export on.
 
 ---
 
@@ -256,10 +259,10 @@ docker run --rm -p 3000:3000 -p 4318:4318 grafana/otel-lgtm
 OT_OTLP_ENDPOINT=http://localhost:4318 npm run dev:desktop-agent
 ```
 
-Open Grafana at <http://localhost:3000>, launch a sample app from the Desktop Agent and broadcast from it, then:
+Open Grafana at <http://localhost:3000>, launch a sample app from the Desktop Agent and broadcast from it, then look for the data below. Label and attribute names depend on your backend's OTLP mapping (Loki may show `ot.origin` as `ot_origin`), so adjust the queries if they return nothing:
 
-- **Explore → Tempo**: search `service.name = desktop-agent` for the `fdc3.request` → `app.launch` → `process.startup` trace.
-- **Explore → Loki**: filter on `service_name` `one-terminal`, then on the `ot.origin` attribute `widget`, for widget records.
+- **Explore → Tempo**: search `service.name = desktop-agent` for the `broadcastRequest` span, or for the `openRequest` → `fdc3.launch` → `app.launch` trace of a launch.
+- **Explore → Loki**: filter on the service `one-terminal`, then on the `ot.origin` value `widget`, for widget records.
 - **Explore → Prometheus**: `ot_fdc3_messages_total`.
 
 Metrics are exported every 60 seconds; set `"metricsIntervalMs": 5000` while experimenting.
@@ -268,10 +271,10 @@ Metrics are exported every 60 seconds; set `"metricsIntervalMs": 5000` while exp
 
 ## Troubleshooting
 
-| Symptom                       | Check                                                                                                                                                                                                                                                         |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Nothing reaches the collector | The startup lines `config telemetry.otlp.* = …` name the endpoint and where it came from; `telemetry.otlp = off` means none was found or `OTEL_SDK_DISABLED` is set                                                                                           |
-| Only some processes export    | `tauri-webview-host` never exports; plugin binaries and the Electron host don't either                                                                                                                                                                        |
-| No log file                   | A warning at startup names the directory that couldn't be created; the process then logs to stderr only                                                                                                                                                       |
-| Widget records missing        | `window.OT_TELEMETRY` is undefined in the page (not opened by OneTerminal, or `telemetry.widgets.enabled` is false); the page's console shows `[telemetry] could not send logs` when the endpoint refuses it; `ot.telemetry.ingress.rejected` counts refusals |
-| Too many or too few log lines | `OT_LOG` (see [Configuration](#configuration)); a Terminal started by the Desktop Agent uses the agent's level                                                                                                                                                |
+| Symptom                       | Check                                                                                                                                                                                                                                                                                 |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Nothing reaches the collector | The startup lines `config telemetry.otlp.* = …` name the endpoint and where it came from; `telemetry.otlp = off` means none was found or `OTEL_SDK_DISABLED` is set                                                                                                                   |
+| Only some processes export    | `tauri-webview-host` never exports; plugin binaries and the Electron host don't either                                                                                                                                                                                                |
+| No log file                   | A warning at startup names the directory that couldn't be created; the process then logs to stderr only                                                                                                                                                                               |
+| Widget records missing        | `window.OT_TELEMETRY` is undefined in the page (not opened by OneTerminal, or `telemetry.widgets.enabled` is false); the page's console shows `[telemetry] could not send logs` (at most once a minute) when the endpoint refuses it; `ot.telemetry.ingress.rejected` counts refusals |
+| Too many or too few log lines | `OT_LOG` (see [Configuration](#configuration)); a Terminal started by the Desktop Agent uses the agent's level                                                                                                                                                                        |
