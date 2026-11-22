@@ -45,6 +45,7 @@ apps/app-directory-server/    — standalone App Directory binary (hosted / Dock
 packages/ot-core/             — shared Rust crate (no Tauri deps)            (AGENTS.md)
 packages/ot-appdirectory/     — Rust (axum) FDC3 AppD REST API; mounted in-process by desktop-agent
 packages/ot-telemetry/        — shared Rust crate: logging, tracing, opt-in OTLP export (no Tauri/FDC3) (AGENTS.md)
+packages/telemetry-client/    — browser client relaying UI errors/logs to Rust (`@one-terminal/telemetry`) (AGENTS.md)
 packages/fdc3-plugin/         — browser FDC3 3.0 client (src/ → fdc3-plugin.js)   (AGENTS.md)
 packages/create-one-terminal/ — the scaffolder (`create-one-terminal`)     (AGENTS.md)
 apps/sample-ticker/           — demo browser app, port 3010
@@ -202,6 +203,7 @@ npm run typecheck
 npm run build:fdc3-plugin        # regenerates packages/fdc3-plugin/fdc3-plugin.js after editing src/
 npm run test:fdc3-plugin         # contract tests: the official proxy against the real Rust bus
 npm run test:terminal            # Terminal UI unit/component tests (Vitest + RTL, jsdom)
+npm run test:telemetry-client    # @one-terminal/telemetry unit tests (Vitest, jsdom)
 npm run build:app-directory      # rebuilds apps/app-directory/dist
 npm run build:samples            # production builds of sample-ticker + sample-chart (planned; not in package.json yet)
 npm run build:all                # all Tauri apps

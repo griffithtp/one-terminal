@@ -1,7 +1,9 @@
-//! Terminal metrics: open windows and popouts, and popout open/dock latency
-//! (the `"open … in N ms"` / `"dock … in N ms"` log lines, as a histogram).
+//! Terminal metrics: open windows and popouts, popout open/dock latency (the
+//! `"open … in N ms"` / `"dock … in N ms"` log lines, as a histogram) and
+//! launches of out-of-process hosts — the same `ot.app.launches` instruments
+//! the Desktop Agent records.
 
-use ot_telemetry::metrics::{Histogram, KeyValue, Meter, UpDownCounter};
+use ot_telemetry::metrics::{Counter, Histogram, KeyValue, Meter, UpDownCounter};
 use std::sync::OnceLock;
 use std::time::Instant;
 
@@ -9,6 +11,8 @@ pub(crate) struct WmMetrics {
     terminals: UpDownCounter<i64>,
     popouts: UpDownCounter<i64>,
     popout_duration: Histogram<f64>,
+    launches: Counter<u64>,
+    launch_duration: Histogram<f64>,
 }
 
 /// What a popout timing measures.
@@ -34,7 +38,32 @@ impl WmMetrics {
                 .with_unit("s")
                 .with_description("Time to open a popout window or dock it back")
                 .build(),
+            launches: meter
+                .u64_counter("ot.app.launches")
+                .with_description("App launches, by launch kind and outcome")
+                .build(),
+            launch_duration: meter
+                .f64_histogram("ot.app.launch.duration")
+                .with_unit("s")
+                .with_description("Time to open a window or spawn the app's host process")
+                .build(),
         }
+    }
+
+    /// One out-of-process host launch of `kind` (a fixed label).
+    pub fn launch(&self, kind: &'static str, ok: bool, started: Instant) {
+        let outcome = if ok { "ok" } else { "error" };
+        self.launches.add(
+            1,
+            &[
+                KeyValue::new("ot.launch.kind", kind),
+                KeyValue::new("outcome", outcome),
+            ],
+        );
+        self.launch_duration.record(
+            started.elapsed().as_secs_f64(),
+            &[KeyValue::new("ot.launch.kind", kind)],
+        );
     }
 
     pub fn terminal_opened(&self) {
@@ -93,5 +122,11 @@ mod tests {
             capture.histogram_count("ot.popout.duration", &[("op", "dock")]),
             1
         );
+        m.launch("electron_host", false, Instant::now());
+        let failed = capture.sum(
+            "ot.app.launches",
+            &[("ot.launch.kind", "electron_host"), ("outcome", "error")],
+        );
+        assert!((failed - 1.0).abs() < f64::EPSILON);
     }
 }

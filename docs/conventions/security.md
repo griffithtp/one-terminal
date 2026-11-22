@@ -6,13 +6,15 @@ system or process spawning except through an explicitly validated path.
 
 ## Trust boundaries
 
-| Boundary                                        | Untrusted side                     | Guard                                                           |
-| ----------------------------------------------- | ---------------------------------- | --------------------------------------------------------------- |
-| Panel webview → Tauri IPC                       | Widget pages (any URL)             | Tauri capabilities (local origins only)                         |
-| Widget → FDC3 bus (`ws://127.0.0.1:7891/fdc3`)  | Any local process or web page      | WCP handshake (see gaps below)                                  |
-| Client → App Directory REST (`:3005`)           | Admin UI, scripts, browsers        | Loopback bind; CORS on the standalone server; auth planned      |
-| App Directory / plugin manifest → process spawn | Directory records, `manifest.json` | Engine catalog checksums; launch routing in `engines/router.rs` |
-| Config files / env vars                         | Local user                         | Validation in `AgentConfig::load()`; unknown keys ignored       |
+| Boundary                                                         | Untrusted side                     | Guard                                                                                                                                                                 |
+| ---------------------------------------------------------------- | ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Panel webview → Tauri IPC                                        | Widget pages (any URL)             | Tauri capabilities (local origins only)                                                                                                                               |
+| Widget → FDC3 bus (`ws://127.0.0.1:7891/fdc3`)                   | Any local process or web page      | WCP handshake (see gaps below)                                                                                                                                        |
+| Client → App Directory REST (`:3005`)                            | Admin UI, scripts, browsers        | Loopback bind; CORS on the standalone server; auth planned                                                                                                            |
+| App Directory / plugin manifest → process spawn                  | Directory records, `manifest.json` | Engine catalog checksums; launch routing in `engines/router.rs`                                                                                                       |
+| Config files / env vars                                          | Local user                         | Validation in `AgentConfig::load()`; unknown keys ignored                                                                                                             |
+| UI webview → log relay (`wm_telemetry_log`, `cda_telemetry_log`) | Any webview that reaches IPC       | Webview-label allowlist (chrome / overlay / dashboard only); sender identity from the label, never the payload; `ot_telemetry::relay` caps, rate limit and sanitising |
+| Parent → child process environment                               | Third-party plugin binaries        | `ot_telemetry::propagation::ChildKind`: OTLP credentials only to the Terminal (`Exporting`); stripped for hosts and plugins                                           |
 
 ## Tauri capabilities
 
@@ -123,11 +125,13 @@ it hosts.
 
 Not yet verified — check before relying on either:
 
-- **Custom scheme widgets and IPC.** The sample widget is served over the
-  `sample-widget://` custom scheme inside Terminal windows. If Tauri treats custom
-  schemes as local origins, that page can call the Terminal's app commands and the
-  capability permissions above. Confirm against Tauri's origin rules; if so, serve local
-  widgets over `http://127.0.0.1` instead or restrict app commands with an app manifest.
+- **Custom scheme widgets and IPC — answered: yes.** Tauri treats registered custom
+  schemes as local origins (`is_local_url` in `tauri/src/webview/mod.rs`), so the
+  `sample-widget://` page can call every Terminal app command. Today it serves only fixed,
+  first-party files (`sample_widget.rs`), so this isn't exploitable, but any local widget
+  served this way must be trusted code. The log relay refuses it by webview label. To
+  close the gap: serve local widgets over `http://127.0.0.1`, or restrict app commands
+  with an app manifest.
 - **Electron host navigation.** `apps/electron-host` runs pages with
   `nodeIntegration: false` and `contextIsolation: true` and no preload, but doesn't
   restrict `window.open` or navigation. Low risk without Node access; decide whether

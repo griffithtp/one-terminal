@@ -78,7 +78,9 @@ struct EngineCatalogResponse {
 async fn fetch_catalog(catalog_url: &str) -> Result<EngineCatalog, String> {
     let res = reqwest::get(catalog_url)
         .await
-        .map_err(|e| format!("engine catalog fetch: {e}"))?;
+        // `without_url`: catalog and download URLs may be presigned, and these
+        // errors reach the UI (and, through console capture, the logs).
+        .map_err(|e| format!("engine catalog fetch: {}", e.without_url()))?;
     if !res.status().is_success() {
         return Err(format!("engine catalog HTTP {}", res.status()));
     }
@@ -335,7 +337,7 @@ async fn install_inner(
     {
         let response = reqwest::get(&download.url)
             .await
-            .map_err(|e| format!("download: {e}"))?;
+            .map_err(|e| format!("download: {}", e.without_url()))?;
         if !response.status().is_success() {
             return Err(format!("download HTTP {}", response.status()));
         }

@@ -5,6 +5,7 @@ mod engines;
 mod layout;
 mod metrics;
 mod sample_widget;
+mod telemetry_cmd;
 mod terminal;
 mod webview_pool;
 mod widgets;
@@ -87,19 +88,40 @@ fn spawn_external_host(
     url: &str,
     title: &str,
 ) -> Result<(), String> {
-    use ot_core::engine::{binding_path, is_installed};
-    use ot_telemetry::propagation::{inject_env, ChildKind};
-
+    // The Desktop Agent's launch-kind labels, so both processes' launches
+    // aggregate under one metric.
+    let kind = match &binding.family {
+        EngineFamily::Electron => "electron_host",
+        EngineFamily::Webview2 | EngineFamily::Wkwebview | EngineFamily::Custom(_) => "tauri_host",
+    };
     // Spawned hosts get this span as TRACEPARENT: the launch and the host's
     // startup and logs form one trace.
-    let _span = tracing::info_span!(
+    let span = tracing::info_span!(
         target: ot_telemetry::SPAN_TARGET,
         "app.launch",
-        ot.launch.kind = %binding.family.as_dir(),
-        // App ids come from the App Directory (unauthenticated writes).
-        ot.window = %ot_telemetry::redact::clip(app_id, 128)
-    )
-    .entered();
+        ot.launch.kind = kind,
+        // Plugin family names and app ids are external input: clip them.
+        ot.engine.family = %ot_telemetry::redact::clip(binding.family.as_dir(), 64),
+        ot.window = %ot_telemetry::redact::clip(app_id, 128),
+        outcome = tracing::field::Empty,
+    );
+    let started = std::time::Instant::now();
+    let result = span.in_scope(|| run_external_host(app, identity, binding, app_id, url, title));
+    span.record("outcome", if result.is_ok() { "ok" } else { "error" });
+    metrics::wm().launch(kind, result.is_ok(), started);
+    result
+}
+
+fn run_external_host(
+    app: &AppHandle,
+    identity: &WmHostIdentity,
+    binding: &EngineBinding,
+    app_id: &str,
+    url: &str,
+    title: &str,
+) -> Result<(), String> {
+    use ot_core::engine::{binding_path, is_installed};
+    use ot_telemetry::propagation::{inject_env, ChildKind};
 
     match &binding.family {
         EngineFamily::Electron => {
@@ -1728,6 +1750,8 @@ pub fn run() {
                     .build(),
             )
             .register_uri_scheme_protocol("sample-widget", sample_widget::handle)
+            // After telemetry init, so the relay's drop counter uses the real meter.
+            .manage(ot_telemetry::relay::Relay::new())
             .manage(identity.clone())
             .manage(manager.clone())
             .manage(cfg.clone())
@@ -2106,6 +2130,7 @@ pub fn run() {
                 wm_spawn_terminal,
                 wm_list_saved_terminals,
                 wm_close_terminal,
+                telemetry_cmd::wm_telemetry_log,
             ])
             .build(tauri::generate_context!())
             .expect("error while building one-terminal")

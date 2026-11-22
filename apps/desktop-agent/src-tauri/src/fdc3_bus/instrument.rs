@@ -11,6 +11,7 @@
 //!   local page can connect to the bus, and a chosen id would let it bypass
 //!   sampling or graft spans into another app's trace.
 
+use crate::broker::Outcome;
 use ot_telemetry::metrics::{Counter, Histogram, KeyValue, Meter, UpDownCounter};
 use serde_json::Value;
 use std::time::Instant;
@@ -96,17 +97,63 @@ impl BusMetrics {
         self.connections.add(-1, &[]);
     }
 
-    pub fn handshake_failed(&self) {
-        self.handshake_failures.add(1, &[]);
+    /// A connection that ended before a valid WCP4 handshake.
+    pub fn handshake_failed(&self, reason: HandshakeEnd) {
+        self.handshake_failures
+            .add(1, &[KeyValue::new("reason", reason.as_str())]);
     }
 
     /// Record one handled request that started at `started`.
-    pub fn handled(&self, label: &'static str, started: Instant) {
-        let attrs = [KeyValue::new("fdc3.message.type", label)];
-        self.messages.add(1, &attrs);
+    pub fn handled(&self, label: &'static str, outcome: Outcome, started: Instant) {
+        let message_type = KeyValue::new("fdc3.message.type", label);
+        self.messages.add(
+            1,
+            &[
+                message_type.clone(),
+                KeyValue::new("outcome", outcome.as_str()),
+            ],
+        );
         self.duration
-            .record(started.elapsed().as_secs_f64(), &attrs);
+            .record(started.elapsed().as_secs_f64(), &[message_type]);
     }
+}
+
+/// How a connection's handshake phase ended without a valid WCP4.
+#[derive(Clone, Copy, Debug)]
+pub(super) enum HandshakeEnd {
+    /// The peer closed (or the socket dropped) first.
+    Closed,
+    /// A non-text frame or a socket error.
+    Invalid,
+}
+
+impl HandshakeEnd {
+    fn as_str(self) -> &'static str {
+        match self {
+            HandshakeEnd::Closed => "closed",
+            HandshakeEnd::Invalid => "invalid",
+        }
+    }
+}
+
+/// A root span for one connection's WCP4/WCP5 handshake. `app_id` is the
+/// self-asserted `?appId=`, clipped. `ot.instance_id` and `outcome` are
+/// recorded when the handshake ends.
+pub(super) fn connect_span(app_id: &str) -> Span {
+    tracing::info_span!(
+        target: ot_telemetry::SPAN_TARGET,
+        parent: None,
+        "fdc3.connect",
+        otel.kind = "server",
+        ot.app_id = %crate::broker::clip_untrusted(app_id),
+        ot.instance_id = tracing::field::Empty,
+        outcome = tracing::field::Empty,
+    )
+}
+
+/// Record how the handshake in `span` ended.
+pub(super) fn handshake_ended(span: &Span, outcome: &str) {
+    span.record("outcome", outcome);
 }
 
 /// The low-cardinality label for a message `type`, or `None` for types that
@@ -176,6 +223,21 @@ mod tests {
     use super::*;
     use ot_telemetry::testing::Capture;
     use serde_json::json;
+
+    #[test]
+    fn connect_span_records_identity_and_outcome() {
+        let capture = Capture::new();
+        capture.run(|| {
+            let span = connect_span(&"a".repeat(10_000));
+            span.record("ot.instance_id", "inst-1");
+            handshake_ended(&span, "ok");
+        });
+        let span = &capture.spans()[0];
+        assert_eq!(span.name, "fdc3.connect");
+        assert_eq!(span.attributes["outcome"], "ok");
+        assert_eq!(span.attributes["ot.instance_id"], "inst-1");
+        assert!(span.attributes["ot.app_id"].len() < 200, "app id clipped");
+    }
 
     #[test]
     fn labels_are_low_cardinality() {
@@ -254,22 +316,30 @@ mod tests {
     fn records_message_metrics() {
         let capture = Capture::new();
         let metrics = BusMetrics::new(&capture.meter("desktop-agent"));
+        let sum = |attrs: &[(&str, &str)]| capture.sum("ot.fdc3.messages", attrs);
         metrics.connected();
-        metrics.handled("broadcastRequest", Instant::now());
-        metrics.handled("broadcastRequest", Instant::now());
-        metrics.handled(OTHER, Instant::now());
+        metrics.handled("broadcastRequest", Outcome::Ok, Instant::now());
+        metrics.handled("broadcastRequest", Outcome::Error, Instant::now());
+        metrics.handled(OTHER, Outcome::Unhandled, Instant::now());
+        metrics.handshake_failed(HandshakeEnd::Closed);
+        assert!((sum(&[("fdc3.message.type", "broadcastRequest")]) - 2.0).abs() < f64::EPSILON);
         assert!(
-            (capture.sum(
-                "ot.fdc3.messages",
-                &[("fdc3.message.type", "broadcastRequest")]
-            ) - 2.0)
+            (sum(&[
+                ("fdc3.message.type", "broadcastRequest"),
+                ("outcome", "error")
+            ]) - 1.0)
                 .abs()
                 < f64::EPSILON
         );
+        assert!((sum(&[("outcome", "unhandled")]) - 1.0).abs() < f64::EPSILON);
         assert_eq!(
             capture.histogram_count("ot.fdc3.message.duration", &[("fdc3.message.type", OTHER)]),
             1
         );
         assert!((capture.sum("ot.fdc3.connections", &[]) - 1.0).abs() < f64::EPSILON);
+        assert!(
+            (capture.sum("ot.fdc3.handshake.failures", &[("reason", "closed")]) - 1.0).abs()
+                < f64::EPSILON
+        );
     }
 }

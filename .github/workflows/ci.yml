@@ -144,6 +144,10 @@ jobs:
         if: steps.changes.outputs.code == 'true'
         run: npm run test:terminal
 
+      - name: Telemetry client tests
+        if: steps.changes.outputs.code == 'true'
+        run: npm run test:telemetry-client
+
       - name: fdc3-plugin bundle is up to date
         if: steps.changes.outputs.code == 'true'
         run: npm -w @one-terminal/fdc3-plugin run check:bundle
