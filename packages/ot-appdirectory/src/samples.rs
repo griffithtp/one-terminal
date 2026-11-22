@@ -3,9 +3,9 @@
 //! `127.0.0.1:3005` (see `data.rs`'s `ticker-plant` / `chart-viewer`
 //! `details.url`). These apps have no build step — just `index.html` +
 //! `sw.js` — so they're embedded straight from source, same as the admin UI
-//! in `ui.rs`. `fdc3-plugin.js` is pulled from the shared
-//! `packages/fdc3-plugin` package, mirroring the special-case in each app's
-//! own `server.js` dev server.
+//! in `ui.rs`. `fdc3-plugin.js` and `ot-telemetry.js` are pulled from the
+//! shared `packages/fdc3-plugin` and `packages/telemetry-client` packages,
+//! mirroring the special cases in each app's own `server.js` dev server.
 //!
 //! Without this, `ticker-plant`/`chart-viewer` panels only render in dev
 //! (where `npm run dev:sample-ticker`/`dev:sample-chart` serve them on
@@ -35,6 +35,11 @@ struct ChartAssets;
 #[folder = "../../packages/fdc3-plugin"]
 #[include = "fdc3-plugin.js"]
 struct Fdc3PluginAsset;
+
+#[derive(RustEmbed)]
+#[folder = "../../packages/telemetry-client"]
+#[include = "ot-telemetry.js"]
+struct TelemetryAsset;
 
 pub fn router() -> Router {
     async fn ticker_index() -> Response {
@@ -75,6 +80,12 @@ fn serve(path: &str, get_asset: impl Fn(&str) -> Option<rust_embed::EmbeddedFile
 
     if path == "fdc3-plugin.js" {
         return match Fdc3PluginAsset::get("fdc3-plugin.js") {
+            Some(file) => asset_response(file),
+            None => StatusCode::NOT_FOUND.into_response(),
+        };
+    }
+    if path == "ot-telemetry.js" {
+        return match TelemetryAsset::get("ot-telemetry.js") {
             Some(file) => asset_response(file),
             None => StatusCode::NOT_FOUND.into_response(),
         };
@@ -124,24 +135,24 @@ mod tests {
         (res.status(), header("content-type"), header("location"))
     }
 
-    /// The apps import `./fdc3-plugin.js` relative to `/apps/<id>/`; it must
-    /// come back as JavaScript, not the admin UI's SPA fallback.
+    /// The apps import `./fdc3-plugin.js` and `./ot-telemetry.js` relative to
+    /// `/apps/<id>/`; they must come back as JavaScript, not the admin UI's
+    /// SPA fallback.
     #[tokio::test]
     async fn plugin_served_as_javascript_under_each_app() {
         for app in ["ticker-plant", "chart-viewer"] {
-            let (status, mime, _) = get(&format!("/apps/{app}/fdc3-plugin.js")).await;
-            assert_eq!(status, StatusCode::OK, "{app}");
-            assert!(mime.contains("javascript"), "{app}: {mime}");
-            let (status, mime, _) = get(&format!("/apps/{app}/sw.js")).await;
-            assert_eq!(status, StatusCode::OK, "{app}");
-            assert!(mime.contains("javascript"), "{app}: {mime}");
+            for file in ["fdc3-plugin.js", "ot-telemetry.js", "sw.js"] {
+                let (status, mime, _) = get(&format!("/apps/{app}/{file}")).await;
+                assert_eq!(status, StatusCode::OK, "{app}/{file}");
+                assert!(mime.contains("javascript"), "{app}/{file}: {mime}");
+            }
         }
     }
 
     /// A long-lived cache of an unhashed file pins widgets to an old plugin.
     #[tokio::test]
     async fn no_asset_is_cached_long_term() {
-        for file in ["", "fdc3-plugin.js", "sw.js"] {
+        for file in ["", "fdc3-plugin.js", "ot-telemetry.js", "sw.js"] {
             let app = crate::ui::serve_ui(super::router());
             let res = app
                 .oneshot(

@@ -145,6 +145,16 @@ impl SenderIdentity {
         }
     }
 
+    /// A widget page, identified by its verified token's claims.
+    pub fn widget(window: String, app_id: Option<String>) -> Self {
+        Self {
+            origin: Origin::Widget,
+            window,
+            app_id,
+            instance_id: None,
+        }
+    }
+
     /// Bucket key. A tuple, not a joined string, so distinct identities can't
     /// collide (`"a|b" + ""` vs `"a" + "b|"`).
     fn key(&self) -> SenderKey {

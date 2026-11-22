@@ -152,6 +152,10 @@ jobs:
         if: steps.changes.outputs.code == 'true'
         run: npm -w @one-terminal/fdc3-plugin run check:bundle
 
+      - name: ot-telemetry.js bundle is up to date
+        if: steps.changes.outputs.code == 'true'
+        run: npm -w @one-terminal/telemetry run check:bundle
+
       - name: Build app-directory
         if: steps.changes.outputs.code == 'true'
         run: npm run build:app-directory

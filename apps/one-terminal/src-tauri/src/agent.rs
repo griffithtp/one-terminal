@@ -499,6 +499,9 @@ fn recreate_webviews(terminal: &Arc<TerminalState>, app: &AppHandle) -> Result<(
                 win.add_child(
                     WebviewBuilder::new(label, WebviewUrl::External(parsed))
                         .initialization_script(&script)
+                        .initialization_script(crate::telemetry_cmd::widget_script(
+                            &app_main, label,
+                        ))
                         .on_navigation(crate::address_bar_navigation_handler(
                             app_main.clone(),
                             terminal_id.clone(),

@@ -366,6 +366,7 @@ fn spawn_or_restore(
                 WebviewUrl::External("about:blank".parse().expect("about:blank is valid")),
             )
             .initialization_script(crate::agent::panel_init_script(app))
+            .initialization_script(crate::telemetry_cmd::widget_script(app, &lbl))
             .on_navigation(crate::address_bar_navigation_handler(
                 app.clone(),
                 label.to_string(),
@@ -395,6 +396,10 @@ fn spawn_or_restore(
                 if let Err(e) = win.add_child(
                     WebviewBuilder::new(panel_label, WebviewUrl::External(parsed_url))
                         .initialization_script(&script)
+                        .initialization_script(crate::telemetry_cmd::widget_script(
+                            app,
+                            panel_label,
+                        ))
                         .on_navigation(crate::address_bar_navigation_handler(
                             app.clone(),
                             label.to_string(),

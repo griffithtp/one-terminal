@@ -1,5 +1,7 @@
 //! Minimal Tauri host: reads `OT_URL` / `OT_TITLE` / `OT_APP_ID` from the
-//! environment and opens a single external-URL webview. `WEBVIEW2_BROWSER_
+//! environment and opens a single external-URL webview. When the spawning
+//! process passes `OT_TELEMETRY_URL` / `OT_TELEMETRY_TOKEN`, the page gets
+//! them as `window.OT_TELEMETRY` to send its logs to that process. `WEBVIEW2_BROWSER_
 //! EXECUTABLE_FOLDER`, if set by the caller, is honored by WebView2 at start
 //! — so the caller controls *which* Chromium runtime this window uses.
 
@@ -41,6 +43,9 @@ fn main() {
     tracing::info!(app_id = %app_id, url = %redact::url(&url_raw), "opening host window");
 
     let label = format!("host-{}", sanitize_label(&app_id));
+    let widget_script =
+        ot_telemetry::widget::WidgetTelemetry::from_env(&|key| std::env::var(key).ok())
+            .map(|w| w.init_script());
     let title_clone = title.clone();
 
     // `process.startup` covers `build` and `setup`: Tauri runs `setup` inside
@@ -52,14 +57,17 @@ fn main() {
         tauri::Builder::default()
             .setup(move |app| {
                 let _startup = startup_setup.enter();
-                tauri::WebviewWindowBuilder::new(
+                let mut window = tauri::WebviewWindowBuilder::new(
                     app,
                     &label,
                     tauri::WebviewUrl::External(parsed.clone()),
                 )
                 .title(title_clone.clone())
-                .inner_size(1280.0, 800.0)
-                .build()?;
+                .inner_size(1280.0, 800.0);
+                if let Some(script) = &widget_script {
+                    window = window.initialization_script(script);
+                }
+                window.build()?;
                 Ok(())
             })
             .build(tauri::generate_context!())

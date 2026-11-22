@@ -140,21 +140,31 @@ pub fn spawn_electron_app(
     url: &str,
     title: &str,
 ) -> Result<(), String> {
-    spawn_electron_app_with(binding, cache_root, app_id, url, title, |_| {})
+    spawn_electron_app_with(binding, cache_root, app_id, url, title, |_, _| {})
+}
+
+/// Which command [`spawn_electron_app_with`]'s `configure` is adjusting.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ElectronCommand {
+    /// Dev mode's `npm install` that fetches Electron. npm runs third-party
+    /// install scripts: give it nothing meant for the host.
+    Install,
+    /// The Electron host itself.
+    Host,
 }
 
 /// [`spawn_electron_app`], letting the caller adjust each command it runs —
 /// e.g. to set trace context and strip credentials from the environment —
 /// without this crate knowing about telemetry. `configure` is applied to the
-/// Electron command and, in dev mode, to the `npm install` that fetches it
-/// (npm runs third-party install scripts).
+/// Electron command ([`ElectronCommand::Host`]) and, in dev mode, to the
+/// `npm install` that fetches it ([`ElectronCommand::Install`]).
 pub fn spawn_electron_app_with(
     binding: &EngineBinding,
     cache_root: &Path,
     app_id: &str,
     url: &str,
     title: &str,
-    configure: impl Fn(&mut std::process::Command),
+    configure: impl Fn(&mut std::process::Command, ElectronCommand),
 ) -> Result<(), String> {
     let shell = locate_electron_shell()?;
     let bin = match locate_electron_binary(binding, cache_root, &shell) {
@@ -176,7 +186,7 @@ pub fn spawn_electron_app_with(
         .env("OT_APP_ID", app_id)
         .env("OT_URL", url)
         .env("OT_TITLE", title);
-    configure(&mut cmd);
+    configure(&mut cmd, ElectronCommand::Host);
     cmd.spawn()
         .map(|_| ())
         .map_err(|e| format!("spawn electron {}: {e}", bin.display()))
@@ -186,7 +196,7 @@ pub fn spawn_electron_app_with(
 /// derived from the shell directory (`shell_dir/../../`).
 fn auto_install_binary(
     shell_dir: &Path,
-    configure: &dyn Fn(&mut std::process::Command),
+    configure: &dyn Fn(&mut std::process::Command, ElectronCommand),
 ) -> Result<(), String> {
     let workspace_root = shell_dir
         .parent() // apps/
@@ -210,7 +220,7 @@ fn auto_install_binary(
     let mut cmd = std::process::Command::new(npm);
     cmd.args(["install", "-w", "@one-terminal/electron-host"])
         .current_dir(workspace_root);
-    configure(&mut cmd);
+    configure(&mut cmd, ElectronCommand::Install);
     let status = cmd
         .status()
         .map_err(|e| format!("failed to run npm: {e}"))?;

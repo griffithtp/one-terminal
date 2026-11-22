@@ -9,9 +9,15 @@ Rules: [docs/conventions/react.md](../../docs/conventions/react.md#errors-and-te
 ## Boundaries
 
 - **No React, Tauri or FDC3 in `src/index.ts`.** The caller supplies the transport
-  (`invoke("wm_telemetry_log" | "cda_telemetry_log", { batch })` in the UIs). React lives
-  only in the `./react` subpath (`TelemetryErrorBoundary`), with React as an optional
-  peer dependency.
+  (`invoke("wm_telemetry_log" | "cda_telemetry_log", { batch })` in the UIs, the `http`
+  transport for widgets). React lives only in the `./react` subpath
+  (`TelemetryErrorBoundary`), with React as an optional peer dependency.
+- **Widgets use `ot-telemetry.js`**, a committed esbuild bundle of `src/widget.ts`
+  (`startWidgetTelemetry`), served next to `fdc3-plugin.js`. It reads
+  `window.OT_TELEMETRY = { url, token }` (injected by the hosting process) and does
+  nothing without it. Rebuild with `npm run build:telemetry-client`; CI checks it.
+- **Request bodies stay under the endpoint's 16 KiB cap** (`http.ts` splits and shortens);
+  `text/plain` bodies, no custom headers, so no CORS preflight.
 - **Wire format = `ot_telemetry::relay::RecordBatch`.** Change both sides together.
 - **A `traceId` is recorded, never joined** as a span parent on the Rust side.
 - **No loops:** what the transport logs _synchronously_ (IPC-layer noise) is not
@@ -28,15 +34,19 @@ Rules: [docs/conventions/react.md](../../docs/conventions/react.md#errors-and-te
 | --------------- | --------------------------------------------------------------------- |
 | `src/index.ts`  | `createTelemetry`: batching, queue cap, error/rejection/console hooks |
 | `src/react.tsx` | `TelemetryErrorBoundary`                                              |
+| `src/http.ts`   | Widget transport: `fetch` / `sendBeacon` to the widget endpoint       |
+| `src/widget.ts` | `startWidgetTelemetry` — the entry bundled into `ot-telemetry.js`     |
+| `build.mjs`     | Builds (or `--check`s) `ot-telemetry.js`                              |
 
-The UIs import the TypeScript source through the npm workspace (Vite compiles it); there
-is no build step.
+The UIs import the TypeScript source through the npm workspace (Vite compiles it); only
+the widget bundle is built.
 
 ## Test
 
 ```sh
 npm run test:telemetry-client
 npm -w @one-terminal/telemetry run typecheck
+npm -w @one-terminal/telemetry run check:bundle
 ```
 
 ## Ships to scaffolded workspaces

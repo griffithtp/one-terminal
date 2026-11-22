@@ -224,6 +224,11 @@
 // The plugin connects once per page. Using its shared connection lets the
 // Terminal's "Set channel" menu control this widget's channel.
 import { getAgent } from './fdc3-plugin.js';
+// In a OneTerminal window, report this page's errors to OneTerminal's logs
+// (`undefined` elsewhere, hence `telemetry?.`).
+import { startWidgetTelemetry } from './ot-telemetry.js';
+
+const telemetry = startWidgetTelemetry({ captureConsole: true });
 
 // ── Mock rate data ──────────────────────────────────────────────────────────
 
@@ -395,6 +400,7 @@ try {
 } catch (e) {
   setStatus(window.OT_FDC3_AGENT_URL === '' ? 'No FDC3 agent configured' : 'CDA unavailable', 'error');
   addLog('✗', `Connection failed: ${e.cause?.message ?? e.message}`);
+  telemetry?.error(e, { attributes: { 'fdc3.op': 'connect' } });
 }
 
 async function joinChannel(channelId) {
@@ -455,6 +461,7 @@ ratesBody.addEventListener('click', async (e) => {
       addLog('✓', `ViewChart [${sym}] → handler: ${resolution.source.appId}`, true);
     } catch (e) {
       addLog('✗', `ViewChart failed: ${e.message}`);
+      telemetry?.error(e, { attributes: { 'fdc3.op': 'raiseIntent' } });
     }
   }
 });

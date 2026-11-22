@@ -185,6 +185,10 @@
       "overlay": "enterprise"
     },
     {
+      "path": "apps/electron-host/preload.js",
+      "overlay": "enterprise"
+    },
+    {
       "path": "apps/one-terminal/popout.html",
       "overlay": "shared"
     },
@@ -761,6 +765,10 @@
       "overlay": "shared"
     },
     {
+      "path": "packages/ot-telemetry/src/ingress.rs",
+      "overlay": "shared"
+    },
+    {
       "path": "packages/ot-telemetry/src/lib.rs",
       "overlay": "shared"
     },
@@ -801,6 +809,26 @@
       "overlay": "shared"
     },
     {
+      "path": "packages/ot-telemetry/src/widget.rs",
+      "overlay": "shared"
+    },
+    {
+      "path": "packages/telemetry-client/build.mjs",
+      "overlay": "shared"
+    },
+    {
+      "path": "packages/telemetry-client/ot-telemetry.js",
+      "overlay": "shared"
+    },
+    {
+      "path": "packages/telemetry-client/src/http.test.ts",
+      "overlay": "shared"
+    },
+    {
+      "path": "packages/telemetry-client/src/http.ts",
+      "overlay": "shared"
+    },
+    {
       "path": "packages/telemetry-client/src/index.test.ts",
       "overlay": "shared"
     },
@@ -814,6 +842,10 @@
     },
     {
       "path": "packages/telemetry-client/src/react.tsx",
+      "overlay": "shared"
+    },
+    {
+      "path": "packages/telemetry-client/src/widget.ts",
       "overlay": "shared"
     },
     {

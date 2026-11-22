@@ -27,6 +27,11 @@
       // The plugin connects once per page. Using its shared connection lets the
       // Terminal's "Set channel" menu control this widget's channel.
       import { getAgent } from "/fdc3-plugin.js";
+      // In a OneTerminal window, report this page's errors to OneTerminal's
+      // logs (`undefined` elsewhere, hence `telemetry?.`).
+      import { startWidgetTelemetry } from "/ot-telemetry.js";
+
+      const telemetry = startWidgetTelemetry({ captureConsole: true });
       const statusEl = document.getElementById("status");
       try {
         const fdc3 = await getAgent();
@@ -36,6 +41,7 @@
       } catch (e) {
         statusEl.textContent = "FDC3 agent unavailable";
         statusEl.className = "err";
+        telemetry?.error(e, { attributes: { "fdc3.op": "connect" } });
       }
     </script>
   </body>

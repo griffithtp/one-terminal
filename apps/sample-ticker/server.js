@@ -4,6 +4,7 @@
  * Serves:
  *   /            → index.html
  *   /fdc3-plugin.js → ../../packages/fdc3-plugin/fdc3-plugin.js  (from monorepo)
+ *   /ot-telemetry.js → ../../packages/telemetry-client/ot-telemetry.js
  */
 import fs   from 'fs';
 import http from 'http';
@@ -13,6 +14,7 @@ import { fileURLToPath } from 'url';
 const PORT    = 3010;
 const __dir   = path.dirname(fileURLToPath(import.meta.url));
 const PLUGIN  = path.resolve(__dir, '../../packages/fdc3-plugin/fdc3-plugin.js');
+const TELEMETRY = path.resolve(__dir, '../../packages/telemetry-client/ot-telemetry.js');
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -27,6 +29,8 @@ http.createServer((req, res) => {
   let filePath;
   if (req.url === '/fdc3-plugin.js') {
     filePath = PLUGIN;
+  } else if (req.url === '/ot-telemetry.js') {
+    filePath = TELEMETRY;
   } else {
     // Strip the query string, decode, then confine the resolved path to __dir
     // so crafted requests (e.g. `/../../etc/passwd`) cannot escape the web root.
@@ -53,8 +57,9 @@ http.createServer((req, res) => {
     }
     const ext  = path.extname(filePath);
     const mime = MIME[ext] ?? 'application/octet-stream';
-    // fdc3-plugin.js has no content hash in its name, so it must revalidate.
-    const cache = ext === '.html' || filePath.endsWith('fdc3-plugin.js')
+    // fdc3-plugin.js and ot-telemetry.js have no content hash in their names, so
+    // they must revalidate.
+    const cache = ext === '.html' || filePath.endsWith('fdc3-plugin.js') || filePath.endsWith('ot-telemetry.js')
       ? 'no-cache, no-store, must-revalidate'
       : 'public, max-age=31536000, immutable';
     res.writeHead(200, { 'Content-Type': mime, 'Cache-Control': cache });
