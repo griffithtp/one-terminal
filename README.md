@@ -124,6 +124,8 @@ npm run dev:terminal           # separate terminal
 
 > The first `cargo` build takes 1–2 minutes. Subsequent incremental builds are seconds.
 
+> To watch logs, traces and metrics while you develop — local log files, or Grafana through a local OpenTelemetry collector — see [docs/telemetry.md → Try it locally](docs/telemetry.md#try-it-locally).
+
 ### Build for production
 
 ```sh

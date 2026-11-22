@@ -60,6 +60,29 @@ One line looks like this:
 
 The file is written by a background thread with a bounded buffer. A process that is force-killed (`taskkill /F`, `kill -9`) loses its last buffered lines; a normal quit flushes them.
 
+### Watching the logs
+
+Follow today's file while you work (macOS shown; use your OS's directory from the table above):
+
+```sh
+tail -f ~/Library/Logs/one-terminal/desktop-agent.$(date +%F).log
+```
+
+On Windows (PowerShell):
+
+```powershell
+Get-Content "$env:LOCALAPPDATA\one-terminal\logs\desktop-agent.$(Get-Date -Format yyyy-MM-dd).log" -Wait
+```
+
+With [`jq`](https://jqlang.org/), show only errors and warnings, or only what the UIs and widgets reported:
+
+```sh
+tail -f ~/Library/Logs/one-terminal/one-terminal.$(date +%F).log | jq -c 'select(.level == "ERROR" or .level == "WARN")'
+tail -f ~/Library/Logs/one-terminal/one-terminal.$(date +%F).log | jq -c 'select(.target | startswith("ot_relay"))'
+```
+
+Widget records are in the log of the process hosting the widget: `one-terminal` for Terminal panels, `desktop-agent` for windows the Desktop Agent opens.
+
 ---
 
 ## Sending telemetry to a collector
@@ -252,20 +275,47 @@ The endpoint is set by `telemetry.widgets.enabled` (on by default). Each Termina
 
 ## Try it locally
 
-Run Grafana's all-in-one OpenTelemetry image (collector, Tempo, Loki, Prometheus):
+This walkthrough sends everything to Grafana's all-in-one OpenTelemetry image (a collector plus Tempo for traces, Loki for logs and Prometheus for metrics) on your machine. It needs Docker.
+
+**1. Start the collector** in its own terminal (it stays in the foreground; `Ctrl+C` stops it and discards the data):
 
 ```sh
 docker run --rm -p 3000:3000 -p 4318:4318 grafana/otel-lgtm
-OT_OTLP_ENDPOINT=http://localhost:4318 npm run dev:desktop-agent
 ```
 
-Open Grafana at <http://localhost:3000>, launch a sample app from the Desktop Agent and broadcast from it, then look for the data below. Label and attribute names depend on your backend's OTLP mapping (Loki may show `ot.origin` as `ot_origin`), so adjust the queries if they return nothing:
+**2. Start the Desktop Agent with export on**, in another terminal. The Terminals it opens export too, and its built-in App Directory serves the sample apps:
 
-- **Explore → Tempo**: search `service.name = desktop-agent` for the `broadcastRequest` span, or for the `openRequest` → `fdc3.launch` → `app.launch` trace of a launch.
-- **Explore → Loki**: filter on the service `one-terminal`, then on the `ot.origin` value `widget`, for widget records.
-- **Explore → Prometheus**: `ot_fdc3_messages_total`.
+```sh
+OT_OTLP_ENDPOINT=http://localhost:4318 OTEL_METRIC_EXPORT_INTERVAL=5000 npm run dev:desktop-agent
+```
 
-Metrics are exported every 60 seconds; set `"metricsIntervalMs": 5000` while experimenting.
+`OTEL_METRIC_EXPORT_INTERVAL=5000` sends metrics every 5 seconds instead of every 60, which is handy while experimenting. To export from a Terminal you start on its own, prefix `npm run dev:terminal` the same way.
+
+**3. Check that export is on.** Among the Desktop Agent's first lines (in the terminal or its [log file](#watching-the-logs)):
+
+```
+config telemetry.otlp.traces = http://localhost:4318/v1/traces (env OT_OTLP_ENDPOINT)
+widget telemetry endpoint on http://127.0.0.1:<port>/v1/records
+```
+
+`telemetry.otlp = off` means the endpoint wasn't picked up.
+
+**4. Make something happen:**
+
+- Open the ticker from the Desktop Agent window (an app launch).
+- In the ticker, click **ViewChart** for an instrument. With no chart open, the Desktop Agent starts one for the intent, which gives the full FDC3 trace.
+- Broadcast an instrument from the ticker. The chart logs each instrument it receives, with its `traceId`.
+- For a widget error, open the chart's DevTools (right-click → **Inspect**) and run `setTimeout(() => { throw new Error("telemetry test"); })`. An uncaught error is reported; one thrown directly at the console prompt isn't, because browsers don't treat it as a page error.
+
+**5. Look at it in Grafana** at <http://localhost:3000>, under **Explore**:
+
+| Data source | What to look for                                                                                                                                                                                                                                                                                         |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Tempo       | Service `desktop-agent`: an `app.launch` trace for the app you opened from its window; `raiseIntentRequest` → `fdc3.launch` → `app.launch` for the chart the intent started; `broadcastRequest` spans. A Terminal the Desktop Agent started has its own `process.startup` under the span that started it |
+| Loki        | Service `desktop-agent` or `one-terminal`. Widget records have `ot.origin` `widget`, with `ot.app_id` and `fdc3.trace_id`; copy a `fdc3.trace_id` into Tempo to find the FDC3 request it belongs to                                                                                                      |
+| Prometheus  | `ot_fdc3_messages_total`, `ot_app_launches_total`, `ot_fdc3_message_duration_seconds_bucket`                                                                                                                                                                                                             |
+
+Label and metric names depend on how your backend maps OTLP (Loki may show `ot.origin` as `ot_origin`; Prometheus adds `_total` and unit suffixes), so adjust a query that returns nothing. If nothing arrives at all, see [Troubleshooting](#troubleshooting).
 
 ---
 
