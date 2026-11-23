@@ -172,6 +172,11 @@ const ROOT_PACKAGE_SCRIPTS_OMIT = new Set([
   "typecheck:scripts",
   "build:fdc3-plugin",
   "test:fdc3-plugin",
+  // Local Grafana for framework development (scripts/otel.mjs and
+  // observability/ don't ship).
+  "otel:up",
+  "otel:import",
+  "otel:down",
   // sample-widget is standalone-only; its dev script lives in the
   // standalone overlay-overrides package.json, not in the extracted one.
   "dev:sample-widget",
