@@ -23,6 +23,7 @@ export default {
         "ci",
         "ai",
         "security",
+        "telemetry",
       ],
     ],
   },

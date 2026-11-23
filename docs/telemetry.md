@@ -277,11 +277,13 @@ The endpoint is set by `telemetry.widgets.enabled` (on by default). Each Termina
 
 This walkthrough sends everything to Grafana's all-in-one OpenTelemetry image (a collector plus Tempo for traces, Loki for logs and Prometheus for metrics) on your machine. It needs Docker.
 
-**1. Start the collector** in its own terminal (it stays in the foreground; `Ctrl+C` stops it and discards the data):
+**1. Start the collector and Grafana:**
 
 ```sh
-docker run --rm -p 3000:3000 -p 4318:4318 grafana/otel-lgtm
+npm run otel:up
 ```
+
+This starts `grafana/otel-lgtm` in the background and imports the OneTerminal dashboards from [`observability/grafana/dashboards/`](../observability/grafana/dashboards/). `npm run otel:down` stops it and discards its data (`npm run otel:up -- --keep-data` keeps it in a Docker volume). The dashboards come back from the repo on every `otel:up`; if you started the image yourself, `npm run otel:import` imports them into it.
 
 **2. Start the Desktop Agent and a Terminal with export on**, each in its own terminal:
 
@@ -292,7 +294,7 @@ OT_OTLP_ENDPOINT=http://localhost:4318 OTEL_METRIC_EXPORT_INTERVAL=5000 npm run 
 
 `OTEL_METRIC_EXPORT_INTERVAL=5000` sends metrics every 5 seconds instead of every 60, which is handy while experimenting. The Desktop Agent's built-in App Directory serves the sample apps.
 
-> In development, a Terminal you open **from the Desktop Agent** runs the `one-terminal` binary already in `target/debug/` and loads its UI from the Terminal's Vite server. `npm run dev:desktop-agent` builds neither, so run `npm run dev:terminal` as above (it does both), or first run `cargo build -p one-terminal` and `npm -w @one-terminal/one-terminal run dev`. Otherwise you get an old Terminal without telemetry, or a blank window.
+A Terminal you open from the Desktop Agent works too: `npm run dev:desktop-agent` builds the Terminal and keeps its UI served. `dev:terminal` is still the way to pick up Terminal code changes without restarting the agent.
 
 **3. Check that export is on.** Among each process's first lines (in its terminal or [log file](#watching-the-logs)):
 
@@ -311,7 +313,11 @@ widget telemetry endpoint on http://127.0.0.1:<port>/v1/records
 
 The widget records appear in the Terminal's log straight away (`ot_relay::widget` lines in `one-terminal.<date>.log`).
 
-**5. Look at it in Grafana** at <http://localhost:3000>, under **Explore**:
+**5. Look at it in Grafana** at <http://localhost:3000>.
+
+**Dashboards → OneTerminal → OneTerminal — errors** shows the errors in one place: counts that turn red above zero (error log lines, widget errors, failed FDC3 requests and launches), errors and warnings over time per service, the error log lines, and a table of widget errors whose FDC3 trace id opens the request in Tempo.
+
+To dig further, use **Explore**:
 
 | Data source | What to look for                                                                                                                                                                                                                                                     |
 | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

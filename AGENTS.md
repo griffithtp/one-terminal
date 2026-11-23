@@ -51,6 +51,7 @@ packages/create-one-terminal/ — the scaffolder (`create-one-terminal`)     (AG
 apps/sample-ticker/           — demo browser app, port 3010
 apps/sample-chart/            — demo browser app, port 3011
 apps/sample-widget/           — demo local widget (widgets.config.json), port 3012
+observability/grafana/        — Grafana dashboards for local telemetry (`npm run otel:up` imports them)
 ```
 
 ## Conventions
@@ -209,6 +210,8 @@ npm run test:fdc3-plugin         # contract tests: the official proxy against th
 npm run test:terminal            # Terminal UI unit/component tests (Vitest + RTL, jsdom)
 npm run test:telemetry-client    # @one-terminal/telemetry unit tests (Vitest, jsdom)
 npm run build:telemetry-client   # regenerates packages/telemetry-client/ot-telemetry.js after editing src/
+npm run otel:up                  # local OTLP collector + Grafana (grafana/otel-lgtm) with the OneTerminal dashboards; otel:down stops it
+npm run otel:import              # re-import observability/grafana/dashboards into a running Grafana (GRAFANA_URL)
 npm run build:app-directory      # rebuilds apps/app-directory/dist
 npm run build:samples            # production builds of sample-ticker + sample-chart (planned; not in package.json yet)
 npm run build:all                # all Tauri apps
