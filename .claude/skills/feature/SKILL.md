@@ -14,7 +14,11 @@ gate because the next step looks obvious.
 
 ## 0. Set up
 
-- Work on a feature branch, not `main` (`git switch -c feature/<name>`).
+- Work on a feature branch, not `main` (`git switch -c feature/<name>`, or `fix/<name>`
+  for a fix), named after the change — see
+  [general.md](../../../docs/conventions/general.md#git-and-pull-requests). If you're
+  already on a tool-generated branch name, propose a meaningful one and rename it with the
+  person's go-ahead before the first push.
 - Small, contained change (one file, an obvious fix)? Skip to step 3 and keep steps 4–6.
 
 ## 1. Requirements → gate

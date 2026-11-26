@@ -166,7 +166,12 @@ Everything crossing IPC is a typed contract; both sides change in the same commi
 
 ## Git and pull requests
 
-- **Branches:** work on `feature/<name>` or `fix/<name>`; never commit to `main` directly.
+- **Branches:** work on `<type>/<name>` — `feature/`, `fix/` or `docs/` — never on `main`.
+  `<name>` is 2–5 lower-case, hyphenated words naming the change, not the tool or session
+  (`fix/widget-url-policy`, `feature/popout-glue`; not `fix/issue-1`, `claude/<random>`).
+  A tool that assigns its own branch name: rename it before the first push if you can,
+  otherwise before opening the PR (`git branch -m <old> <type>/<name>`, push the new name,
+  delete the old remote branch).
 - **Commit messages:** [Conventional Commits](https://www.conventionalcommits.org/) with a
   scope, as used on `main` — checked by commitlint in lefthook's `commit-msg` hook
   (`commitlint.config.js`; an unknown scope warns, a malformed message is rejected):
