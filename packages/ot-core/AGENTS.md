@@ -4,12 +4,12 @@ Shared, **Tauri-agnostic** Rust consumed by every workspace member. Never add a 
 dependency here; anything needing an `AppHandle` belongs in the app crates. Rules:
 [docs/conventions/rust.md](../../docs/conventions/rust.md).
 
-| Module             | Contents                                                                                                       |
-| ------------------ | -------------------------------------------------------------------------------------------------------------- |
-| `engine.rs`        | `EngineFamily`, engine bindings, `default_cache_root()`                                                        |
-| `plugin.rs`        | Engine plugin manifests, `LaunchMode`                                                                          |
-| `electron_host.rs` | Locating / launching the Electron host (`spawn_electron_app_with` lets the caller add env, e.g. trace context) |
-| `widget_url.rs`    | Widget URL policy: `parse_widget_url`, `check_widget_url`, `is_allowed_navigation` (see security.md)           |
+| Module             | Contents                                                                                                                      |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| `engine.rs`        | `EngineFamily`, engine bindings, `default_cache_root()`                                                                       |
+| `plugin.rs`        | Engine plugin manifests, `LaunchMode`                                                                                         |
+| `electron_host.rs` | Locating / launching the Electron host (`spawn_electron_app_with` lets the caller add env, e.g. trace context)                |
+| `widget_url.rs`    | Widget URL policy: `parse_widget_url(_on)`, `check_widget_url(_on)` per `Platform`, `is_allowed_navigation` (see security.md) |
 
 ## Engine families
 
