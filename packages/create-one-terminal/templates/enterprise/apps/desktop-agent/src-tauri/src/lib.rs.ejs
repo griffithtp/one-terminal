@@ -395,6 +395,9 @@ async fn run_plan(
             let parsed: tauri::Url = url.parse().map_err(|e| format!("Invalid URL: {e}"))?;
             tauri::WebviewWindowBuilder::new(app, label, tauri::WebviewUrl::External(parsed))
                 .initialization_script(endpoint.init_script(label, Some(app_id)))
+                // The page may not navigate itself to a local origin (the
+                // agent's own, a custom scheme) or `file:` either.
+                .on_navigation(ot_core::widget_url::is_allowed_navigation)
                 .title(title)
                 .inner_size(1280.0, 800.0)
                 .build()
