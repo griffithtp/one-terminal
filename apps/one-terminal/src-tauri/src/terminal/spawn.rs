@@ -390,7 +390,7 @@ fn spawn_or_restore(
     if !panels_to_restore.is_empty() {
         let base_init_script = crate::agent::panel_init_script(app);
         for (panel_label, url, channel) in &panels_to_restore {
-            if let Ok(parsed_url) = url.parse::<tauri::Url>() {
+            if let Ok(parsed_url) = crate::widget_url::parse(url) {
                 let script =
                     crate::config::append_initial_channel(&base_init_script, channel.as_deref());
                 if let Err(e) = win.add_child(
@@ -415,6 +415,12 @@ fn spawn_or_restore(
                 ) {
                     tracing::warn!("restore panel '{panel_label}': {e}");
                 }
+            } else {
+                tracing::warn!(
+                    ot.window = %panel_label,
+                    "panel not restored: refused URL {}",
+                    ot_telemetry::redact::url(url)
+                );
             }
         }
         {

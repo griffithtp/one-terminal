@@ -8,6 +8,7 @@ mod sample_widget;
 mod telemetry_cmd;
 mod terminal;
 mod webview_pool;
+mod widget_url;
 mod widgets;
 
 use config::TerminalConfig;
@@ -88,6 +89,8 @@ fn spawn_external_host(
     url: &str,
     title: &str,
 ) -> Result<(), String> {
+    // Engine hosts load `OT_URL` with no further checks: refuse local origins here.
+    widget_url::parse(url)?;
     // The Desktop Agent's launch-kind labels, so both processes' launches
     // aggregate under one metric.
     let kind = match &binding.family {
@@ -310,6 +313,14 @@ pub(crate) fn address_bar_navigation_handler(
     tree: LayoutTree,
 ) -> impl Fn(&tauri::Url) -> bool + Send + 'static {
     move |url: &tauri::Url| {
+        if !widget_url::allows_navigation(url) {
+            tracing::warn!(
+                ot.window = %label,
+                "refused panel navigation to a disallowed URL: {}",
+                ot_telemetry::redact::url(url.as_str())
+            );
+            return false;
+        }
         if tree.track_navigated_url(&label, url.as_str()) {
             tree.emit_host(&app);
             if let Some(snap) = tree.snapshot() {
@@ -375,6 +386,9 @@ async fn wm_open(
     identity: State<'_, WmHostIdentity>,
     app: AppHandle,
 ) -> Result<LayoutSnapshot, String> {
+    // Refuse local origins (the Terminal's own, custom schemes) before the
+    // layout tree or an engine host sees the URL.
+    let parsed_url = widget_url::parse(&url)?;
     let panel_init_script = agent::panel_init_script(&app);
     let terminal = get_terminal!(manager, window);
     let tree = &terminal.layout_tree;
@@ -406,8 +420,6 @@ async fn wm_open(
         Some(lbl) => tree.add_panel_with_label(lbl, spec, target.as_deref(), dir),
         None => tree.add_panel(spec, target.as_deref(), dir),
     };
-
-    let parsed_url: tauri::Url = url.parse().map_err(|e: url::ParseError| e.to_string())?;
 
     // Dispatch the webview operation to the UI/main thread.
     //
@@ -1992,7 +2004,7 @@ pub fn run() {
                 let panels_to_restore = tree.panels_for_restore();
                 if !panels_to_restore.is_empty() {
                     for (label, url, channel) in &panels_to_restore {
-                        if let Ok(parsed_url) = url.parse::<tauri::Url>() {
+                        if let Ok(parsed_url) = crate::widget_url::parse(url) {
                             let script = config::append_initial_channel(
                                 &panel_init_script,
                                 channel.as_deref(),

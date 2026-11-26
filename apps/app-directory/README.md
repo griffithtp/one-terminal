@@ -165,7 +165,7 @@ Register a new application. The `appId` must be unique.
 ```
 
 **Response** `201 Created` — registered `AppD`
-**Response** `400 Bad Request` — missing required fields
+**Response** `400 Bad Request` — missing required fields, or `Invalid details.url: …` (see Launch URL below)
 **Response** `409 Conflict` — `appId` already exists
 
 ---
@@ -177,7 +177,7 @@ Full-replacement update for an existing application.
 **Body** — complete `AppD` record (same shape as POST)
 
 **Response** `200 OK` — updated `AppD`
-**Response** `400 Bad Request` — missing required fields
+**Response** `400 Bad Request` — missing required fields, or `Invalid details.url: …`
 **Response** `404 Not Found` — `appId` not registered
 
 ---
@@ -244,12 +244,12 @@ The form captures every field defined in the FDC3 3.0 App Directory specificatio
 
 ### Identity (required)
 
-| Field      | JSON key      | Description                                                                                      |
-| ---------- | ------------- | ------------------------------------------------------------------------------------------------ |
-| App ID     | `appId`       | Unique stable identifier. Alphanumeric, hyphens, underscores only. Immutable after registration. |
-| Title      | `title`       | Display name shown in launchers. `name` is accepted on input from older clients and converted.   |
-| Type       | `type`        | See **App Types** below.                                                                         |
-| Launch URL | `details.url` | URL the platform navigates to when opening the app. Required for `web` and `onlineNative` types. |
+| Field      | JSON key      | Description                                                                                                                                                                                                                                                |
+| ---------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| App ID     | `appId`       | Unique stable identifier. Alphanumeric, hyphens, underscores only. Immutable after registration.                                                                                                                                                           |
+| Title      | `title`       | Display name shown in launchers. `name` is accepted on input from older clients and converted.                                                                                                                                                             |
+| Type       | `type`        | See **App Types** below.                                                                                                                                                                                                                                   |
+| Launch URL | `details.url` | URL the platform navigates to when opening the app. Required for `web` and `onlineNative` types. For those two types it must be `http`/`https` with a host and not a `*.localhost` origin (use `localhost:<port>`); otherwise `POST` / `PUT` return `400`. |
 
 ### App Types
 

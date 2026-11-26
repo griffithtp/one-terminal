@@ -346,7 +346,7 @@ pub fn open_popout(
                         wv.reparent(&win).map_err(|e| e.to_string())?;
                     }
                     PanelSource::Create { url, init_script } => {
-                        let parsed: tauri::Url = url.parse().map_err(|e| format!("{e}"))?;
+                        let parsed = crate::widget_url::parse(&url)?;
                         win.add_child(
                             WebviewBuilder::new(&panel_m, WebviewUrl::External(parsed))
                                 .initialization_script(&init_script)

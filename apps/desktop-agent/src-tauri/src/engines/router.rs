@@ -89,6 +89,9 @@ pub fn plan_launch(
         .as_ref()
         .and_then(|d| d.url.clone())
         .ok_or_else(|| format!("App {} has no launch URL", appd.app_id))?;
+    // Directory records are untrusted: never launch a local origin (the
+    // agent's own, a custom scheme), `file:` or anything but http(s).
+    ot_core::widget_url::parse_widget_url(&url).map_err(|e| format!("App {}: {e}", appd.app_id))?;
     let title = appd.display_title().to_string();
 
     // No engine binding for this OS → keep today's behavior (in-process).
@@ -225,6 +228,21 @@ mod tests {
     }
 
     use super::super::OsKey;
+
+    #[test]
+    fn refuses_local_origin_and_non_http_urls() {
+        for url in [
+            "tauri://localhost/index.html",
+            "http://tauri.localhost/",
+            "file:///etc/passwd",
+            "javascript:alert(1)",
+        ] {
+            let appd = app(url, None);
+            let err = plan_launch(&appd, &LaunchContext::Standalone, None, &[])
+                .expect_err(&format!("{url} should be refused"));
+            assert!(err.starts_with("App t:"), "{err}");
+        }
+    }
 
     #[test]
     fn no_binding_is_in_process() {

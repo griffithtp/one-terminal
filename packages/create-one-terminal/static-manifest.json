@@ -21,6 +21,10 @@
       "overlay": "enterprise"
     },
     {
+      "path": "apps/app-directory/ui/dist/index.html",
+      "overlay": "enterprise"
+    },
+    {
       "path": "apps/app-directory/ui/index.html",
       "overlay": "enterprise"
     },
@@ -306,6 +310,10 @@
     },
     {
       "path": "apps/one-terminal/src-tauri/src/webview_pool.rs",
+      "overlay": "shared"
+    },
+    {
+      "path": "apps/one-terminal/src-tauri/src/widget_url.rs",
       "overlay": "shared"
     },
     {
@@ -762,6 +770,10 @@
     },
     {
       "path": "packages/ot-core/src/plugin.rs",
+      "overlay": "shared"
+    },
+    {
+      "path": "packages/ot-core/src/widget_url.rs",
       "overlay": "shared"
     },
     {

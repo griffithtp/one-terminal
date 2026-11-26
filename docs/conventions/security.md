@@ -10,6 +10,7 @@ system or process spawning except through an explicitly validated path.
 | ---------------------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Panel webview → Tauri IPC                                                    | Widget pages (any URL)             | Tauri capabilities (local origins only)                                                                                                                                                                                   |
 | Widget → FDC3 bus (`ws://127.0.0.1:7891/fdc3`)                               | Any local process or web page      | WCP handshake (see gaps below)                                                                                                                                                                                            |
+| Widget / app URL → webview or window creation and navigation                 | Config, directory records, widgets | `ot_core::widget_url`: http(s) with a host, never a `*.localhost` origin; enforced at every creation site and in `on_navigation` (see below)                                                                              |
 | Client → App Directory REST (`:3005`)                                        | Admin UI, scripts, browsers        | Loopback bind; CORS on the standalone server; auth planned                                                                                                                                                                |
 | App Directory / plugin manifest → process spawn                              | Directory records, `manifest.json` | Engine catalog checksums; launch routing in `engines/router.rs`                                                                                                                                                           |
 | Config files / env vars                                                      | Local user                         | Validation in `AgentConfig::load()`; unknown keys ignored                                                                                                                                                                 |
@@ -28,7 +29,15 @@ system or process spawning except through an explicitly validated path.
 - Every new `#[tauri::command]` validates its arguments as if they came from an attacker:
   labels and ids must refer to existing objects, paths must be canonicalised and kept
   inside an allowed root, URLs must be parsed and their scheme checked
-  (`http`/`https` only for widgets).
+  (`http`/`https` only for widgets) with `ot_core::widget_url::parse_widget_url`; it also
+  refuses `*.localhost` hosts, which are local origins with IPC (`tauri.localhost` on
+  Windows). Use `localhost:<port>` for dev servers, not `myapp.localhost`.
+- Panel webviews and Desktop Agent app windows also refuse _navigation_ to a local origin
+  (`tauri:`, `ipc:`, `asset:`, custom schemes, `*.localhost`) or `file:`, via
+  `ot_core::widget_url::is_allowed_navigation`. On macOS the handler runs for every
+  frame, so it allows ordinary iframe content (`about:srcdoc`, `data:`, `blob:`); on
+  Windows it runs for the top-level page only, so `frame-ancestors 'none'` (below) is what
+  stops a widget framing the app's own pages.
 - Grant only what the app's **JS** calls. Windows, webviews and events driven from Rust
   need no capability. Current grants:
 
@@ -49,16 +58,19 @@ Each `tauri.conf.json` sets `app.security.csp`. Tauri applies it to the app's ow
 (Terminal chrome, overlay and popout chrome; Desktop Agent dashboard; the host's stub
 page) — **not** to widget pages, which load remote URLs or custom schemes.
 
-| Directive                                            | Terminal / Desktop Agent    | Why                                     |
-| ---------------------------------------------------- | --------------------------- | --------------------------------------- |
-| `default-src`, `script-src`, `style-src`             | `'self'`                    | Vite emits only bundled JS/CSS files    |
-| `img-src`, `font-src`                                | `'self' data:`              | Vite may inline small assets as `data:` |
-| `connect-src`                                        | `ipc: http://ipc.localhost` | Tauri IPC (macOS / Windows); no `fetch` |
-| `object-src`, `base-uri`, `form-action`, `frame-src` | `'none'`                    | Not used                                |
+| Directive                                            | Terminal / Desktop Agent    | Why                                                                                       |
+| ---------------------------------------------------- | --------------------------- | ----------------------------------------------------------------------------------------- |
+| `default-src`, `script-src`, `style-src`             | `'self'`                    | Vite emits only bundled JS/CSS files                                                      |
+| `img-src`, `font-src`                                | `'self' data:`              | Vite may inline small assets as `data:`                                                   |
+| `connect-src`                                        | `ipc: http://ipc.localhost` | Tauri IPC (macOS / Windows); no `fetch`                                                   |
+| `object-src`, `base-uri`, `form-action`, `frame-src` | `'none'`                    | Not used                                                                                  |
+| `frame-ancestors`                                    | `'none'`                    | A widget must not frame the app's pages (they have IPC); also set on `tauri-webview-host` |
 
 - React `style={{…}}` props are fine (set through the CSSOM). Literal `style="…"`
   markup, `<style>` elements, `dangerouslySetInnerHTML`, `innerHTML`, `eval` and remote
   scripts are not — and would also be blocked.
+- `frame-ancestors` only works because Tauri sends the CSP as a response header on its own
+  pages (a `<meta>` CSP ignores it). Dev builds (`devCsp: null`) don't send it.
 - Loading something new (a font, an image host, a `fetch` to the App Directory) means
   adding that exact source to the CSP in the same change.
 - `devCsp` is `null`: the Vite dev server needs inline scripts and an HMR websocket. The
@@ -84,6 +96,11 @@ it hosts.
 
 ## App Directory
 
+- `POST` / `PUT /v2/apps` reject a `web` or `onlineNative` `details.url` that isn't
+  http(s) with a host or is a `*.localhost` origin (`400`, `Invalid details.url: …`); the
+  Desktop Agent re-checks in `plan_launch`, since records may predate the check. `native`,
+  `citrix` and `other` URLs go to the OS opener unchecked (deep links, `file://`) — any
+  local process can register one, so this stays open until writes are authenticated.
 - The embedded App Directory binds to `127.0.0.1` and has no CORS layer, so browsers block
   cross-origin JSON writes (preflight fails). The standalone server allows only the
   origins in `CORS_ORIGIN`.
@@ -126,13 +143,15 @@ it hosts.
 
 Not yet verified — check before relying on either:
 
-- **Custom scheme widgets and IPC — answered: yes.** Tauri treats registered custom
-  schemes as local origins (`is_local_url` in `tauri/src/webview/mod.rs`), so the
-  `sample-widget://` page can call every Terminal app command. Today it serves only fixed,
-  first-party files (`sample_widget.rs`), so this isn't exploitable, but any local widget
-  served this way must be trusted code. The log relay refuses it by webview label. To
-  close the gap: serve local widgets over `http://127.0.0.1`, or restrict app commands
-  with an app manifest.
+- **Custom scheme widgets and IPC — answered: yes; mitigated.** Tauri treats registered
+  custom schemes as local origins (`is_local_url` in `tauri/src/webview/mod.rs`), so the
+  `sample-widget://` page can call every Terminal app command. Widget URLs are now
+  refused when they point at a local origin (custom schemes, `*.localhost`), with one
+  exception in the Terminal: the bundled sample widget (`sample-widget://localhost`,
+  `http(s)://sample-widget.localhost`), which serves only fixed, first-party files
+  (`sample_widget.rs`). Any other local widget served this way would need to be trusted
+  code. The log relay refuses it by webview label. To remove the exception: serve local
+  widgets over `http://127.0.0.1`, or restrict app commands with an app manifest.
 - **Electron host navigation.** `apps/electron-host` runs pages with
   `nodeIntegration: false` and `contextIsolation: true` and no preload, but doesn't
   restrict `window.open` or navigation. Low risk without Node access; decide whether
