@@ -50,12 +50,7 @@ behaviour. Agents must say so in their PR and leave per-OS manual checks for a p
 
 ## Rules for every cloud agent
 
-- Work on a branch and open a PR; never push to `main`. Name it `<type>/<name>` after the
-  change (`fix/widget-url-policy`), per
-  [general.md](../docs/conventions/general.md#git-and-pull-requests). If the platform
-  assigns a generated name (`claude/<adjective>-<name>-<id>`, `devin/…`, `copilot/…`),
-  propose a meaningful one to the person once the change's scope is clear and rename the
-  branch with their go-ahead, before opening the PR.
+- Work on a branch and open a PR; never push to `main`.
 - Run the done checklist from `AGENTS.md` before opening the PR, and paste the results.
 - Generated files (`templates/`, `fdc3-plugin.js`, AI adapters) come from their
   generators — CI's drift checks catch hand edits.
