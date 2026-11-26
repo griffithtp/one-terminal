@@ -16,7 +16,7 @@ use ot_core::engine::OsKey;
 use crate::data::AppStore;
 use crate::engines;
 use crate::filter::apply_filter;
-use crate::types::{AppD, AppsListResponse, EngineCatalogResponse, ErrorResponse};
+use crate::types::{AppD, AppType, AppsListResponse, EngineCatalogResponse, ErrorResponse};
 
 #[derive(Clone)]
 pub struct AppState {
@@ -101,7 +101,7 @@ async fn create_app(
             .into_response();
     }
 
-    if let Err(err) = ot_core::widget_url::parse_widget_url(&body.details.url) {
+    if let Err(err) = check_launch_url(&body) {
         return (
             StatusCode::BAD_REQUEST,
             Json(ErrorResponse {
@@ -149,7 +149,7 @@ async fn update_app(
             .into_response();
     }
 
-    if let Err(err) = ot_core::widget_url::parse_widget_url(&body.details.url) {
+    if let Err(err) = check_launch_url(&body) {
         return (
             StatusCode::BAD_REQUEST,
             Json(ErrorResponse {
@@ -228,4 +228,17 @@ fn validate_engine_bindings(
         }
     }
     None
+}
+
+/// `web` and `onlineNative` URLs load in a webview (a Terminal panel or a
+/// Desktop Agent window), so they must pass the widget URL policy: never a
+/// local origin with IPC. Other types go to the OS opener (deep links,
+/// `file://`), which this check doesn't cover.
+fn check_launch_url(app: &AppD) -> Result<(), ot_core::widget_url::WidgetUrlError> {
+    match app.app_type {
+        AppType::Web | AppType::OnlineNative => {
+            ot_core::widget_url::parse_widget_url(&app.details.url).map(|_| ())
+        }
+        AppType::Native | AppType::Citrix | AppType::Other => Ok(()),
+    }
 }

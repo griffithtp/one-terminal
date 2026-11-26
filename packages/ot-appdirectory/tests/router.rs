@@ -333,3 +333,34 @@ async fn update_with_a_local_origin_url_is_rejected() {
         .unwrap();
     assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
 }
+
+#[tokio::test]
+async fn native_apps_keep_os_opener_urls() {
+    // `native` goes to the OS opener, not a webview: deep links and
+    // `file://` stay allowed (the widget URL policy doesn't apply).
+    for (app_id, url) in [
+        ("native-file", "file:///Applications/Tool.app"),
+        ("native-deeplink", "mytool://open?x=1"),
+    ] {
+        let (status, body) = post_app(json!({
+            "appId": app_id,
+            "title": "Native",
+            "type": "native",
+            "details": { "url": url }
+        }))
+        .await;
+        assert_eq!(status, StatusCode::CREATED, "{url}: {body}");
+    }
+}
+
+#[tokio::test]
+async fn online_native_apps_get_the_widget_url_policy() {
+    let (status, _) = post_app(json!({
+        "appId": "online-native-bad",
+        "title": "Bad",
+        "type": "onlineNative",
+        "details": { "url": "tauri://localhost/" }
+    }))
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}

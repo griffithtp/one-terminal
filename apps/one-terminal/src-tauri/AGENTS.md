@@ -18,6 +18,7 @@ panel webviews added on top with `add_child`. Rules:
 | `src/metrics.rs`                     | Terminal metrics: open windows/popouts, popout open/dock latency                                                                  |
 | `src/engine.rs`, `engines.rs`        | Engine selection / spawning out-of-process hosts                                                                                  |
 | `src/widgets.rs`, `sample_widget.rs` | Local widgets from `widgets.config.json`; embedded sample widget                                                                  |
+| `src/widget_url.rs`                  | Widget URL policy (`ot_core::widget_url`) plus the bundled sample-widget exception; apply it at every webview-creation site       |
 
 ## Rules for changes here
 
