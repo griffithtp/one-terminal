@@ -484,11 +484,7 @@ fn recreate_webviews(terminal: &Arc<TerminalState>, app: &AppHandle) -> Result<(
                 }
             }
             for (label, url, channel) in &panels {
-                let Ok(parsed) = crate::widget_url::parse(url) else {
-                    tracing::warn!(
-                        "recreate '{label}': invalid url '{}'",
-                        ot_telemetry::redact::url(url)
-                    );
+                let Some(parsed) = crate::widget_url::parse_for_restore(label, url) else {
                     continue;
                 };
                 if let Some(wv) = app_main.get_webview(label) {

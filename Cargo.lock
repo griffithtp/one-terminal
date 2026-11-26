@@ -4585,6 +4585,7 @@ dependencies = [
 name = "tauri-webview-host"
 version = "0.1.0"
 dependencies = [
+ "ot-core",
  "ot-telemetry",
  "serde",
  "serde_json",

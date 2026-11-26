@@ -290,11 +290,18 @@ fn wm_host_snapshot(window: Window, manager: State<'_, TerminalManager>) -> Host
     }
 }
 
-/// Build an `on_navigation` handler that keeps `LeafMeta.url` in sync with
-/// live navigation inside a panel's webview (link clicks, redirects, SPA
-/// route changes) — so a Generic Web Widget's read-only address-bar row
-/// reflects where the user actually is, not just the URL it was launched
-/// with.
+/// Build the `on_navigation` handler every panel webview gets. It does two
+/// things:
+///
+/// 1. **Refuses** navigation the widget URL policy forbids
+///    ([`widget_url::allows_navigation`]): the Terminal's own origin, custom
+///    schemes, `file:` and (Windows) `*.localhost` app origins — local origins
+///    with IPC. Returns `false` for those, which cancels the navigation (on
+///    macOS this also covers iframes; on Windows only top-level loads).
+/// 2. Otherwise keeps `LeafMeta.url` in sync with live navigation (link
+///    clicks, redirects, SPA route changes) — so a Generic Web Widget's
+///    read-only address-bar row reflects where the user actually is — and
+///    returns `true`.
 ///
 /// Attached to *every* panel-webview builder (cold `wm_open` path, pool
 /// pre-warm, dashboard-switch/discard reconcile, startup/spawn restore) —
@@ -304,8 +311,7 @@ fn wm_host_snapshot(window: Window, manager: State<'_, TerminalManager>) -> Host
 /// creation time and must already be in place before that later navigate
 /// call. The actual app-type gating happens inside
 /// `LayoutTree::track_navigated_url`, so this is a cheap no-op for every
-/// panel that isn't a Generic Web Widget. Always returns `true` (never
-/// blocks navigation).
+/// panel that isn't a Generic Web Widget.
 pub(crate) fn address_bar_navigation_handler(
     app: AppHandle,
     terminal_id: String,
@@ -1808,6 +1814,9 @@ pub fn run() {
             .manage(InstanceId(instance_id.clone()))
             .setup(move |app| {
                 let _startup = startup_setup.enter();
+                // Debug builds serve the UI from the dev server, a local
+                // origin: widgets must not load or navigate onto it.
+                widget_url::set_dev_url(app.config().build.dev_url.as_ref());
                 if let Some(server) = widget_server {
                     tauri::async_runtime::spawn(server.run());
                 }
@@ -2016,7 +2025,7 @@ pub fn run() {
                 let panels_to_restore = tree.panels_for_restore();
                 if !panels_to_restore.is_empty() {
                     for (label, url, channel) in &panels_to_restore {
-                        if let Ok(parsed_url) = crate::widget_url::parse(url) {
+                        if let Some(parsed_url) = crate::widget_url::parse_for_restore(label, url) {
                             let script = config::append_initial_channel(
                                 &panel_init_script,
                                 channel.as_deref(),
@@ -2043,11 +2052,6 @@ pub fn run() {
                             ) {
                                 tracing::warn!("restore panel '{label}': {e}");
                             }
-                        } else {
-                            tracing::warn!(
-                                "restore panel '{label}': invalid url '{}'",
-                                ot_telemetry::redact::url(url)
-                            );
                         }
                     }
                     {
