@@ -32,6 +32,12 @@ system or process spawning except through an explicitly validated path.
   (`http`/`https` only for widgets) with `ot_core::widget_url::parse_widget_url`; it also
   refuses `*.localhost` hosts, which are local origins with IPC (`tauri.localhost` on
   Windows). Use `localhost:<port>` for dev servers, not `myapp.localhost`.
+- Panel webviews and Desktop Agent app windows also refuse _navigation_ to a local origin
+  (`tauri:`, `ipc:`, `asset:`, custom schemes, `*.localhost`) or `file:`, via
+  `ot_core::widget_url::is_allowed_navigation`. On macOS the handler runs for every
+  frame, so it allows ordinary iframe content (`about:srcdoc`, `data:`, `blob:`); on
+  Windows it runs for the top-level page only, so `frame-ancestors 'none'` (below) is what
+  stops a widget framing the app's own pages.
 - Grant only what the app's **JS** calls. Windows, webviews and events driven from Rust
   need no capability. Current grants:
 
@@ -52,16 +58,19 @@ Each `tauri.conf.json` sets `app.security.csp`. Tauri applies it to the app's ow
 (Terminal chrome, overlay and popout chrome; Desktop Agent dashboard; the host's stub
 page) — **not** to widget pages, which load remote URLs or custom schemes.
 
-| Directive                                            | Terminal / Desktop Agent    | Why                                     |
-| ---------------------------------------------------- | --------------------------- | --------------------------------------- |
-| `default-src`, `script-src`, `style-src`             | `'self'`                    | Vite emits only bundled JS/CSS files    |
-| `img-src`, `font-src`                                | `'self' data:`              | Vite may inline small assets as `data:` |
-| `connect-src`                                        | `ipc: http://ipc.localhost` | Tauri IPC (macOS / Windows); no `fetch` |
-| `object-src`, `base-uri`, `form-action`, `frame-src` | `'none'`                    | Not used                                |
+| Directive                                            | Terminal / Desktop Agent    | Why                                                                                       |
+| ---------------------------------------------------- | --------------------------- | ----------------------------------------------------------------------------------------- |
+| `default-src`, `script-src`, `style-src`             | `'self'`                    | Vite emits only bundled JS/CSS files                                                      |
+| `img-src`, `font-src`                                | `'self' data:`              | Vite may inline small assets as `data:`                                                   |
+| `connect-src`                                        | `ipc: http://ipc.localhost` | Tauri IPC (macOS / Windows); no `fetch`                                                   |
+| `object-src`, `base-uri`, `form-action`, `frame-src` | `'none'`                    | Not used                                                                                  |
+| `frame-ancestors`                                    | `'none'`                    | A widget must not frame the app's pages (they have IPC); also set on `tauri-webview-host` |
 
 - React `style={{…}}` props are fine (set through the CSSOM). Literal `style="…"`
   markup, `<style>` elements, `dangerouslySetInnerHTML`, `innerHTML`, `eval` and remote
   scripts are not — and would also be blocked.
+- `frame-ancestors` only works because Tauri sends the CSP as a response header on its own
+  pages (a `<meta>` CSP ignores it). Dev builds (`devCsp: null`) don't send it.
 - Loading something new (a font, an image host, a `fetch` to the App Directory) means
   adding that exact source to the CSP in the same change.
 - `devCsp` is `null`: the Vite dev server needs inline scripts and an HMR websocket. The
