@@ -1774,6 +1774,16 @@ pub fn run() {
         }
     });
 
+    // Bundled sample widget: bound now so `bundled:sample-widget` resolves to
+    // its loopback URL before any panel webview exists; served in setup.
+    let sample_widget_server = match sample_widget::bind() {
+        Ok(s) => Some(s),
+        Err(e) => {
+            tracing::warn!("sample widget server not bound: {e}");
+            None
+        }
+    };
+
     let startup = telemetry.startup_span();
     let startup_setup = startup.clone();
     let app = startup.in_scope(|| {
@@ -1789,7 +1799,6 @@ pub fn run() {
                     })
                     .build(),
             )
-            .register_uri_scheme_protocol("sample-widget", sample_widget::handle)
             // After telemetry init, so the relay's drop counter uses the real meter.
             .manage(ot_telemetry::relay::Relay::new())
             .manage(widget_endpoint)
@@ -1800,6 +1809,9 @@ pub fn run() {
             .setup(move |app| {
                 let _startup = startup_setup.enter();
                 if let Some(server) = widget_server {
+                    tauri::async_runtime::spawn(server.run());
+                }
+                if let Some(server) = sample_widget_server {
                     tauri::async_runtime::spawn(server.run());
                 }
                 // ── Resolve the FDC3 Desktop Agent (docs/fdc3.md) ───────────────

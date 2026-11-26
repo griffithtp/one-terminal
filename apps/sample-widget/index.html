@@ -153,10 +153,10 @@
     <script type="module">
       // The plugin connects once per page. Using its shared connection lets the
       // Terminal's "Set channel" menu control this widget's channel.
-      import { getAgent } from "/fdc3-plugin.js";
+      import { getAgent } from "./fdc3-plugin.js";
       // In a OneTerminal window, report this page's errors to OneTerminal's
       // logs (`undefined` elsewhere, hence `telemetry?.`).
-      import { startWidgetTelemetry } from "/ot-telemetry.js";
+      import { startWidgetTelemetry } from "./ot-telemetry.js";
 
       const telemetry = startWidgetTelemetry({ captureConsole: true });
       const statusEl = document.getElementById("status");
@@ -166,10 +166,22 @@
       const tickerEl = document.getElementById("ticker");
       const broadcastBtn = document.getElementById("broadcast");
 
-      function log(msg) {
+      // Builds DOM nodes, never markup: logged values include FDC3 context
+      // and channel ids from other apps, which are untrusted.
+      // `log("Broadcast ", strong(ticker))` — strings become text nodes.
+      function strong(text) {
+        const el = document.createElement("strong");
+        el.textContent = String(text);
+        return el;
+      }
+
+      function log(...parts) {
         const entry = document.createElement("div");
         entry.className = "log-entry";
-        entry.innerHTML = `<span class="ts">${new Date().toTimeString().slice(0, 8)}</span>${msg}`;
+        const ts = document.createElement("span");
+        ts.className = "ts";
+        ts.textContent = new Date().toTimeString().slice(0, 8);
+        entry.append(ts, ...parts);
         logEl.prepend(entry);
         while (logEl.children.length > 30) logEl.removeChild(logEl.lastChild);
       }
@@ -196,7 +208,7 @@
         await fdc3.addEventListener("userChannelChanged", (e) => {
           const id = e.details.currentChannelId;
           showChannel(id);
-          log(id ? `Joined channel <strong>${id}</strong>` : "Left channel");
+          log(...(id ? ["Joined channel ", strong(id)] : ["Left channel"]));
         });
 
         // Inside a Terminal (OT_FDC3_INITIAL_CHANNEL defined, even as null)
@@ -210,7 +222,7 @@
           lastEl.textContent = JSON.stringify(ctx, null, 2);
           // `traceId` relates this record to the broadcast that delivered it.
           telemetry?.log("info", "instrument received", { traceId: meta?.traceId });
-          log(`Received instrument: <strong>${ctx.id?.ticker ?? ctx.name ?? "?"}</strong>`);
+          log("Received instrument: ", strong(ctx.id?.ticker ?? ctx.name ?? "?"));
         });
       } catch (e) {
         statusEl.textContent =
@@ -234,7 +246,7 @@
         };
         try {
           await fdc3.broadcast(context);
-          log(`Broadcast <strong>${ticker}</strong>`);
+          log("Broadcast ", strong(ticker));
         } catch (e) {
           log(`Broadcast failed: ${e.message}`);
           telemetry?.error(e, { attributes: { "fdc3.op": "broadcast" } });
