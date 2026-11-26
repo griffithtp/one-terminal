@@ -2,25 +2,18 @@
   "schemaVersion": 1,
   "versions": [
     {
+      "version": "0.4.4",
+      "releaseDate": "2026-11-26",
+      "breaking": false,
+      "changelogUrl": "https://github.com/one-terminal/one-terminal/releases/tag/v0.4.4",
+      "migrations": []
+    },
+    {
       "version": "0.4.3",
       "releaseDate": "2026-11-26",
       "breaking": false,
       "changelogUrl": "https://github.com/one-terminal/one-terminal/releases/tag/v0.4.3",
       "migrations": [
-        {
-          "type": "structural",
-          "id": "0.4.3-lib-rs",
-          "target": "apps/desktop-agent/src-tauri/src/lib.rs",
-          "description": "Desktop Agent: in-process app windows refuse navigation to local origins (the agent's own, custom schemes), file: and other non-http(s) URLs",
-          "operations": [
-            {
-              "op": "insert-after-line-matching",
-              "pattern": ".initialization_script(endpoint.init_script(label, Some(app_id)))",
-              "content": "                // The page may not navigate itself to a local origin (the\n                // agent's own, a custom scheme) or `file:` either.\n                .on_navigation(ot_core::widget_url::is_allowed_navigation)"
-            }
-          ],
-          "appliesTo": "enterprise"
-        },
         {
           "type": "config-merge",
           "id": "0.4.3-desktop-agent-csp",

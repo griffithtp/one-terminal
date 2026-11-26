@@ -124,16 +124,17 @@ changing those, templates drift and CI's template-drift check fails until you ru
 
 ## Key port defaults (all overridable via env vars)
 
-| Service              | Port                    | Env var                                                        |
-| -------------------- | ----------------------- | -------------------------------------------------------------- |
-| App Directory        | 3005                    | `OT_APP_DIR_URL` (agent) / `PORT` (standalone server)          |
-| FDC3 Bus WS          | 7891                    | `OT_FDC3_BUS_PORT`                                             |
-| Instance discovery   | ephemeral (OS-assigned) | —                                                              |
-| Widget telemetry     | ephemeral (OS-assigned) | — (one per Terminal / Desktop Agent process, `127.0.0.1` only) |
-| sample-ticker        | 3010                    | —                                                              |
-| sample-chart         | 3011                    | —                                                              |
-| sample-widget        | 3012                    | —                                                              |
-| App Directory UI dev | 5174                    | — (`npm run dev:app-directory`, proxies to 3005)               |
+| Service               | Port                    | Env var                                                                     |
+| --------------------- | ----------------------- | --------------------------------------------------------------------------- |
+| App Directory         | 3005                    | `OT_APP_DIR_URL` (agent) / `PORT` (standalone server)                       |
+| FDC3 Bus WS           | 7891                    | `OT_FDC3_BUS_PORT`                                                          |
+| Instance discovery    | ephemeral (OS-assigned) | —                                                                           |
+| Widget telemetry      | ephemeral (OS-assigned) | — (one per Terminal / Desktop Agent process, `127.0.0.1` only)              |
+| Bundled sample widget | ephemeral (OS-assigned) | — (one per Terminal process, `127.0.0.1` only, under `/_ot/sample-widget/`) |
+| sample-ticker         | 3010                    | —                                                                           |
+| sample-chart          | 3011                    | —                                                                           |
+| sample-widget         | 3012                    | —                                                                           |
+| App Directory UI dev  | 5174                    | — (`npm run dev:app-directory`, proxies to 3005)                            |
 
 ## Environment variables
 

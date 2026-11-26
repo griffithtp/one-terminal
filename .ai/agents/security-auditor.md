@@ -34,9 +34,9 @@ it; do flag any change that relies on a known gap being closed.
    callable from any webview Tauri treats as local, so ask which webviews those are.
 3. **Local vs remote webviews** — which webviews load app assets (local, get IPC)
    versus widget URLs (remote, no IPC). Check custom URI schemes
-   (`register_uri_scheme_protocol`, e.g. `sample-widget://`): if Tauri treats a custom
-   scheme as local, pages served from it reach app commands — verify against Tauri's
-   origin rules and report what you find.
+   (`register_uri_scheme_protocol`): Tauri treats them as local, so pages served from
+   one reach every app command. No widget content may be served that way — the bundled
+   sample widget is served over loopback HTTP for this reason; flag any new scheme.
 4. **CSP** (`tauri.conf.json` → `app.security.csp`) — no `'unsafe-inline'`,
    `'unsafe-eval'`, wildcards or remote origins without a reason; new frontend code that
    needs a new source (fonts, images, fetch) updates the CSP deliberately. No

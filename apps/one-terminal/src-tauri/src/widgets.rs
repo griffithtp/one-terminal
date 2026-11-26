@@ -202,22 +202,16 @@ fn resolve_path(path: &str, resource_dir: Option<&Path>) -> Option<PathBuf> {
 }
 
 /// `widgets.config.json` uses this sentinel instead of a literal URL for the
-/// bundled `sample-widget` demo, since the registered `sample-widget://` URI
-/// scheme's Origin differs by platform (see `register_uri_scheme_protocol`'s
-/// docs): `<scheme>://localhost/` on macOS/iOS/Linux vs
-/// `http://<scheme>.localhost/` on Windows/Android. Resolving it here keeps
-/// the JSON config platform-agnostic.
+/// bundled `sample-widget` demo, whose loopback port is only known at run
+/// time (see `sample_widget.rs`). If its server failed to bind, the sentinel
+/// is left as is and the widget URL policy refuses it.
 const BUNDLED_SAMPLE_WIDGET_URL: &str = "bundled:sample-widget";
 
 fn resolve_widget_url(url: String) -> String {
     if url != BUNDLED_SAMPLE_WIDGET_URL {
         return url;
     }
-    if cfg!(any(target_os = "windows", target_os = "android")) {
-        "http://sample-widget.localhost/".into()
-    } else {
-        "sample-widget://localhost/".into()
-    }
+    crate::sample_widget::url().map_or(url, str::to_string)
 }
 
 fn local_widget_to_value(w: LocalWidget) -> Value {
@@ -259,10 +253,13 @@ mod tests {
     }
 
     #[test]
-    fn bundled_sample_widget_sentinel_resolves_to_registered_scheme() {
+    fn bundled_sample_widget_sentinel_resolves_to_its_loopback_server() {
+        if crate::sample_widget::url().is_none() {
+            let _ = crate::sample_widget::bind();
+        }
         let resolved = resolve_widget_url(BUNDLED_SAMPLE_WIDGET_URL.into());
-        assert_ne!(resolved, BUNDLED_SAMPLE_WIDGET_URL);
-        assert!(resolved.contains("sample-widget"));
+        assert_eq!(Some(resolved.as_str()), crate::sample_widget::url());
+        assert!(resolved.starts_with("http://127.0.0.1:"));
     }
 
     #[test]
