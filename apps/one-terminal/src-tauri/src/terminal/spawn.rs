@@ -415,6 +415,12 @@ fn spawn_or_restore(
                 ) {
                     tracing::warn!("restore panel '{panel_label}': {e}");
                 }
+            } else {
+                tracing::warn!(
+                    ot.window = %panel_label,
+                    "panel not restored: refused URL {}",
+                    ot_telemetry::redact::url(url)
+                );
             }
         }
         {

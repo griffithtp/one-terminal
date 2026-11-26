@@ -72,6 +72,8 @@ mod tests {
     fn navigation_policy() {
         let nav = |s: &str| allows_navigation(&s.parse().unwrap());
         assert!(nav("about:blank"));
+        assert!(nav("about:srcdoc"));
+        assert!(nav("data:text/html,x"));
         assert!(nav("https://example.com/next"));
         assert!(nav("sample-widget://localhost/page"));
         assert!(!nav("tauri://localhost/"));

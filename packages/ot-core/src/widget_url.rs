@@ -76,16 +76,20 @@ pub fn check_widget_url(url: &Url) -> Result<(), WidgetUrlError> {
     Ok(())
 }
 
-/// Whether a panel webview may *navigate* to `url` after it has loaded.
+/// Whether a panel webview (or any frame in it) may *navigate* to `url`.
 ///
-/// Everything [`check_widget_url`] allows, plus `about:blank` (pre-warmed pool
-/// webviews start there) and `blob:` (inherits the origin of the page that
-/// created it, so it is never a local origin unless that page already was).
+/// On macOS the navigation handler runs for every frame, so this must not
+/// refuse ordinary iframe content. It allows [`check_widget_url`]'s http(s)
+/// URLs plus schemes that are never a local origin: `about:` (`blank`,
+/// `srcdoc`) and `blob:` inherit their creator's origin, `data:` is opaque,
+/// `javascript:` runs in the current page, `mailto:` / `tel:` hand off to the
+/// OS. Everything else — `tauri:`, `ipc:`, `asset:`, any custom scheme,
+/// `file:` — is refused, as are `*.localhost` hosts.
 pub fn is_allowed_navigation(url: &Url) -> bool {
     match url.scheme() {
-        "about" => url.as_str() == "about:blank",
-        "blob" => true,
-        _ => check_widget_url(url).is_ok(),
+        "http" | "https" => check_widget_url(url).is_ok(),
+        "about" | "blob" | "data" | "javascript" | "mailto" | "tel" => true,
+        _ => false,
     }
 }
 
@@ -168,16 +172,32 @@ mod tests {
     }
 
     #[test]
-    fn navigation_allows_blank_and_blob_only_beyond_widget_urls() {
+    fn navigation_allows_iframe_content_but_not_local_origins() {
         let nav = |s: &str| is_allowed_navigation(&Url::parse(s).unwrap());
-        assert!(nav("about:blank"));
-        assert!(nav("blob:https://example.com/3f2c-uuid"));
-        assert!(nav("https://example.com/next"));
-        assert!(!nav("about:srcdoc"));
-        assert!(!nav("tauri://localhost/"));
-        assert!(!nav("http://tauri.localhost/"));
-        assert!(!nav("file:///C:/Windows/"));
-        assert!(!nav("data:text/html,x"));
+        for s in [
+            "about:blank",
+            "about:srcdoc",
+            "blob:https://example.com/3f2c-uuid",
+            "data:text/html,x",
+            "javascript:void(0)",
+            "mailto:a@example.com",
+            "https://example.com/next",
+            "http://localhost:3010/",
+        ] {
+            assert!(nav(s), "{s} should be allowed");
+        }
+        for s in [
+            "tauri://localhost/",
+            "http://tauri.localhost/",
+            "https://tauri.localhost/",
+            "ipc://localhost/cmd",
+            "asset://localhost/x",
+            "sample-widget://localhost/",
+            "http://sample-widget.localhost/",
+            "file:///C:/Windows/",
+        ] {
+            assert!(!nav(s), "{s} should be refused");
+        }
     }
 
     #[test]
