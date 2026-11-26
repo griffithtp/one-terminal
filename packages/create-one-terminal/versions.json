@@ -20,6 +20,54 @@
             }
           ],
           "appliesTo": "enterprise"
+        },
+        {
+          "type": "config-merge",
+          "id": "0.4.3-desktop-agent-csp",
+          "target": "apps/desktop-agent/src-tauri/tauri.conf.json",
+          "description": "Desktop Agent CSP: frame-ancestors 'none' so widget pages can't frame the app's own pages",
+          "patch": {
+            "app": {
+              "security": {
+                "csp": {
+                  "frame-ancestors": "'none'"
+                }
+              }
+            }
+          },
+          "appliesTo": "enterprise"
+        },
+        {
+          "type": "config-merge",
+          "id": "0.4.3-webview-host-csp",
+          "target": "apps/tauri-webview-host/src-tauri/tauri.conf.json",
+          "description": "tauri-webview-host CSP: frame-ancestors 'none' so widget pages can't frame the app's own pages",
+          "patch": {
+            "app": {
+              "security": {
+                "csp": {
+                  "frame-ancestors": "'none'"
+                }
+              }
+            }
+          },
+          "appliesTo": "enterprise"
+        },
+        {
+          "type": "config-merge",
+          "id": "0.4.3-terminal-csp",
+          "target": "apps/one-terminal/src-tauri/tauri.conf.json",
+          "description": "Terminal CSP: frame-ancestors 'none' so widget pages can't frame the app's own pages",
+          "patch": {
+            "app": {
+              "security": {
+                "csp": {
+                  "frame-ancestors": "'none'"
+                }
+              }
+            }
+          },
+          "appliesTo": "both"
         }
       ]
     },
