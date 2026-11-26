@@ -143,15 +143,14 @@ it hosts.
 
 Not yet verified — check before relying on either:
 
-- **Custom scheme widgets and IPC — answered: yes; mitigated.** Tauri treats registered
-  custom schemes as local origins (`is_local_url` in `tauri/src/webview/mod.rs`), so the
-  `sample-widget://` page can call every Terminal app command. Widget URLs are now
-  refused when they point at a local origin (custom schemes, `*.localhost`), with one
-  exception in the Terminal: the bundled sample widget (`sample-widget://localhost`,
-  `http(s)://sample-widget.localhost`), which serves only fixed, first-party files
-  (`sample_widget.rs`). Any other local widget served this way would need to be trusted
-  code. The log relay refuses it by webview label. To remove the exception: serve local
-  widgets over `http://127.0.0.1`, or restrict app commands with an app manifest.
+- **Custom scheme widgets and IPC — answered: yes; closed.** Tauri treats registered
+  custom schemes as local origins (`is_local_url` in `tauri/src/webview/mod.rs`), so a
+  page served from one can call every Terminal app command — and "first-party" isn't
+  enough: the bundled sample widget renders other apps' FDC3 context, and an XSS there
+  meant Terminal IPC. Never serve widget content from a custom scheme. The sample widget
+  is served over HTTP on `127.0.0.1` with an OS-assigned port (`sample_widget.rs`), a
+  remote origin with no IPC, and the widget URL policy has no exceptions. A saved
+  session's old `sample-widget://` URL is mapped to the loopback server on restore.
 - **Electron host navigation.** `apps/electron-host` runs pages with
   `nodeIntegration: false` and `contextIsolation: true` and no preload, but doesn't
   restrict `window.open` or navigation. Low risk without Node access; decide whether
