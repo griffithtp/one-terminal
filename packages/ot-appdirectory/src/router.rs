@@ -101,6 +101,16 @@ async fn create_app(
             .into_response();
     }
 
+    if let Err(err) = ot_core::widget_url::parse_widget_url(&body.details.url) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                message: format!("Invalid details.url: {err}"),
+            }),
+        )
+            .into_response();
+    }
+
     if let Some(err) = validate_engine_bindings(&body.engine_bindings) {
         return (
             StatusCode::BAD_REQUEST,
@@ -134,6 +144,16 @@ async fn update_app(
             StatusCode::BAD_REQUEST,
             Json(ErrorResponse {
                 message: "Missing required fields: appId, title, type, details.url".into(),
+            }),
+        )
+            .into_response();
+    }
+
+    if let Err(err) = ot_core::widget_url::parse_widget_url(&body.details.url) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(ErrorResponse {
+                message: format!("Invalid details.url: {err}"),
             }),
         )
             .into_response();

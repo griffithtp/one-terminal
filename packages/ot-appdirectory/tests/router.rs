@@ -282,3 +282,54 @@ async fn app_channels_and_fdc3_version_round_trip() {
     assert_eq!(body["fdc3Version"], ">=3.0");
     assert_eq!(body["interop"]["appChannels"][0]["id"], "prices");
 }
+
+#[tokio::test]
+async fn local_origin_and_non_http_urls_are_rejected() {
+    for url in [
+        "tauri://localhost/index.html",
+        "http://tauri.localhost/",
+        "sample-widget://localhost/",
+        "file:///etc/passwd",
+        "javascript:alert(1)",
+    ] {
+        let (status, body) = post_app(json!({
+            "appId": "bad-url",
+            "title": "Bad URL",
+            "type": "web",
+            "details": { "url": url }
+        }))
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST, "{url}");
+        assert!(
+            body["message"]
+                .as_str()
+                .unwrap()
+                .starts_with("Invalid details.url"),
+            "{url}: {body}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn update_with_a_local_origin_url_is_rejected() {
+    let resp = app()
+        .oneshot(
+            Request::builder()
+                .method("PUT")
+                .uri("/v2/apps/chart-viewer")
+                .header("content-type", "application/json")
+                .body(Body::from(
+                    json!({
+                        "appId": "chart-viewer",
+                        "title": "Chart",
+                        "type": "web",
+                        "details": { "url": "http://tauri.localhost/" }
+                    })
+                    .to_string(),
+                ))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+}

@@ -1982,7 +1982,7 @@ impl LayoutTree {
                     park_label_offscreen(&app_for_main, label);
                 }
                 for (label, url, channel) in &to_create {
-                    if let Ok(parsed) = url.parse::<tauri::Url>() {
+                    if let Ok(parsed) = crate::widget_url::parse(url) {
                         let script =
                             crate::config::append_initial_channel(&base_script, channel.as_deref());
                         win_for_main

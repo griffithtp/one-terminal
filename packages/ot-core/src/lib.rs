@@ -6,3 +6,4 @@
 pub mod electron_host;
 pub mod engine;
 pub mod plugin;
+pub mod widget_url;
