@@ -69,9 +69,10 @@ I/O is requested by returning an `Effect` (`Launch`, `ExpireAfter`, `CloseWindow
 
 ## Identity and trust
 
-The `appId` is self-asserted (query string) and the bus does not check `Origin` — see
+The bus binds the claimed `appId` to the connection's `Origin` through the App Directory;
+non-browser and loopback clients are still trusted with the `appId` they claim — see
 [security.md](security.md#fdc3-bus). Don't add behaviour that grants privileges based on
-`appId` until that is fixed.
+`appId` alone.
 
 ## Testing a change
 

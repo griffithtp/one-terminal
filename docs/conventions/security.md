@@ -9,7 +9,7 @@ system or process spawning except through an explicitly validated path.
 | Boundary                                                                     | Untrusted side                     | Guard                                                                                                                                                                                                                     |
 | ---------------------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Panel webview → Tauri IPC                                                    | Widget pages (any URL)             | Tauri capabilities (local origins only)                                                                                                                                                                                   |
-| Widget → FDC3 bus (`ws://127.0.0.1:7891/fdc3`)                               | Any local process or web page      | WCP handshake (see gaps below)                                                                                                                                                                                            |
+| Widget → FDC3 bus (`ws://127.0.0.1:7891/fdc3`)                               | Any local process or web page      | `Origin` bound to the claimed `appId` via the App Directory before the upgrade (`fdc3_bus::admission`, see below)                                                                                                         |
 | Widget / app URL → webview or window creation and navigation                 | Config, directory records, widgets | `ot_core::widget_url`: http(s) with a host, never a local origin; enforced at every creation site, in `on_navigation` and in `tauri-webview-host` (see below)                                                             |
 | Client → App Directory REST (`:3005`)                                        | Admin UI, scripts, browsers        | Loopback bind; CORS on the standalone server; auth planned                                                                                                                                                                |
 | App Directory / plugin manifest → process spawn                              | Directory records, `manifest.json` | Engine catalog checksums; launch routing in `engines/router.rs`                                                                                                                                                           |
@@ -92,18 +92,32 @@ page) — **not** to widget pages, which load remote URLs or custom schemes.
 
 The bus binds to `127.0.0.1` only — keep it that way (never `0.0.0.0`).
 
-**Known gaps (not yet fixed — don't build on these assumptions):**
+Browsers don't apply CORS to WebSockets, so the bus checks the upgrade request's
+`Origin` header — which a page can't set — against the claimed `?appId=`
+(`fdc3_bus::admission`, before the socket opens):
 
-- The `appId` is self-asserted: it comes from the `?appId=` query string (default
-  `unknown-app`) and isn't checked against where the page was loaded from.
-- The WebSocket upgrade doesn't check `Origin`. Browsers don't apply CORS to WebSockets,
-  so any web page open in the user's normal browser can connect to the local bus.
+| `Origin`                                           | Admitted as                                                                    |
+| -------------------------------------------------- | ------------------------------------------------------------------------------ |
+| none (native apps, Node tests)                     | the claimed `appId` — only a local process can be such a client                |
+| loopback (`localhost`, `127.0.0.0/8`, `[::1]`)     | the claimed `appId` — only a local process can serve such a page               |
+| the origin of an App Directory app's `details.url` | that app, if the claimed `appId` is one of the apps at that origin; else `403` |
+| anything else, `null`, unparsable                  | refused (`403`)                                                                |
 
-Consequences: any page can claim to be any app, broadcast on user channels, raise intents
-and trigger `open` (which launches apps). New broker features that grant power to a
-specific `appId` (permissions, privileged intents) must first close these gaps — e.g.
-an Origin allow-list, plus a per-panel token injected by the Terminal into each webview
-it hosts.
+To let a web app connect, register it in the App Directory; there is no allow-list
+setting.
+
+**Remaining gaps:**
+
+- Local processes and loopback pages can still claim any `appId`.
+- App Directory writes are unauthenticated, so a local process can register an app at an
+  attacker's origin (see below).
+- Two apps sharing an origin can claim each other's `appId`.
+- The check identifies the origin, not the window: two instances of the same app are
+  indistinguishable.
+
+New broker features that grant power to a specific `appId` (permissions, privileged
+intents) need more than this — e.g. App Directory authentication plus a per-panel token
+injected by the Terminal into each webview it hosts.
 
 ## App Directory
 
