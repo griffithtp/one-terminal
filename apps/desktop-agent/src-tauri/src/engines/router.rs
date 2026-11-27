@@ -229,17 +229,24 @@ mod tests {
 
     use super::super::OsKey;
 
+    /// Removes a test's temp root when dropped.
+    struct TempRoot(std::path::PathBuf);
+
+    impl Drop for TempRoot {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
     /// A manifest loaded from a fresh `<tmp>/plugins/<family>/` folder.
-    fn plugin(family: &str, binary: &str) -> (std::path::PathBuf, EngineManifest) {
+    fn plugin(family: &str, binary: &str) -> (TempRoot, std::path::PathBuf, EngineManifest) {
         static N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
-        let dir = std::env::temp_dir()
-            .join(format!(
-                "da-router-plugin-{}-{}",
-                std::process::id(),
-                N.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-            ))
-            .join("plugins")
-            .join(family);
+        let root = std::env::temp_dir().join(format!(
+            "da-router-plugin-{}-{}",
+            std::process::id(),
+            N.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+        ));
+        let dir = root.join("plugins").join(family);
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("manifest.json");
         std::fs::write(
@@ -249,7 +256,7 @@ mod tests {
             ),
         )
         .unwrap();
-        (dir, EngineManifest::load(&path).unwrap())
+        (TempRoot(root), dir, EngineManifest::load(&path).unwrap())
     }
 
     fn custom(family: &str) -> InstalledEngine {
@@ -263,15 +270,17 @@ mod tests {
 
     #[test]
     fn spawn_binary_plans_an_absolute_path_in_the_plugin_folder() {
-        let (dir, m) = plugin("cef", "cef-host");
-        std::fs::write(dir.join("cef-host"), b"").unwrap();
+        let (_root, dir, m) = plugin("cef", "cef-host");
+        let file = format!("cef-host{}", std::env::consts::EXE_SUFFIX);
+        std::fs::write(dir.join(&file), b"").unwrap();
         let plan =
             plan_from_manifest(&m, &custom("cef"), "https://x/".into(), "T".into(), "a").unwrap();
         let LaunchPlan::SpawnBinary { binary, env_vars } = plan else {
             panic!("expected SpawnBinary");
         };
         assert!(binary.is_absolute());
-        assert_eq!(binary, dir.canonicalize().unwrap().join("cef-host"));
+        assert!(binary.ends_with(&file), "{}", binary.display());
+        assert!(!binary.to_string_lossy().starts_with(r"\\?\"));
         assert_eq!(
             env_vars,
             vec![("X_URL".to_string(), "https://x/".to_string())]
@@ -281,7 +290,7 @@ mod tests {
     #[test]
     fn spawn_binary_refuses_a_path_or_a_missing_binary() {
         for name in ["../../../bin/sh", "sh"] {
-            let (_dir, m) = plugin("cef", name);
+            let (_root, _dir, m) = plugin("cef", name);
             assert!(
                 plan_from_manifest(&m, &custom("cef"), "https://x/".into(), "T".into(), "a")
                     .is_err(),
@@ -297,7 +306,8 @@ mod tests {
         let m = EngineManifest::load(&path).unwrap();
         assert!(matches!(
             m.launch_mode,
-            ot_core::plugin::LaunchMode::SpawnBinary { ref binary_name, .. } if binary_name == "cef-host"
+            ot_core::plugin::LaunchMode::SpawnBinary { ref binary_name, ref env_templates }
+                if binary_name == "cef-host" && env_templates.len() == 4
         ));
     }
 

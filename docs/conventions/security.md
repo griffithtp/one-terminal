@@ -125,16 +125,29 @@ it hosts.
 
 - Engine runtime downloads are verified with SHA-256 against the catalog. Never add a
   download path that skips verification.
+- An engine binding's family and version become folder names under the engine cache
+  (`binding_path`). Installers call `ot_core::engine::check_binding` first, which refuses
+  anything but a plain name (`[A-Za-z0-9._-]`, not `.`/`..`, not a Windows device name)
+  and the reserved family `plugins`, so a catalog or App Directory entry can't install
+  into the plugin folder or outside the cache. `binding_path` itself maps such names to
+  a `_`-prefixed stand-in, so other callers can't escape either.
 - Archives are extracted entry by entry (`extract_zip` in both apps): paths confined with
   `enclosed_name()`, contents streamed with `io::copy` (never sized from the entry
   header), no symlinks created, no permission bits applied. Don't switch to
   `ZipArchive::extract()`.
 - Plugin `LaunchMode::SpawnBinary` binaries are resolved by
   `EngineManifest::resolve_binary` to an absolute, canonical path inside the manifest's
-  own folder (`<engine-cache>/plugins/<family>/`, plus `.exe` on Windows) and spawned from
-  that folder — never looked up on `PATH`. Names with a path separator, `..`, `:` or NUL
-  are refused, as is a file whose canonical path (e.g. through a symlink) leaves the
-  folder. Never pass a manifest-supplied name to `Command::new` directly.
+  own folder (`<engine-cache>/plugins/<family>/`) and spawned from that folder — never
+  looked up on `PATH`. Names with a path separator, `..`, `:` or NUL are refused, as is a
+  file whose canonical path (e.g. through a symlink) leaves the folder. On Windows the
+  canonical file must be an `.exe` (`cef-host` finds `cef-host.exe`, tried first):
+  `.bat`/`.cmd` would run through `cmd.exe`, where `envTemplates` values can inject
+  commands. The path handed to the OS has Windows' `\\?\` prefix removed. Never pass a
+  manifest-supplied name to `Command::new` directly.
+- `envTemplates` values (`{{url}}`, `{{title}}`, `{{app_id}}`) come from App Directory
+  records, which any local process can write: plugin binaries must treat them as
+  untrusted. Templates are expanded in one pass, so a value can't smuggle in another
+  placeholder.
 - Pass untrusted values (`{{url}}`, `{{title}}`, `{{app_id}}`) as discrete arguments or
   env vars — never through a shell (`sh -c`, `cmd /C`).
 - Native app launch (planned) must be allow-list based
