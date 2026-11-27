@@ -21,6 +21,7 @@ use axum::{
         ws::{Message, WebSocket},
         Query, State, WebSocketUpgrade,
     },
+    http::{header, HeaderMap, StatusCode},
     response::IntoResponse,
     routing::get,
     Router,
@@ -37,6 +38,7 @@ use tracing::Instrument;
 use crate::app_dir::AppRecord;
 use crate::broker::{Broker, Effect};
 
+pub mod admission;
 mod instrument;
 use instrument::{BusMetrics, HandshakeEnd};
 
@@ -91,11 +93,31 @@ pub async fn start(port: u16, broker: Broker, host: Arc<dyn BusHost>) {
 
 async fn ws_handler(
     ws: WebSocketUpgrade,
+    headers: HeaderMap,
     Query(params): Query<ConnectParams>,
     State(state): State<BusState>,
-) -> impl IntoResponse {
+) -> axum::response::Response {
     let app_id = params.app_id.unwrap_or_else(|| "unknown-app".to_string());
-    ws.on_upgrade(move |socket| handle_connection(socket, app_id, state))
+    // Bind the claimed app id to the page's Origin before the socket opens:
+    // see `admission` for the rule.
+    let origin = headers
+        .get(header::ORIGIN)
+        .map(|v| v.to_str().unwrap_or("<non-ascii>"));
+    let directory = state.host.directory().await;
+    match admission::admit(origin, &app_id, &directory) {
+        Ok(_) => ws
+            .on_upgrade(move |socket| handle_connection(socket, app_id, state))
+            .into_response(),
+        Err(refused) => {
+            state.metrics.handshake_failed(HandshakeEnd::Refused);
+            tracing::warn!(
+                app_id = %crate::broker::clip_untrusted(&app_id),
+                origin = %crate::broker::clip_untrusted(origin.unwrap_or_default()),
+                "refused bus connection: {refused}"
+            );
+            (StatusCode::FORBIDDEN, refused.to_string()).into_response()
+        }
+    }
 }
 
 async fn handle_connection(socket: WebSocket, app_id: String, state: BusState) {
@@ -259,6 +281,96 @@ fn perform(effects: Vec<Effect>, state: &BusState) {
                     broker.close_failed(&instance_id, &request_uuid);
                 }
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod upgrade_tests {
+    use super::*;
+    use crate::app_dir::AppDetails;
+    use crate::broker::{BrokerEvent, BrokerEvents};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    struct NoEvents;
+    impl BrokerEvents for NoEvents {
+        fn emit(&self, _event: BrokerEvent) {}
+    }
+
+    struct Host(Vec<AppRecord>);
+    impl BusHost for Host {
+        fn directory(&self) -> BoxFuture<'_, Vec<AppRecord>> {
+            Box::pin(async move { self.0.clone() })
+        }
+        fn launch(&self, _app: AppRecord) -> BoxFuture<'_, Result<Option<String>, String>> {
+            Box::pin(async { Ok(None) })
+        }
+        fn close_window(&self, _label: &str) -> Result<(), String> {
+            Ok(())
+        }
+    }
+
+    async fn serve() -> std::net::SocketAddr {
+        let host = Host(vec![AppRecord {
+            app_id: "blotter".into(),
+            details: Some(AppDetails {
+                url: Some("https://apps.example.com/blotter/".into()),
+            }),
+            ..Default::default()
+        }]);
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let app = router(Broker::new(Arc::new(NoEvents)), Arc::new(host));
+        tokio::spawn(async move {
+            let _ = axum::serve(listener, app).await;
+        });
+        addr
+    }
+
+    /// Send a WebSocket upgrade request and return the response status code.
+    async fn upgrade_status(addr: std::net::SocketAddr, app_id: &str, origin: Option<&str>) -> u16 {
+        let mut s = tokio::net::TcpStream::connect(addr).await.unwrap();
+        let origin = origin
+            .map(|o| format!("Origin: {o}\r\n"))
+            .unwrap_or_default();
+        let req = format!(
+            "GET /fdc3?appId={app_id} HTTP/1.1\r\nHost: {addr}\r\nUpgrade: websocket\r\n\
+             Connection: Upgrade\r\nSec-WebSocket-Version: 13\r\n\
+             Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n{origin}\r\n"
+        );
+        s.write_all(req.as_bytes()).await.unwrap();
+        let mut buf = [0u8; 64];
+        let n = s.read(&mut buf).await.unwrap();
+        let head = String::from_utf8_lossy(&buf[..n]);
+        head.split_whitespace().nth(1).unwrap().parse().unwrap()
+    }
+
+    #[tokio::test]
+    async fn the_bus_refuses_unknown_origins_before_the_upgrade() {
+        let addr = serve().await;
+        // Non-browser and loopback clients: as before.
+        assert_eq!(upgrade_status(addr, "anything", None).await, 101);
+        assert_eq!(
+            upgrade_status(addr, "anything", Some("http://localhost:3010")).await,
+            101
+        );
+        // A registered origin, as its own app.
+        assert_eq!(
+            upgrade_status(addr, "blotter", Some("https://apps.example.com")).await,
+            101
+        );
+        // A random web page, a registered origin claiming another id, an
+        // opaque origin: refused.
+        for (id, origin) in [
+            ("blotter", "https://evil.example"),
+            ("someone-else", "https://apps.example.com"),
+            ("blotter", "null"),
+        ] {
+            assert_eq!(
+                upgrade_status(addr, id, Some(origin)).await,
+                403,
+                "{id} {origin}"
+            );
         }
     }
 }

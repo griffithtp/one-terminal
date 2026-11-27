@@ -121,6 +121,10 @@
       "overlay": "enterprise"
     },
     {
+      "path": "apps/desktop-agent/src-tauri/src/fdc3_bus/admission.rs",
+      "overlay": "enterprise"
+    },
+    {
       "path": "apps/desktop-agent/src-tauri/src/fdc3_bus/instrument.rs",
       "overlay": "enterprise"
     },
