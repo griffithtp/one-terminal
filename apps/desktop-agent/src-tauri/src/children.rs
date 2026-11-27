@@ -197,7 +197,8 @@ impl TerminalRegistry {
         self.0.kill_all(force, false);
     }
 
-    #[cfg(test)]
+    /// Only the Unix process tests call this; on Windows it would be dead code.
+    #[cfg(all(test, unix))]
     pub fn pids(&self) -> Vec<u32> {
         self.0.pids()
     }
