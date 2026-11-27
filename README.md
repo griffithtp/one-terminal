@@ -317,12 +317,12 @@ Drop a `manifest.json` into `<engine-cache>/plugins/<family>/` to register a new
 
 **`launchMode.type` values:**
 
-| Type                | Behaviour                                                   |
-| ------------------- | ----------------------------------------------------------- |
-| `inProcess`         | Render inside the Desktop Agent Tauri webview               |
-| `spawnTauriHost`    | Spawn `tauri-webview-host` binary                           |
-| `spawnElectronHost` | Spawn `apps/electron-host` via Electron                     |
-| `spawnBinary`       | Spawn an arbitrary binary with env vars from `envTemplates` |
+| Type                | Behaviour                                                                         |
+| ------------------- | --------------------------------------------------------------------------------- |
+| `inProcess`         | Render inside the Desktop Agent Tauri webview                                     |
+| `spawnTauriHost`    | Spawn `tauri-webview-host` binary                                                 |
+| `spawnElectronHost` | Spawn `apps/electron-host` via Electron                                           |
+| `spawnBinary`       | Spawn `binaryName` from the plugin's own folder with env vars from `envTemplates` |
 
 **Template variables** in `envTemplates.value`:
 

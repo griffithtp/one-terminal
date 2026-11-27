@@ -459,11 +459,14 @@ async fn run_plan(
                 },
             )
         }
-        LaunchPlan::SpawnBinary {
-            binary_name,
-            env_vars,
-        } => {
-            let mut cmd = std::process::Command::new(&binary_name);
+        LaunchPlan::SpawnBinary { binary, env_vars } => {
+            // `binary` is an absolute path inside the plugin's folder, so no
+            // `PATH` lookup happens; run it from that folder so relative
+            // lookups (config, DLLs on Windows) stay inside it too.
+            let mut cmd = std::process::Command::new(&binary);
+            if let Some(dir) = binary.parent() {
+                cmd.current_dir(dir);
+            }
             for (k, v) in env_vars {
                 cmd.env(k, v);
             }
@@ -471,7 +474,7 @@ async fn run_plan(
             inject_env(&mut cmd, ChildKind::Untrusted);
             cmd.spawn()
                 .map(|_| ())
-                .map_err(|e| format!("Failed to spawn plugin binary '{binary_name}': {e}"))
+                .map_err(|e| format!("Failed to spawn plugin binary {}: {e}", binary.display()))
         }
     }
 }
