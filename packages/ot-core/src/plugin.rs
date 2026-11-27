@@ -26,10 +26,16 @@
 //! # The plugin binary
 //!
 //! `binaryName` is a bare file name inside the manifest's own folder
-//! (`<engine-cache>/plugins/<family>/cef-host`, plus `.exe` on Windows). It is
-//! never looked up on `PATH`: [`EngineManifest::resolve_binary`] refuses names
-//! with path separators, `..` or a drive prefix, and a file that resolves
-//! (through a symlink, say) to anywhere outside that folder.
+//! (`<engine-cache>/plugins/<family>/cef-host`). It is never looked up on
+//! `PATH`: [`EngineManifest::resolve_binary`] refuses names with path
+//! separators, `..` or a drive prefix, and a file that resolves (through a
+//! symlink, say) to anywhere outside that folder. On Windows it must be a
+//! real `.exe` (`cef-host` finds `cef-host.exe`): `.bat` / `.cmd` would run
+//! through `cmd.exe`, where values passed on from `envTemplates` can inject
+//! commands.
+//!
+//! `envTemplates` values carry App Directory data (the URL and title of the
+//! app being launched): plugin binaries must treat them as untrusted input.
 //!
 //! # Template variables
 //!
@@ -39,6 +45,7 @@
 //! - `{{app_id}}` — the FDC3 app ID
 //! - `{{runtime_path}}` — absolute path to the installed runtime folder, if any
 
+use std::env::consts::EXE_SUFFIX;
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
@@ -150,22 +157,45 @@ impl EngineManifest {
             )
         })?;
 
-        let mut candidates = vec![dir.join(binary_name)];
-        if cfg!(windows) && Path::new(binary_name).extension().is_none() {
-            candidates.push(dir.join(format!("{binary_name}.exe")));
+        // Windows: `<name>.exe` first, so a stray extensionless file of the
+        // same name can't shadow it.
+        let mut candidates = Vec::with_capacity(2);
+        if requires_exe() && !has_exe_suffix(binary_name) {
+            candidates.push(dir.join(format!("{binary_name}{EXE_SUFFIX}")));
         }
+        candidates.push(dir.join(binary_name));
         for candidate in candidates {
             let Ok(real) = candidate.canonicalize() else {
                 continue;
             };
+            // Containment is checked on the canonical (on Windows: `\\?\`
+            // verbatim) forms of both paths, which compare consistently.
             if !real.starts_with(&dir) {
                 return Err(format!(
                     "plugin '{}': binaryName '{binary_name}' resolves outside the plugin's folder",
                     self.family
                 ));
             }
+            if real.is_dir() {
+                return Err(format!(
+                    "plugin '{}': binaryName '{binary_name}' is a directory, not an executable \
+                     (on macOS, point it at a plain executable, not an .app bundle)",
+                    self.family
+                ));
+            }
+            // Windows runs `.bat` / `.cmd` through `cmd.exe`, where values a
+            // plugin passes on from `envTemplates` (an App Directory title, a
+            // URL) can inject commands; `.ps1`, `.lnk` and others don't run
+            // as programs at all. Only a real `.exe` is launched. Checked on
+            // the canonical file, so a link named `x.exe` to a `.cmd` fails.
+            if requires_exe() && !has_exe_suffix(&real.to_string_lossy()) {
+                return Err(format!(
+                    "plugin '{}': binaryName '{binary_name}' must be an .exe on Windows",
+                    self.family
+                ));
+            }
             if real.is_file() {
-                return Ok(real);
+                return Ok(simplify_verbatim(real));
             }
         }
         Err(format!(
@@ -199,6 +229,10 @@ impl EngineManifest {
     }
 
     /// Expand an env-template value, substituting known placeholders.
+    ///
+    /// One pass over `template`: an inserted value is never scanned again, so
+    /// a title or URL that itself contains `{{runtime_path}}` stays literal.
+    /// Unknown placeholders are left as written.
     pub fn expand_template(
         template: &str,
         url: &str,
@@ -206,11 +240,34 @@ impl EngineManifest {
         app_id: &str,
         runtime_path: &str,
     ) -> String {
-        template
-            .replace("{{url}}", url)
-            .replace("{{title}}", title)
-            .replace("{{app_id}}", app_id)
-            .replace("{{runtime_path}}", runtime_path)
+        let mut out = String::with_capacity(template.len());
+        let mut rest = template;
+        while let Some(start) = rest.find("{{") {
+            out.push_str(&rest[..start]);
+            let after = &rest[start + 2..];
+            let value = after.find("}}").and_then(|end| {
+                let v = match &after[..end] {
+                    "url" => url,
+                    "title" => title,
+                    "app_id" => app_id,
+                    "runtime_path" => runtime_path,
+                    _ => return None,
+                };
+                Some((v, end))
+            });
+            match value {
+                Some((v, end)) => {
+                    out.push_str(v);
+                    rest = &after[end + 2..];
+                }
+                None => {
+                    out.push_str("{{");
+                    rest = after;
+                }
+            }
+        }
+        out.push_str(rest);
+        out
     }
 }
 
@@ -219,13 +276,62 @@ pub fn plugins_dir(root: &Path) -> PathBuf {
     root.join("plugins")
 }
 
+/// Plugin binaries must be `.exe` files on Windows (see `resolve_binary`).
+const fn requires_exe() -> bool {
+    !EXE_SUFFIX.is_empty()
+}
+
+fn has_exe_suffix(name: &str) -> bool {
+    name.len() >= EXE_SUFFIX.len()
+        && name[name.len() - EXE_SUFFIX.len()..].eq_ignore_ascii_case(EXE_SUFFIX)
+}
+
+/// Strip Windows' `\\?\` verbatim prefix from a canonical path when the
+/// plain form means the same thing (`\\?\C:\…` → `C:\…`, under 260
+/// characters). Child processes see this path as their program path and
+/// working directory, and Chromium/CEF hosts and `cmd.exe` mishandle verbatim
+/// ones. UNC (`\\?\UNC\…`) and long paths are kept as they are.
+fn simplify_verbatim(path: PathBuf) -> PathBuf {
+    match path.to_str().and_then(strip_verbatim_drive) {
+        Some(plain) => PathBuf::from(plain),
+        None => path,
+    }
+}
+
+/// `r"\\?\C:\x"` → `Some(r"C:\x")`; `None` for anything else.
+fn strip_verbatim_drive(s: &str) -> Option<&str> {
+    let rest = s.strip_prefix(r"\\?\")?;
+    let b = rest.as_bytes();
+    let drive = b.len() >= 3 && b[0].is_ascii_alphabetic() && b[1] == b':' && b[2] == b'\\';
+    (drive && rest.len() < 260).then_some(rest)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::sync::atomic::{AtomicU32, Ordering};
 
-    /// A fresh `<tmp>/ot-core-plugin-<pid>-<n>/plugins/demo/` folder.
-    fn plugin_dir() -> PathBuf {
+    /// A fresh `<tmp>/ot-core-plugin-<pid>-<n>/plugins/demo/` folder,
+    /// removed (with its root) when dropped.
+    struct PluginDir {
+        root: PathBuf,
+        dir: PathBuf,
+    }
+
+    impl std::ops::Deref for PluginDir {
+        type Target = Path;
+        fn deref(&self) -> &Path {
+            &self.dir
+        }
+    }
+
+    impl Drop for PluginDir {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.root);
+        }
+    }
+
+    fn plugin_dir() -> PluginDir {
         static N: AtomicU32 = AtomicU32::new(0);
         let root = std::env::temp_dir().join(format!(
             "ot-core-plugin-{}-{}",
@@ -234,7 +340,12 @@ mod tests {
         ));
         let dir = root.join("plugins").join("demo");
         std::fs::create_dir_all(&dir).unwrap();
-        dir
+        PluginDir { root, dir }
+    }
+
+    /// The file name a test plugin binary has on this OS.
+    fn exe(name: &str) -> String {
+        format!("{name}{EXE_SUFFIX}")
     }
 
     fn write_manifest(dir: &Path, binary: &str) -> EngineManifest {
@@ -250,21 +361,26 @@ mod tests {
     fn load_records_the_manifest_folder() {
         let dir = plugin_dir();
         let m = write_manifest(&dir, "demo-host");
-        assert_eq!(m.dir, dir);
+        assert_eq!(m.dir.as_path(), &*dir);
         let root = dir.parent().unwrap().parent().unwrap();
         let scanned = EngineManifest::scan_plugins(root);
         assert_eq!(scanned.len(), 1);
-        assert_eq!(scanned[0].dir, dir);
+        assert_eq!(scanned[0].dir.as_path(), &*dir);
     }
 
     #[test]
     fn resolves_a_binary_in_the_plugin_folder() {
         let dir = plugin_dir();
         let m = write_manifest(&dir, "demo-host");
-        std::fs::write(dir.join("demo-host"), b"").unwrap();
+        std::fs::write(dir.join(exe("demo-host")), b"").unwrap();
         let resolved = m.resolve_binary("demo-host").unwrap();
         assert!(resolved.is_absolute());
-        assert_eq!(resolved, dir.canonicalize().unwrap().join("demo-host"));
+        assert_eq!(
+            resolved,
+            simplify_verbatim(dir.canonicalize().unwrap().join(exe("demo-host")))
+        );
+        // Never the `\\?\` form on Windows.
+        assert!(!resolved.to_string_lossy().starts_with(r"\\?\"));
     }
 
     #[test]
@@ -303,7 +419,8 @@ mod tests {
         let dir = plugin_dir();
         let m = write_manifest(&dir, "bin");
         std::fs::create_dir(dir.join("bin")).unwrap();
-        assert!(m.resolve_binary("bin").unwrap_err().contains("not found"));
+        let err = m.resolve_binary("bin").unwrap_err();
+        assert!(err.contains("is a directory"), "{err}");
     }
 
     #[cfg(unix)]
@@ -324,6 +441,89 @@ mod tests {
         std::fs::write(dir.join("demo-host.exe"), b"").unwrap();
         let resolved = m.resolve_binary("demo-host").unwrap();
         assert!(resolved.ends_with("demo-host.exe"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_prefers_exe_over_an_extensionless_file() {
+        let dir = plugin_dir();
+        let m = write_manifest(&dir, "demo-host");
+        std::fs::write(dir.join("demo-host"), b"").unwrap();
+        std::fs::write(dir.join("demo-host.exe"), b"").unwrap();
+        assert!(m
+            .resolve_binary("demo-host")
+            .unwrap()
+            .ends_with("demo-host.exe"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_refuses_scripts_and_other_non_exe_files() {
+        let dir = plugin_dir();
+        let m = write_manifest(&dir, "x");
+        for name in [
+            "host.cmd", "host.bat", "host.CMD", "host.ps1", "host.com", "host",
+        ] {
+            std::fs::write(dir.join(name), b"").unwrap();
+            let err = m.resolve_binary(name).expect_err(name);
+            assert!(err.contains("must be an .exe"), "{name}: {err}");
+        }
+        // Case-insensitive `.exe` is fine.
+        std::fs::write(dir.join("HOST2.EXE"), b"").unwrap();
+        assert!(m.resolve_binary("HOST2.EXE").is_ok());
+    }
+
+    #[test]
+    fn verbatim_drive_paths_are_simplified_and_others_kept() {
+        assert_eq!(
+            strip_verbatim_drive(r"\\?\C:\x\host.exe"),
+            Some(r"C:\x\host.exe")
+        );
+        assert_eq!(strip_verbatim_drive(r"\\?\UNC\srv\share\host.exe"), None);
+        assert_eq!(strip_verbatim_drive(r"C:\x\host.exe"), None);
+        assert_eq!(strip_verbatim_drive("/usr/bin/x"), None);
+        let long = format!(r"\\?\C:\{}", "a".repeat(300));
+        assert_eq!(strip_verbatim_drive(&long), None);
+    }
+
+    #[test]
+    fn exe_suffix_check_ignores_case() {
+        if requires_exe() {
+            assert!(has_exe_suffix("a.exe") && has_exe_suffix("a.EXE"));
+            assert!(!has_exe_suffix("a.cmd") && !has_exe_suffix("exe"));
+        } else {
+            // No suffix on macOS / Linux: every name "has" it.
+            assert!(has_exe_suffix("anything"));
+        }
+    }
+
+    #[test]
+    fn templates_expand_in_one_pass() {
+        let out = EngineManifest::expand_template(
+            "u={{url}} t={{title}} a={{app_id}} r={{runtime_path}} x={{other}} {{",
+            "https://e.com/?q={{runtime_path}}",
+            "{{app_id}}",
+            "app",
+            "SECRET",
+        );
+        assert_eq!(
+            out,
+            "u=https://e.com/?q={{runtime_path}} t={{app_id}} a=app r=SECRET x={{other}} {{"
+        );
+    }
+
+    #[test]
+    fn launch_mode_round_trips_in_camel_case() {
+        let m: EngineManifest = serde_json::from_str(
+            r#"{"family":"cef","label":"CEF","launchMode":{"type":"spawnBinary","binaryName":"cef-host","envTemplates":[{"key":"K","value":"V"}]}}"#,
+        )
+        .unwrap();
+        let json = serde_json::to_value(&m).unwrap();
+        assert_eq!(json["launchMode"]["binaryName"], "cef-host");
+        assert_eq!(json["launchMode"]["envTemplates"][0]["key"], "K");
+        assert!(json.get("dir").is_none());
+        let back: EngineManifest = serde_json::from_value(json).unwrap();
+        assert!(matches!(back.launch_mode, LaunchMode::SpawnBinary { .. }));
     }
 
     #[test]

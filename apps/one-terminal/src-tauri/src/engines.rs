@@ -238,6 +238,9 @@ pub async fn engine_install(
     app: &AppHandle,
     catalog_url: &str,
 ) -> Result<PathBuf, String> {
+    // Refuse a family/version that isn't a plain folder name (or is
+    // `plugins`) before anything is downloaded, written or deleted.
+    ot_core::engine::check_binding(binding)?;
     if binding.family == EngineFamily::Electron {
         return Err(
             "Electron uses a local npm binary, not the download catalog. \

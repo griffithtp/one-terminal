@@ -133,6 +133,10 @@ impl EngineRuntimeStore {
         catalog: &EngineCatalog,
         app: &AppHandle,
     ) -> Result<InstalledEngine, String> {
+        // Bindings come from the App Directory and the catalog: refuse a
+        // family/version that isn't a plain folder name (or is `plugins`)
+        // before anything is downloaded, written or deleted.
+        ot_core::engine::check_binding(binding)?;
         // Electron is resolved via the electron-host launcher, not the catalog.
         if binding.family == EngineFamily::Electron {
             let shell = ot_core::electron_host::locate_electron_shell()?;
