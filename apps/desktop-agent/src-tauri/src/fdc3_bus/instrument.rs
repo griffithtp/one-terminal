@@ -125,6 +125,9 @@ pub(super) enum HandshakeEnd {
     Closed,
     /// A non-text frame or a socket error.
     Invalid,
+    /// Refused before the upgrade: the Origin doesn't match the claimed app
+    /// (`fdc3_bus::admission`).
+    Refused,
 }
 
 impl HandshakeEnd {
@@ -132,6 +135,7 @@ impl HandshakeEnd {
         match self {
             HandshakeEnd::Closed => "closed",
             HandshakeEnd::Invalid => "invalid",
+            HandshakeEnd::Refused => "refused",
         }
     }
 }
