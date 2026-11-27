@@ -150,6 +150,11 @@ it hosts.
   placeholder.
 - Pass untrusted values (`{{url}}`, `{{title}}`, `{{app_id}}`) as discrete arguments or
   env vars — never through a shell (`sh -c`, `cmd /C`).
+- Everything the Desktop Agent launches for an app (`tauri-webview-host`, Electron hosts,
+  plugin binaries, in-process app windows) takes a slot in `HostRegistry`: at most 8 live
+  per app id and 32 in total, because any FDC3 client can request launches. Processes are
+  tracked by PID, reaped when they exit and killed when the Desktop Agent exits. A new
+  spawn path must reserve a slot and `track` its child — never drop the `Child`.
 - Native app launch (planned) must be allow-list based
   (`OT_NATIVE_APP_ALLOW_PATHS`).
 

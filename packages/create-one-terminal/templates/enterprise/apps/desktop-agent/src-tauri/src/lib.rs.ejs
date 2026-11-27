@@ -1,5 +1,6 @@
 pub mod app_dir;
 pub mod broker;
+mod children;
 mod config;
 mod engines;
 pub mod fdc3_bus;
@@ -8,6 +9,7 @@ mod telemetry_cmd;
 
 use app_dir::{AppDirectoryCache, AppRecord};
 use broker::{Broker, BrokerEvent, BrokerEvents, ChannelInfo, IntentHandlerInfo, WindowHandle};
+use children::{HostRegistry, TerminalRegistry};
 use config::AgentConfig;
 use engines::{EngineCatalogClient, EngineRuntimeStore};
 use futures_util::future::BoxFuture;
@@ -170,6 +172,15 @@ fn cda_open_terminal(registry: State<'_, TerminalRegistry>) {
 fn cda_quit(app: AppHandle, registry: State<'_, TerminalRegistry>) {
     registry.kill_all(false);
     app.exit(0);
+}
+
+/// Exit handler: end every app host and plugin process this Desktop Agent
+/// launched (Terminals are handled by the quit commands, which also decide
+/// whether their state is kept).
+fn kill_app_hosts(app: &AppHandle) {
+    if let Some(hosts) = app.try_state::<HostRegistry>() {
+        hosts.kill_all(false, true);
+    }
 }
 
 /// Quit the Desktop Agent and discard all Terminal state files so nothing is
@@ -389,6 +400,11 @@ async fn run_plan(
     use ot_telemetry::propagation::{inject_env, ChildKind};
 
     let endpoint = app.state::<ot_telemetry::ingress::WidgetEndpoint>();
+    // Any FDC3 client can ask for a launch (the bus doesn't authenticate
+    // them yet): cap windows and processes per app and in total. The slot is
+    // held for the window's or process's lifetime; an early error drops it.
+    let hosts = app.state::<HostRegistry>();
+    let slot = hosts.reserve(app_id)?;
 
     match plan {
         LaunchPlan::InProcessWebview { url, title } => {
@@ -405,15 +421,24 @@ async fn run_plan(
             if is_dev(&parsed) {
                 return Err("Invalid URL: the Desktop Agent's dev server origin".into());
             }
-            tauri::WebviewWindowBuilder::new(app, label, tauri::WebviewUrl::External(parsed))
-                .initialization_script(endpoint.init_script(label, Some(app_id)))
-                // The page may not navigate itself to a local origin (the
-                // agent's own, a custom scheme, the dev server) or `file:`.
-                .on_navigation(move |u| ot_core::widget_url::is_allowed_navigation(u) && !is_dev(u))
-                .title(title)
-                .inner_size(1280.0, 800.0)
-                .build()
-                .map_err(|e| format!("Failed to open WebView: {e}"))?;
+            let window =
+                tauri::WebviewWindowBuilder::new(app, label, tauri::WebviewUrl::External(parsed))
+                    .initialization_script(endpoint.init_script(label, Some(app_id)))
+                    // The page may not navigate itself to a local origin (the
+                    // agent's own, a custom scheme, the dev server) or `file:`.
+                    .on_navigation(move |u| {
+                        ot_core::widget_url::is_allowed_navigation(u) && !is_dev(u)
+                    })
+                    .title(title)
+                    .inner_size(1280.0, 800.0)
+                    .build()
+                    .map_err(|e| format!("Failed to open WebView: {e}"))?;
+            let slot = std::sync::Mutex::new(Some(slot));
+            window.on_window_event(move |event| {
+                if matches!(event, tauri::WindowEvent::Destroyed) {
+                    slot.lock().unwrap().take();
+                }
+            });
             Ok(())
         }
         LaunchPlan::SpawnTauriHost {
@@ -431,9 +456,11 @@ async fn run_plan(
             }
             inject_env(&mut cmd, ChildKind::LogsOnly);
             endpoint.configure_host(&mut cmd, label, Some(app_id));
-            cmd.spawn()
-                .map(|_| ())
-                .map_err(|e| format!("Failed to spawn {}: {e}", host_bin.display()))
+            let child = cmd
+                .spawn()
+                .map_err(|e| format!("Failed to spawn {}: {e}", host_bin.display()))?;
+            hosts.track(child, slot);
+            Ok(())
         }
         LaunchPlan::SpawnElectronHost {
             binding,
@@ -445,7 +472,7 @@ async fn run_plan(
             // and the Electron binary (OT_ELECTRON_BIN, catalog cache, or
             // the shell's own node_modules from `npm install`).
             let cache_root = ot_core::engine::default_cache_root();
-            ot_core::electron_host::spawn_electron_app_with(
+            let child = ot_core::electron_host::spawn_electron_app_with(
                 &binding,
                 &cache_root,
                 label,
@@ -457,7 +484,9 @@ async fn run_plan(
                         endpoint.configure_host(cmd, label, Some(app_id));
                     }
                 },
-            )
+            )?;
+            hosts.track(child, slot);
+            Ok(())
         }
         LaunchPlan::SpawnBinary { binary, env_vars } => {
             // `binary` is an absolute path inside the plugin's folder, so no
@@ -472,9 +501,11 @@ async fn run_plan(
             }
             // Third-party code: trace context only, no telemetry credentials.
             inject_env(&mut cmd, ChildKind::Untrusted);
-            cmd.spawn()
-                .map(|_| ())
-                .map_err(|e| format!("Failed to spawn plugin binary {}: {e}", binary.display()))
+            let child = cmd
+                .spawn()
+                .map_err(|e| format!("Failed to spawn plugin binary {}: {e}", binary.display()))?;
+            hosts.track(child, slot);
+            Ok(())
         }
     }
 }
@@ -529,76 +560,6 @@ fn locate_wm_binary() -> Result<std::path::PathBuf, String> {
     Ok(candidate)
 }
 
-/// Tracks the PIDs of `one-terminal` instances this `desktop-agent` process
-/// spawned, so quit can kill precisely those processes instead of every
-/// `one-terminal` on the machine (a bare `killall`/`taskkill` by name would
-/// also kill an unrelated, independently-launched standalone `one-terminal`
-/// install). Also watches each child so an unexpected exit (crash) gets
-/// logged — previously the spawned `Child` handle was dropped immediately,
-/// so `desktop-agent` had no visibility into whether its Terminal windows
-/// were still alive.
-#[derive(Clone, Default)]
-struct TerminalRegistry {
-    pids: std::sync::Arc<std::sync::Mutex<std::collections::HashSet<u32>>>,
-    /// Set just before an intentional kill so the watcher thread doesn't log
-    /// the resulting exit as an unexpected crash.
-    quitting: std::sync::Arc<std::sync::atomic::AtomicBool>,
-}
-
-impl TerminalRegistry {
-    /// Record a freshly spawned child and start a background thread that
-    /// waits on it, removing it from the registry and logging on unexpected
-    /// exit (skipped during an intentional `kill_all`, and for a clean exit
-    /// status — closing all Terminal windows normally exits the process
-    /// with success, which isn't a crash).
-    fn track(&self, mut child: std::process::Child) {
-        let pid = child.id();
-        self.pids.lock().unwrap().insert(pid);
-
-        let pids = Arc::clone(&self.pids);
-        let quitting = Arc::clone(&self.quitting);
-        std::thread::spawn(move || {
-            let status = child.wait();
-            pids.lock().unwrap().remove(&pid);
-            if quitting.load(std::sync::atomic::Ordering::SeqCst) {
-                return;
-            }
-            match status {
-                Ok(s) if s.success() => {}
-                Ok(s) => tracing::warn!("one-terminal (pid {pid}) exited unexpectedly: {s}"),
-                Err(e) => tracing::warn!("one-terminal (pid {pid}) wait() failed: {e}"),
-            }
-        });
-    }
-
-    /// Kill every tracked instance by PID. `force` sends SIGKILL/`taskkill
-    /// /F` for immediate termination; otherwise SIGTERM/`taskkill` (graceful,
-    /// lets the Tauri runtime flush pending state writes before exiting).
-    fn kill_all(&self, force: bool) {
-        self.quitting
-            .store(true, std::sync::atomic::Ordering::SeqCst);
-        let pids: Vec<u32> = self.pids.lock().unwrap().iter().copied().collect();
-        for pid in pids {
-            #[cfg(target_os = "windows")]
-            {
-                let mut cmd = std::process::Command::new("taskkill");
-                cmd.args(["/PID", &pid.to_string()]);
-                if force {
-                    cmd.arg("/F");
-                }
-                let _ = cmd.output();
-            }
-            #[cfg(not(target_os = "windows"))]
-            {
-                let sig = if force { "-KILL" } else { "-TERM" };
-                let _ = std::process::Command::new("kill")
-                    .args([sig, &pid.to_string()])
-                    .output();
-            }
-        }
-    }
-}
-
 /// Command to run `one-terminal`. `OT_SPAWNED_BY_AGENT` tells a dev build
 /// it's one of this agent's per-Terminal processes, so it exits with its
 /// last window like a release build (rather than staying up the way
@@ -622,96 +583,6 @@ fn spawn_wm_restore(registry: &TerminalRegistry) {
             Err(e) => tracing::error!("Failed to spawn window-manager: {e}"),
         },
         Err(e) => tracing::error!("{e}"),
-    }
-}
-
-#[cfg(all(test, unix))]
-mod terminal_registry_tests {
-    use super::TerminalRegistry;
-    use std::process::Command;
-    use std::time::Duration;
-
-    fn is_alive(pid: u32) -> bool {
-        Command::new("kill")
-            .args(["-0", &pid.to_string()])
-            .status()
-            .map(|s| s.success())
-            .unwrap_or(false)
-    }
-
-    /// Polls `condition` until it holds or `timeout` passes. These tests wait on other
-    /// processes and the watcher thread, so a fixed sleep is flaky on a loaded CI runner
-    /// (tests run in parallel); polling passes as soon as the state is reached.
-    fn wait_until(timeout: Duration, mut condition: impl FnMut() -> bool) -> bool {
-        let deadline = std::time::Instant::now() + timeout;
-        while std::time::Instant::now() < deadline {
-            if condition() {
-                return true;
-            }
-            std::thread::sleep(Duration::from_millis(20));
-        }
-        condition()
-    }
-
-    /// Regression test for the bug `TerminalRegistry` replaced: a bare
-    /// `killall one-terminal` / `taskkill /IM one-terminal.exe` kills every
-    /// process with that name on the machine, including an unrelated,
-    /// independently-launched standalone `one-terminal` — not just the
-    /// instance(s) this `desktop-agent` process spawned. `kill_all` must
-    /// only touch tracked PIDs.
-    #[test]
-    fn kill_all_only_kills_tracked_pids() {
-        let registry = TerminalRegistry::default();
-
-        // Stand-in for a Terminal instance desktop-agent spawned itself.
-        let tracked_child = Command::new("sleep").arg("30").spawn().unwrap();
-        let tracked_pid = tracked_child.id();
-        registry.track(tracked_child);
-
-        // Stand-in for an unrelated, independently-launched one-terminal —
-        // must survive `kill_all`.
-        let mut unrelated_child = Command::new("sleep").arg("30").spawn().unwrap();
-        let unrelated_pid = unrelated_child.id();
-
-        assert!(is_alive(tracked_pid), "tracked child should be running");
-        assert!(is_alive(unrelated_pid), "unrelated child should be running");
-
-        registry.kill_all(true);
-
-        // The watcher thread reaps the killed child, so `kill -0` stops seeing it.
-        assert!(
-            wait_until(Duration::from_secs(10), || !is_alive(tracked_pid)),
-            "tracked child should have been killed"
-        );
-        assert!(
-            is_alive(unrelated_pid),
-            "unrelated child must survive kill_all — this is the bug being fixed"
-        );
-
-        let _ = unrelated_child.kill();
-        let _ = unrelated_child.wait();
-    }
-
-    /// `track()`'s watcher thread must remove the PID from the registry once
-    /// the child exits on its own (e.g. the user closed all Terminal
-    /// windows) — otherwise the registry accumulates dead PIDs forever.
-    #[test]
-    fn track_removes_pid_after_natural_exit() {
-        let registry = TerminalRegistry::default();
-        let child = Command::new("sleep").arg("0.2").spawn().unwrap();
-        let pid = child.id();
-        registry.track(child);
-
-        assert!(registry.pids.lock().unwrap().contains(&pid));
-
-        assert!(
-            wait_until(Duration::from_secs(10), || !registry
-                .pids
-                .lock()
-                .unwrap()
-                .contains(&pid)),
-            "watcher thread should have pruned the PID after natural exit"
-        );
     }
 }
 
@@ -896,6 +767,7 @@ pub fn run() {
             .manage(engine_catalog.clone())
             .manage(cfg.clone())
             .manage(TerminalRegistry::default())
+            .manage(HostRegistry::default())
             .setup(move |app| {
                 let _startup = startup_setup.enter();
                 if let Some(server) = widget_server {
@@ -1103,8 +975,9 @@ pub fn run() {
             .expect("error while building <%= displayName %> Desktop Agent")
     });
     drop(startup);
-    app.run(move |_app, event| {
+    app.run(move |app, event| {
         if let tauri::RunEvent::Exit = event {
+            kill_app_hosts(app);
             telemetry.shutdown();
         }
     });
