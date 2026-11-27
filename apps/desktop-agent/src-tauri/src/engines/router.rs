@@ -56,10 +56,12 @@ pub enum LaunchPlan {
         title: String,
     },
 
-    /// Spawn an arbitrary binary declared by a plugin manifest, with fully
-    /// resolved env vars (placeholders already substituted).
+    /// Spawn a binary declared by a plugin manifest, with fully resolved env
+    /// vars (placeholders already substituted).
     SpawnBinary {
-        binary_name: String,
+        /// Absolute, canonical path inside the plugin's own folder
+        /// ([`EngineManifest::resolve_binary`]) — never a `PATH` lookup.
+        binary: std::path::PathBuf,
         /// `(key, value)` pairs — already template-expanded.
         env_vars: Vec<(String, String)>,
     },
@@ -201,10 +203,8 @@ fn plan_from_manifest(
                     (t.key.clone(), v)
                 })
                 .collect();
-            Ok(LaunchPlan::SpawnBinary {
-                binary_name: binary_name.clone(),
-                env_vars,
-            })
+            let binary = manifest.resolve_binary(binary_name)?;
+            Ok(LaunchPlan::SpawnBinary { binary, env_vars })
         }
     }
 }
@@ -228,6 +228,78 @@ mod tests {
     }
 
     use super::super::OsKey;
+
+    /// A manifest loaded from a fresh `<tmp>/plugins/<family>/` folder.
+    fn plugin(family: &str, binary: &str) -> (std::path::PathBuf, EngineManifest) {
+        static N: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+        let dir = std::env::temp_dir()
+            .join(format!(
+                "da-router-plugin-{}-{}",
+                std::process::id(),
+                N.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            ))
+            .join("plugins")
+            .join(family);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("manifest.json");
+        std::fs::write(
+            &path,
+            format!(
+                r#"{{"family":"{family}","label":"X","launchMode":{{"type":"spawnBinary","binaryName":"{binary}","envTemplates":[{{"key":"X_URL","value":"{{{{url}}}}"}}]}}}}"#
+            ),
+        )
+        .unwrap();
+        (dir, EngineManifest::load(&path).unwrap())
+    }
+
+    fn custom(family: &str) -> InstalledEngine {
+        InstalledEngine {
+            family: EngineFamily::Custom(family.into()),
+            version: "1".into(),
+            path: None,
+            system: false,
+        }
+    }
+
+    #[test]
+    fn spawn_binary_plans_an_absolute_path_in_the_plugin_folder() {
+        let (dir, m) = plugin("cef", "cef-host");
+        std::fs::write(dir.join("cef-host"), b"").unwrap();
+        let plan =
+            plan_from_manifest(&m, &custom("cef"), "https://x/".into(), "T".into(), "a").unwrap();
+        let LaunchPlan::SpawnBinary { binary, env_vars } = plan else {
+            panic!("expected SpawnBinary");
+        };
+        assert!(binary.is_absolute());
+        assert_eq!(binary, dir.canonicalize().unwrap().join("cef-host"));
+        assert_eq!(
+            env_vars,
+            vec![("X_URL".to_string(), "https://x/".to_string())]
+        );
+    }
+
+    #[test]
+    fn spawn_binary_refuses_a_path_or_a_missing_binary() {
+        for name in ["../../../bin/sh", "sh"] {
+            let (_dir, m) = plugin("cef", name);
+            assert!(
+                plan_from_manifest(&m, &custom("cef"), "https://x/".into(), "T".into(), "a")
+                    .is_err(),
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_bundled_cef_manifest_parses_as_spawn_binary() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("resources/plugins/cef/manifest.json");
+        let m = EngineManifest::load(&path).unwrap();
+        assert!(matches!(
+            m.launch_mode,
+            ot_core::plugin::LaunchMode::SpawnBinary { ref binary_name, .. } if binary_name == "cef-host"
+        ));
+    }
 
     #[test]
     fn refuses_local_origin_and_non_http_urls() {
