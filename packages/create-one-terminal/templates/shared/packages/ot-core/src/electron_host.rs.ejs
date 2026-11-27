@@ -139,7 +139,7 @@ pub fn spawn_electron_app(
     app_id: &str,
     url: &str,
     title: &str,
-) -> Result<(), String> {
+) -> Result<std::process::Child, String> {
     spawn_electron_app_with(binding, cache_root, app_id, url, title, |_, _| {})
 }
 
@@ -153,6 +153,8 @@ pub enum ElectronCommand {
     Host,
 }
 
+/// Returns the Electron host process, so the caller can track and kill it.
+///
 /// [`spawn_electron_app`], letting the caller adjust each command it runs —
 /// e.g. to set trace context and strip credentials from the environment —
 /// without this crate knowing about telemetry. `configure` is applied to the
@@ -165,7 +167,7 @@ pub fn spawn_electron_app_with(
     url: &str,
     title: &str,
     configure: impl Fn(&mut std::process::Command, ElectronCommand),
-) -> Result<(), String> {
+) -> Result<std::process::Child, String> {
     let shell = locate_electron_shell()?;
     let bin = match locate_electron_binary(binding, cache_root, &shell) {
         Ok(b) => b,
@@ -188,7 +190,6 @@ pub fn spawn_electron_app_with(
         .env("OT_TITLE", title);
     configure(&mut cmd, ElectronCommand::Host);
     cmd.spawn()
-        .map(|_| ())
         .map_err(|e| format!("spawn electron {}: {e}", bin.display()))
 }
 

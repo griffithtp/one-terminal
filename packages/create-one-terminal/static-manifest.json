@@ -97,6 +97,10 @@
       "overlay": "enterprise"
     },
     {
+      "path": "apps/desktop-agent/src-tauri/src/children.rs",
+      "overlay": "enterprise"
+    },
+    {
       "path": "apps/desktop-agent/src-tauri/src/engines/catalog.rs",
       "overlay": "enterprise"
     },
