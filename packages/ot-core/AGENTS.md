@@ -32,7 +32,7 @@ Types live here; loading happens in the Desktop Agent at `EngineRuntimeStore::ne
 - `InProcess`
 - `SpawnTauriHost`
 - `SpawnElectronHost`
-- `SpawnBinary { binary_name, env_templates }` (JSON `binaryName`, `envTemplates`; snake_case accepted) — template vars: `{{url}}`, `{{title}}`, `{{app_id}}`, `{{runtime_path}}`. `binary_name` is a file in the manifest's folder: launch it only through `EngineManifest::resolve_binary`, which returns its absolute path (never a `PATH` lookup)
+- `SpawnBinary { binary_name, env_templates }` (JSON `binaryName`, `envTemplates`; snake_case accepted) — template vars: `{{url}}`, `{{title}}`, `{{app_id}}`, `{{runtime_path}}`. `binary_name` is a file in the manifest's folder (an `.exe` on Windows): launch it only through `EngineManifest::resolve_binary`, which returns its absolute path (never a `PATH` lookup). Engine installers must call `engine::check_binding` before writing under `binding_path`
 
 ## Per-OS paths
 
