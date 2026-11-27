@@ -11,7 +11,36 @@
 //! maps a saved session's sample-widget URL (the retired `sample-widget://`
 //! scheme, or a previous run's port) to this run's server first.
 
+//!
+//! In debug builds the Terminal's own UI is served from the Vite dev server
+//! (`build.devUrl`), which Tauri then treats as a local origin. [`set_dev_url`]
+//! records it at startup so widgets can't load or navigate onto it.
+
+use std::sync::OnceLock;
+
 use ot_core::widget_url::{check_widget_url, is_allowed_navigation, WidgetUrlError};
+
+/// Origin of `build.devUrl`, set only in debug builds (see [`set_dev_url`]).
+static DEV_ORIGIN: OnceLock<String> = OnceLock::new();
+
+/// Record the app's `build.devUrl` so its origin is refused as widget
+/// content. A no-op in release builds, where the UI is bundled and the dev
+/// server URL is not an app origin.
+pub(crate) fn set_dev_url(dev_url: Option<&tauri::Url>) {
+    if cfg!(debug_assertions) {
+        if let Some(u) = dev_url {
+            let _ = DEV_ORIGIN.set(u.origin().ascii_serialization());
+        }
+    }
+}
+
+fn is_dev_origin(url: &tauri::Url) -> bool {
+    DEV_ORIGIN.get().is_some_and(|dev| same_origin(url, dev))
+}
+
+fn same_origin(url: &tauri::Url, origin: &str) -> bool {
+    url.origin().is_tuple() && url.origin().ascii_serialization() == origin
+}
 
 /// Parse a URL a panel or engine host is about to load and check it.
 pub(crate) fn parse(raw: &str) -> Result<tauri::Url, String> {
@@ -22,12 +51,33 @@ pub(crate) fn parse(raw: &str) -> Result<tauri::Url, String> {
         .parse()
         .map_err(|_| WidgetUrlError::Invalid.to_string())?;
     check_widget_url(&url).map_err(|e| e.to_string())?;
+    if is_dev_origin(&url) {
+        return Err("widget URL is the Terminal's dev server origin and is not allowed".into());
+    }
     Ok(url)
+}
+
+/// [`parse`] for a panel being restored or recreated (startup, a new Terminal
+/// window, a dashboard switch, a Desktop Agent change). A refused URL is
+/// logged the same way at every site and the panel gets no webview; its tab
+/// stays in the layout with its URL, so the user can see and close it.
+pub(crate) fn parse_for_restore(label: &str, raw: &str) -> Option<tauri::Url> {
+    match parse(raw) {
+        Ok(url) => Some(url),
+        Err(e) => {
+            tracing::warn!(
+                ot.window = %label,
+                "panel not loaded: {e}: {}",
+                ot_telemetry::redact::url(raw)
+            );
+            None
+        }
+    }
 }
 
 /// Whether a panel webview may navigate to `url`.
 pub(crate) fn allows_navigation(url: &tauri::Url) -> bool {
-    is_allowed_navigation(url)
+    is_allowed_navigation(url) && !is_dev_origin(url)
 }
 
 #[cfg(test)]
@@ -65,11 +115,8 @@ mod tests {
         sample_url();
         for s in [
             "tauri://localhost/index.html",
-            "http://tauri.localhost/index.html",
-            "https://tauri.localhost/",
             "sample-widget://evil/",
             "other-scheme://localhost/",
-            "http://other-scheme.localhost/",
             "file:///etc/passwd",
             "data:text/html,x",
             "javascript:alert(1)",
@@ -77,11 +124,46 @@ mod tests {
         ] {
             assert!(parse(s).is_err(), "{s} should be refused");
         }
+        // Windows spells app and custom-scheme origins `http(s)://<x>.localhost`.
+        let windows = cfg!(any(target_os = "windows", target_os = "android"));
+        for s in [
+            "http://tauri.localhost/index.html",
+            "https://tauri.localhost/",
+            "http://other-scheme.localhost/",
+        ] {
+            assert_eq!(parse(s).is_err(), windows, "{s}");
+        }
+    }
+
+    #[test]
+    fn dev_origin_match_is_exact() {
+        let dev = "http://localhost:1422";
+        let u = |s: &str| s.parse::<tauri::Url>().unwrap();
+        assert!(same_origin(&u("http://localhost:1422/"), dev));
+        assert!(same_origin(
+            &u("http://localhost:1422/@fs/x/index.html"),
+            dev
+        ));
+        assert!(!same_origin(&u("http://localhost:3010/"), dev));
+        assert!(!same_origin(&u("https://localhost:1422/"), dev));
+        assert!(!same_origin(&u("http://127.0.0.1:1422/"), dev));
+        assert!(!same_origin(&u("data:text/html,x"), "null"));
+    }
+
+    #[test]
+    fn restore_returns_none_for_a_refused_url() {
+        assert!(parse_for_restore("p1", "tauri://localhost/").is_none());
+        assert!(parse_for_restore("p1", "not a url").is_none());
+        assert_eq!(
+            parse_for_restore("p1", "https://example.com/").map(|u| u.to_string()),
+            Some("https://example.com/".to_string())
+        );
     }
 
     #[test]
     fn navigation_policy_has_no_sample_widget_exception() {
         let nav = |s: &str| allows_navigation(&s.parse().unwrap());
+        let windows = cfg!(any(target_os = "windows", target_os = "android"));
         assert!(nav("about:blank"));
         assert!(nav("about:srcdoc"));
         assert!(nav("data:text/html,x"));
@@ -89,10 +171,10 @@ mod tests {
         assert!(nav(sample_url()));
         // A widget must not be able to move itself onto a local origin.
         assert!(!nav("sample-widget://localhost/"));
-        assert!(!nav("http://sample-widget.localhost/"));
-        assert!(!nav("https://sample-widget.localhost/"));
+        assert_eq!(!nav("http://sample-widget.localhost/"), windows);
+        assert_eq!(!nav("https://sample-widget.localhost/"), windows);
         assert!(!nav("tauri://localhost/"));
-        assert!(!nav("http://tauri.localhost/"));
+        assert_eq!(!nav("http://tauri.localhost/"), windows);
         assert!(!nav("file:///C:/"));
     }
 }

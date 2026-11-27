@@ -233,7 +233,6 @@ mod tests {
     fn refuses_local_origin_and_non_http_urls() {
         for url in [
             "tauri://localhost/index.html",
-            "http://tauri.localhost/",
             "file:///etc/passwd",
             "javascript:alert(1)",
         ] {
@@ -242,6 +241,13 @@ mod tests {
                 .expect_err(&format!("{url} should be refused"));
             assert!(err.starts_with("App t:"), "{err}");
         }
+        // Windows spells the agent's own origin `http://tauri.localhost`.
+        let windows = cfg!(any(target_os = "windows", target_os = "android"));
+        let appd = app("http://tauri.localhost/", None);
+        assert_eq!(
+            plan_launch(&appd, &LaunchContext::Standalone, None, &[]).is_err(),
+            windows
+        );
     }
 
     #[test]

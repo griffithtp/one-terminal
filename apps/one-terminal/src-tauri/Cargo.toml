@@ -23,7 +23,7 @@ sha2         = { workspace = true }
 hex          = { workspace = true }
 zip          = { workspace = true }
 futures-util = { workspace = true }
-url          = "2"
+url          = { workspace = true }
 uuid         = { version = "1", features = ["v4"] }
 ot-core                    = { workspace = true }
 ot-telemetry               = { workspace = true, features = ["otlp", "ingress"] }

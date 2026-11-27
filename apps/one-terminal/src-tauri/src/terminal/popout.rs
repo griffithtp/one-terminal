@@ -305,6 +305,13 @@ pub fn open_popout(
         .map(|t| t.display_name.unwrap_or(t.title))
         .unwrap_or_default();
 
+    // Check a fresh panel's URL before the window exists, so a refused URL
+    // leaves no empty, hidden popout window behind.
+    let created_url = match &source {
+        PanelSource::Create { url, .. } => Some(crate::widget_url::parse(url)?),
+        PanelSource::Reparent => None,
+    };
+
     let (tx, rx) = std::sync::mpsc::channel::<Result<(), String>>();
     {
         let app_m = app.clone();
@@ -345,8 +352,9 @@ pub fn open_popout(
                             .ok_or_else(|| format!("panel '{panel_m}' not found"))?;
                         wv.reparent(&win).map_err(|e| e.to_string())?;
                     }
-                    PanelSource::Create { url, init_script } => {
-                        let parsed = crate::widget_url::parse(&url)?;
+                    PanelSource::Create { init_script, .. } => {
+                        let parsed =
+                            created_url.ok_or_else(|| "popout URL was not checked".to_string())?;
                         win.add_child(
                             WebviewBuilder::new(&panel_m, WebviewUrl::External(parsed))
                                 .initialization_script(&init_script)

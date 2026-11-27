@@ -10,7 +10,7 @@ serde      = { workspace = true }
 serde_json = { workspace = true }
 # Logging API only; each binary installs the subscriber (ot-telemetry).
 tracing    = { workspace = true }
-url        = "2"
+url        = { workspace = true }
 
 [lints]
 workspace = true

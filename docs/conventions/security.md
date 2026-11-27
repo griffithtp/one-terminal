@@ -10,7 +10,7 @@ system or process spawning except through an explicitly validated path.
 | ---------------------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Panel webview → Tauri IPC                                                    | Widget pages (any URL)             | Tauri capabilities (local origins only)                                                                                                                                                                                   |
 | Widget → FDC3 bus (`ws://127.0.0.1:7891/fdc3`)                               | Any local process or web page      | WCP handshake (see gaps below)                                                                                                                                                                                            |
-| Widget / app URL → webview or window creation and navigation                 | Config, directory records, widgets | `ot_core::widget_url`: http(s) with a host, never a `*.localhost` origin; enforced at every creation site and in `on_navigation` (see below)                                                                              |
+| Widget / app URL → webview or window creation and navigation                 | Config, directory records, widgets | `ot_core::widget_url`: http(s) with a host, never a local origin; enforced at every creation site, in `on_navigation` and in `tauri-webview-host` (see below)                                                             |
 | Client → App Directory REST (`:3005`)                                        | Admin UI, scripts, browsers        | Loopback bind; CORS on the standalone server; auth planned                                                                                                                                                                |
 | App Directory / plugin manifest → process spawn                              | Directory records, `manifest.json` | Engine catalog checksums; launch routing in `engines/router.rs`                                                                                                                                                           |
 | Config files / env vars                                                      | Local user                         | Validation in `AgentConfig::load()`; unknown keys ignored                                                                                                                                                                 |
@@ -29,15 +29,26 @@ system or process spawning except through an explicitly validated path.
 - Every new `#[tauri::command]` validates its arguments as if they came from an attacker:
   labels and ids must refer to existing objects, paths must be canonicalised and kept
   inside an allowed root, URLs must be parsed and their scheme checked
-  (`http`/`https` only for widgets) with `ot_core::widget_url::parse_widget_url`; it also
-  refuses `*.localhost` hosts, which are local origins with IPC (`tauri.localhost` on
-  Windows). Use `localhost:<port>` for dev servers, not `myapp.localhost`.
-- Panel webviews and Desktop Agent app windows also refuse _navigation_ to a local origin
-  (`tauri:`, `ipc:`, `asset:`, custom schemes, `*.localhost`) or `file:`, via
-  `ot_core::widget_url::is_allowed_navigation`. On macOS the handler runs for every
-  frame, so it allows ordinary iframe content (`about:srcdoc`, `data:`, `blob:`); on
-  Windows it runs for the top-level page only, so `frame-ancestors 'none'` (below) is what
-  stops a widget framing the app's own pages.
+  (`http`/`https` only for widgets) with `ot_core::widget_url::parse_widget_url`. On
+  Windows it also refuses `*.localhost` hosts: that's how Windows spells local origins
+  (`http://tauri.localhost`, `http://<scheme>.localhost`). macOS and Linux spell them
+  `<scheme>://localhost`, which the scheme check already refuses, so `*.localhost` dev
+  hosts work there — use `localhost:<port>` to be portable. Data that may be launched on
+  another OS (App Directory records) is checked with `Platform::Any`, which refuses every
+  spelling.
+- In **debug builds** the app's UI comes from the Vite dev server (`build.devUrl`), which
+  Tauri treats as local: the Terminal and Desktop Agent also refuse that exact origin as
+  widget content and as a navigation target.
+- Panel webviews, Desktop Agent app windows and `tauri-webview-host` windows also refuse
+  _navigation_ to a local origin (`tauri:`, `ipc:`, `asset:`, custom schemes, Windows'
+  `*.localhost`) or `file:`, via `ot_core::widget_url::is_allowed_navigation`. On macOS
+  the handler runs for every frame, so it allows ordinary iframe content (`about:srcdoc`,
+  `data:`); a `blob:` URL is allowed only when its creator origin passes the policy (or is
+  opaque, `blob:null/…`). On Windows the handler runs for the top-level page only; Tauri
+  injects its IPC bootstrap into main frames only, and `frame-ancestors 'none'` (below)
+  stops the app's pages being framed at all.
+- A panel whose saved URL is refused on restore gets no webview: its tab stays in the
+  layout (so the user can see and close it) and one `panel not loaded` warning is logged.
 - Grant only what the app's **JS** calls. Windows, webviews and events driven from Rust
   need no capability. Current grants:
 
@@ -97,7 +108,8 @@ it hosts.
 ## App Directory
 
 - `POST` / `PUT /v2/apps` reject a `web` or `onlineNative` `details.url` that isn't
-  http(s) with a host or is a `*.localhost` origin (`400`, `Invalid details.url: …`); the
+  http(s) with a host or is a local origin on any OS, `*.localhost` included
+  (`400`, `Invalid details.url: …`); the
   Desktop Agent re-checks in `plan_launch`, since records may predate the check. `native`,
   `citrix` and `other` URLs go to the OS opener unchecked (deep links, `file://`) — any
   local process can register one, so this stays open until writes are authenticated.

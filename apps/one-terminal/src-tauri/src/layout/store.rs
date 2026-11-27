@@ -1982,7 +1982,7 @@ impl LayoutTree {
                     park_label_offscreen(&app_for_main, label);
                 }
                 for (label, url, channel) in &to_create {
-                    if let Ok(parsed) = crate::widget_url::parse(url) {
+                    if let Some(parsed) = crate::widget_url::parse_for_restore(label, url) {
                         let script =
                             crate::config::append_initial_channel(&base_script, channel.as_deref());
                         win_for_main
@@ -2007,11 +2007,6 @@ impl LayoutTree {
                                 LogicalSize::new(1.0, 1.0),
                             )
                             .map_err(|e| e.to_string())?;
-                    } else {
-                        tracing::warn!(
-                            "switch: invalid url '{}' for panel '{label}'",
-                            ot_telemetry::redact::url(url)
-                        );
                     }
                 }
                 Ok(())

@@ -313,10 +313,6 @@
       "overlay": "shared"
     },
     {
-      "path": "apps/one-terminal/src-tauri/src/widget_url.rs",
-      "overlay": "shared"
-    },
-    {
       "path": "apps/one-terminal/src-tauri/src/widgets.rs",
       "overlay": "shared"
     },

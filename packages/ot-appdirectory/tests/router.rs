@@ -289,6 +289,8 @@ async fn local_origin_and_non_http_urls_are_rejected() {
         "tauri://localhost/index.html",
         "http://tauri.localhost/",
         "sample-widget://localhost/",
+        // Refused on every server OS: records may be launched on Windows.
+        "http://a.b.localhost/",
         "file:///etc/passwd",
         "javascript:alert(1)",
     ] {

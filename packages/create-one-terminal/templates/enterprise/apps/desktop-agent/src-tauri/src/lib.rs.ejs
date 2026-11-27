@@ -392,12 +392,24 @@ async fn run_plan(
 
     match plan {
         LaunchPlan::InProcessWebview { url, title } => {
-            let parsed: tauri::Url = url.parse().map_err(|e| format!("Invalid URL: {e}"))?;
+            // `plan_launch` already checked the URL; check again here so any
+            // other way of building a plan gets the same policy.
+            let parsed = ot_core::widget_url::parse_widget_url(&url)
+                .map_err(|e| format!("Invalid URL: {e}"))?;
+            // Debug builds serve the dashboard from the dev server, which
+            // Tauri then treats as a local origin (with IPC).
+            let dev_origin = cfg!(debug_assertions)
+                .then(|| app.config().build.dev_url.as_ref().map(|u| u.origin()))
+                .flatten();
+            let is_dev = move |u: &tauri::Url| dev_origin.as_ref() == Some(&u.origin());
+            if is_dev(&parsed) {
+                return Err("Invalid URL: the Desktop Agent's dev server origin".into());
+            }
             tauri::WebviewWindowBuilder::new(app, label, tauri::WebviewUrl::External(parsed))
                 .initialization_script(endpoint.init_script(label, Some(app_id)))
                 // The page may not navigate itself to a local origin (the
-                // agent's own, a custom scheme) or `file:` either.
-                .on_navigation(ot_core::widget_url::is_allowed_navigation)
+                // agent's own, a custom scheme, the dev server) or `file:`.
+                .on_navigation(move |u| ot_core::widget_url::is_allowed_navigation(u) && !is_dev(u))
                 .title(title)
                 .inner_size(1280.0, 800.0)
                 .build()

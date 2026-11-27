@@ -12,6 +12,7 @@ use serde::Deserialize;
 use serde_json::json;
 
 use ot_core::engine::OsKey;
+use ot_core::widget_url::{parse_widget_url_on, Platform, WidgetUrlError};
 
 use crate::data::AppStore;
 use crate::engines;
@@ -102,13 +103,7 @@ async fn create_app(
     }
 
     if let Err(err) = check_launch_url(&body) {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse {
-                message: format!("Invalid details.url: {err}"),
-            }),
-        )
-            .into_response();
+        return invalid_launch_url(&err);
     }
 
     if let Some(err) = validate_engine_bindings(&body.engine_bindings) {
@@ -150,13 +145,7 @@ async fn update_app(
     }
 
     if let Err(err) = check_launch_url(&body) {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(ErrorResponse {
-                message: format!("Invalid details.url: {err}"),
-            }),
-        )
-            .into_response();
+        return invalid_launch_url(&err);
     }
 
     if let Some(err) = validate_engine_bindings(&body.engine_bindings) {
@@ -232,13 +221,28 @@ fn validate_engine_bindings(
 
 /// `web` and `onlineNative` URLs load in a webview (a Terminal panel or a
 /// Desktop Agent window), so they must pass the widget URL policy: never a
-/// local origin with IPC. Other types go to the OS opener (deep links,
+/// local origin with IPC. Records are launched on whatever OS the client runs,
+/// so every platform's local-origin spelling is refused ([`Platform::Any`]),
+/// not just the server's. Other types go to the OS opener (deep links,
 /// `file://`), which this check doesn't cover.
-fn check_launch_url(app: &AppD) -> Result<(), ot_core::widget_url::WidgetUrlError> {
+///
+/// Only writes are checked; seeded and stored records are re-checked by the
+/// launchers (`plan_launch`, the Terminal's widget URL policy).
+fn check_launch_url(app: &AppD) -> Result<(), WidgetUrlError> {
     match app.app_type {
         AppType::Web | AppType::OnlineNative => {
-            ot_core::widget_url::parse_widget_url(&app.details.url).map(|_| ())
+            parse_widget_url_on(&app.details.url, Platform::Any).map(|_| ())
         }
         AppType::Native | AppType::Citrix | AppType::Other => Ok(()),
     }
+}
+
+fn invalid_launch_url(err: &WidgetUrlError) -> axum::response::Response {
+    (
+        StatusCode::BAD_REQUEST,
+        Json(ErrorResponse {
+            message: format!("Invalid details.url: {err}"),
+        }),
+    )
+        .into_response()
 }

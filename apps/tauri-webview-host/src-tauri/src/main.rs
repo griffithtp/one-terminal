@@ -32,10 +32,13 @@ fn main() {
     let title = std::env::var("OT_TITLE").unwrap_or_else(|_| "App".into());
     let app_id = std::env::var("OT_APP_ID").unwrap_or_else(|_| "app".into());
 
-    let parsed: tauri::Url = match url_raw.parse() {
+    // The spawning Terminal / Desktop Agent already checked the URL; check it
+    // again here so a host started any other way can't open a local origin
+    // (this host's own `tauri://localhost`, a custom scheme) or `file:`.
+    let parsed: tauri::Url = match ot_core::widget_url::parse_widget_url(&url_raw) {
         Ok(u) => u,
         Err(e) => {
-            tracing::error!("invalid OT_URL {}: {e}", redact::url(&url_raw));
+            tracing::error!("refused OT_URL {}: {e}", redact::url(&url_raw));
             telemetry.shutdown();
             std::process::exit(EXIT_BAD_ARGS);
         }
@@ -63,7 +66,9 @@ fn main() {
                     tauri::WebviewUrl::External(parsed.clone()),
                 )
                 .title(title_clone.clone())
-                .inner_size(1280.0, 800.0);
+                .inner_size(1280.0, 800.0)
+                // Nor may the page navigate itself onto one.
+                .on_navigation(ot_core::widget_url::is_allowed_navigation);
                 if let Some(script) = &widget_script {
                     window = window.initialization_script(script);
                 }
