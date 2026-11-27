@@ -129,9 +129,12 @@ it hosts.
   `enclosed_name()`, contents streamed with `io::copy` (never sized from the entry
   header), no symlinks created, no permission bits applied. Don't switch to
   `ZipArchive::extract()`.
-- Plugin `LaunchMode::SpawnBinary { binary_name, … }` is passed to `Command::new`, which
-  does a `PATH` lookup. Resolve plugin binaries to an absolute path inside the plugin's own
-  directory, and reject names containing path separators or `..`.
+- Plugin `LaunchMode::SpawnBinary` binaries are resolved by
+  `EngineManifest::resolve_binary` to an absolute, canonical path inside the manifest's
+  own folder (`<engine-cache>/plugins/<family>/`, plus `.exe` on Windows) and spawned from
+  that folder — never looked up on `PATH`. Names with a path separator, `..`, `:` or NUL
+  are refused, as is a file whose canonical path (e.g. through a symlink) leaves the
+  folder. Never pass a manifest-supplied name to `Command::new` directly.
 - Pass untrusted values (`{{url}}`, `{{title}}`, `{{app_id}}`) as discrete arguments or
   env vars — never through a shell (`sh -c`, `cmd /C`).
 - Native app launch (planned) must be allow-list based
