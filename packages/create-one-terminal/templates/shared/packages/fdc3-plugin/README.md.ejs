@@ -41,7 +41,7 @@ The first non-empty value wins:
 2. The `fdc3AppId` query parameter
 3. The document title
 
-App ids are self-asserted: the Desktop Agent doesn't authenticate them.
+The Desktop Agent checks the claim against the page's origin: a page served from a non-loopback origin must be served from the origin of that app's `details.url` in the App Directory, or the connection is refused (`403`). Pages on `localhost` / `127.0.0.1` and non-browser clients are trusted with the id they claim.
 
 ## Bus URL
 
