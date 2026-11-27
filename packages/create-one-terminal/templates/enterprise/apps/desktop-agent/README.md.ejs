@@ -189,6 +189,8 @@ If multiple bindings exist for the current OS, a picker dialog is shown in the T
 
 Drop a `manifest.json` into `<engine-cache>/plugins/<name>/` to register a custom engine. The `launchMode` field drives the launch decision. Template variables available in `envTemplates`: `{{url}}`, `{{title}}`, `{{app_id}}`, `{{runtime_path}}`.
 
+For `spawnBinary`, `binaryName` is a file name in the same folder as `manifest.json` (on Windows, `.exe` is added if the name has no extension). It is never looked up on `PATH`. A name containing `/`, `\`, `..` or `:`, or a file that resolves outside the plugin's folder (for example through a symlink), is refused. The binary runs with the plugin's folder as its working directory.
+
 Example (`plugins/cef/manifest.json`):
 
 ```json
