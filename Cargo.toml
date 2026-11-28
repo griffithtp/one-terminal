@@ -43,7 +43,7 @@ futures-util      = "0.3"
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
 
 # Engine runtime cache (download/verify/extract)
-sha2 = "0.10"
+sha2 = "0.11"
 hex  = "0.4"
 # Widget telemetry tokens (packages/ot-telemetry, feature `ingress`).
 hmac = "0.12"
