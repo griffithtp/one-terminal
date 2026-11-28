@@ -3,8 +3,11 @@
 
 use std::collections::HashSet;
 
+use axum::extract::Request;
 use axum::extract::{Path, Query, State};
-use axum::http::StatusCode;
+use axum::http::{Method, StatusCode};
+use axum::middleware::{self, Next};
+use axum::response::Response;
 use axum::response::{IntoResponse, Json};
 use axum::routing::get;
 use axum::Router;
@@ -14,6 +17,7 @@ use serde_json::json;
 use ot_core::engine::OsKey;
 use ot_core::widget_url::{parse_widget_url_on, Platform, WidgetUrlError};
 
+use crate::auth::WriteAuth;
 use crate::data::AppStore;
 use crate::engines;
 use crate::filter::apply_filter;
@@ -22,12 +26,16 @@ use crate::types::{AppD, AppType, AppsListResponse, EngineCatalogResponse, Error
 #[derive(Clone)]
 pub struct AppState {
     pub store: AppStore,
+    pub auth: WriteAuth,
 }
 
 /// Build the App Directory router. Mount at `/v2` for the FDC3 routes; `/health`
 /// is mounted at the router root (matches `apps/app-directory/src/index.ts`).
-pub fn router(store: AppStore) -> Router {
-    let state = AppState { store };
+///
+/// `auth` guards `POST` / `PUT` / `DELETE /v2/apps` ([`WriteAuth`]); reads
+/// are open.
+pub fn router(store: AppStore, auth: WriteAuth) -> Router {
+    let state = AppState { store, auth };
 
     let v2 = Router::new()
         .route("/engines", get(get_engines))
@@ -35,12 +43,29 @@ pub fn router(store: AppStore) -> Router {
         .route(
             "/apps/:app_id",
             get(get_app).put(update_app).delete(delete_app),
-        );
+        )
+        // Before any extractor, so an unauthorised write is refused without
+        // its body being parsed or validated.
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            require_write_auth,
+        ));
 
     Router::new()
         .route("/health", get(health))
         .nest("/v2", v2)
         .with_state(state)
+}
+
+/// Refuse writes that don't pass the router's [`WriteAuth`]; reads pass.
+async fn require_write_auth(State(state): State<AppState>, req: Request, next: Next) -> Response {
+    let reads = [Method::GET, Method::HEAD, Method::OPTIONS];
+    if !reads.contains(req.method()) {
+        if let Err(e) = state.auth.check(req.headers()) {
+            return e.into_response();
+        }
+    }
+    next.run(req).await
 }
 
 async fn health() -> impl IntoResponse {

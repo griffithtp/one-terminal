@@ -1,6 +1,7 @@
 import * as p from "@clack/prompts";
 import ejs from "ejs";
 import { readFile, readdir, writeFile, mkdir, stat } from "node:fs/promises";
+import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { walk } from "../utils/fs.js";
@@ -141,8 +142,9 @@ async function registerWidget(spec: WidgetSpec, cwd: string, variant: Variant): 
     return;
   }
 
-  // Enterprise — print the curl command. Optionally execute if OT_APPD_TOKEN
-  // and OT_APP_DIR_URL are both set.
+  // Enterprise — register through the API when a write token is available
+  // (OT_APPD_TOKEN, else the running Desktop Agent's token file); otherwise
+  // print the curl command.
   const url = process.env.OT_APP_DIR_URL ?? "http://localhost:3005/v2/apps";
   const payload = {
     appId: spec.widgetName,
@@ -153,7 +155,7 @@ async function registerWidget(spec: WidgetSpec, cwd: string, variant: Variant): 
     categories: [],
   };
 
-  const token = process.env.OT_APPD_TOKEN;
+  const token = process.env.OT_APPD_TOKEN || (await readDesktopAgentToken());
   if (token) {
     const ok = await tryRegisterViaApi(url, payload, token);
     if (ok) {
@@ -174,6 +176,29 @@ async function registerWidget(spec: WidgetSpec, cwd: string, variant: Variant): 
       .filter(Boolean)
       .join("\n")
   );
+}
+
+/**
+ * The write token of the App Directory embedded in a running Desktop Agent:
+ * it writes a new one per run to `appd-token` next to the user's
+ * `agent.config.json` (macOS `~/Library/Application Support/one-terminal/`,
+ * Windows `%APPDATA%\one-terminal\`, Linux `$XDG_CONFIG_HOME/one-terminal/`
+ * or `~/.config/one-terminal/`).
+ */
+async function readDesktopAgentToken(): Promise<string | undefined> {
+  const dir =
+    process.platform === "darwin"
+      ? join(homedir(), "Library", "Application Support")
+      : process.platform === "win32"
+        ? process.env.APPDATA
+        : process.env.XDG_CONFIG_HOME || join(homedir(), ".config");
+  if (!dir) return undefined;
+  try {
+    const token = (await readFile(join(dir, "one-terminal", "appd-token"), "utf8")).trim();
+    return token || undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 async function tryRegisterViaApi(url: string, payload: unknown, token: string): Promise<boolean> {

@@ -132,6 +132,17 @@ Returns a single application by `appId` (exact, case-sensitive).
 
 ---
 
+### Writes need a token
+
+`POST`, `PUT` and `DELETE` need `Authorization: Bearer <token>`. Reads are open.
+
+- **Embedded in the Desktop Agent:** a new random token every run.
+  - The Desktop Agent's **App Directory** button opens this UI with the token in the URL fragment. The fragment never reaches the server; the page moves it into `sessionStorage`.
+  - It is also written to `appd-token` in the user's `one-terminal` config folder (owner-only on macOS and Linux), where the scaffolder's `new-widget` wizard reads it. The file is removed on exit.
+- **Standalone server:** set `APPD_WRITE_TOKEN`. Without it the server is **read-only**. The UI asks for the token the first time a write is refused.
+
+Without a valid token, a write returns `401 Unauthorized`; on a read-only server it returns `403 Forbidden`.
+
 ### `POST /v2/apps`
 
 Register a new application. The `appId` must be unique.
@@ -188,6 +199,7 @@ Remove an application from the directory. The CDA will no longer include it in L
 
 **Response** `204 No Content`
 **Response** `404 Not Found`
+**Response** `401` / `403` — see [Writes need a token](#writes-need-a-token)
 
 ---
 

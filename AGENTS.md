@@ -172,9 +172,10 @@ The standalone App Directory server (`apps/app-directory-server`) reads its vars
 | `OT_LOG`                     | all binaries  | Log filter: a level plus `target=level` pairs, e.g. `info,desktop_agent_lib=debug`; overrides `RUST_LOG` and `telemetry.logLevel`                                          |
 | `OT_LOG_DIR`                 | all binaries  | Log file directory; overrides `telemetry.logDir` (default: macOS `~/Library/Logs/one-terminal`, Windows `%LOCALAPPDATA%\one-terminal\logs`)                                |
 | `OT_OTLP_ENDPOINT`           | all binaries  | OTLP/HTTP collector base URL (e.g. `http://localhost:4318`). Turns export on; overrides the standard `OTEL_EXPORTER_OTLP_*ENDPOINT` vars and `telemetry.otlp.endpoint`     |
-| `OT_APPD_TOKEN`              | scaffolder    | Bearer token the `new-widget` wizard sends when registering a widget (the server doesn't check it yet)                                                                     |
+| `OT_APPD_TOKEN`              | scaffolder    | Bearer token the `new-widget` wizard sends when registering a widget; defaults to the running Desktop Agent's `appd-token` file                                            |
 | `PORT`                       | App Directory | Standalone server listen port (default 3005)                                                                                                                               |
 | `CORS_ORIGIN`                | App Directory | Comma-separated allowed origins                                                                                                                                            |
+| `APPD_WRITE_TOKEN`           | App Directory | Standalone server: bearer token required for `POST`/`PUT`/`DELETE /v2/apps`. Unset = read-only                                                                             |
 
 ### Internal variables
 

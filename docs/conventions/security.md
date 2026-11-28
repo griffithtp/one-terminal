@@ -11,7 +11,7 @@ system or process spawning except through an explicitly validated path.
 | Panel webview → Tauri IPC                                                    | Widget pages (any URL)             | Tauri capabilities (local origins only)                                                                                                                                                                                   |
 | Widget → FDC3 bus (`ws://127.0.0.1:7891/fdc3`)                               | Any local process or web page      | `Origin` bound to the claimed `appId` via the App Directory before the upgrade (`fdc3_bus::admission`, see below)                                                                                                         |
 | Widget / app URL → webview or window creation and navigation                 | Config, directory records, widgets | `ot_core::widget_url`: http(s) with a host, never a local origin; enforced at every creation site, in `on_navigation` and in `tauri-webview-host` (see below)                                                             |
-| Client → App Directory REST (`:3005`)                                        | Admin UI, scripts, browsers        | Loopback bind; CORS on the standalone server; auth planned                                                                                                                                                                |
+| Client → App Directory REST (`:3005`)                                        | Admin UI, scripts, browsers        | Writes need a bearer token (`WriteAuth`): per-run for the embedded directory, `APPD_WRITE_TOKEN` (else read-only) for the standalone server; loopback bind / CORS                                                         |
 | App Directory / plugin manifest → process spawn                              | Directory records, `manifest.json` | Engine catalog checksums; launch routing in `engines/router.rs`                                                                                                                                                           |
 | Config files / env vars                                                      | Local user                         | Validation in `AgentConfig::load()`; unknown keys ignored                                                                                                                                                                 |
 | UI webview → log relay (`wm_telemetry_log`, `cda_telemetry_log`)             | Any webview that reaches IPC       | Webview-label allowlist (chrome / overlay / dashboard only); sender identity from the label, never the payload; `ot_telemetry::relay` caps, rate limit and sanitising                                                     |
@@ -109,8 +109,8 @@ setting.
 **Remaining gaps:**
 
 - Local processes and loopback pages can still claim any `appId`.
-- App Directory writes are unauthenticated, so a local process can register an app at an
-  attacker's origin (see below).
+- A local process running as the user can read the embedded App Directory's token file and
+  register an app at an attacker's origin (see below).
 - Two apps sharing an origin can claim each other's `appId`.
 - The check identifies the origin, not the window: two instances of the same app are
   indistinguishable.
@@ -127,14 +127,21 @@ injected by the Terminal into each webview it hosts.
   Desktop Agent re-checks in `plan_launch`, since records may predate the check. `native`,
   `citrix` and `other` URLs reach the OS opener only through the `nativeApps.allow`
   check (see Process spawning): `file:` paths and custom schemes are refused unless
-  listed.
+  listed, and only a writer holding the token can register such a record.
 - The embedded App Directory binds to `127.0.0.1` and has no CORS layer, so browsers block
   cross-origin JSON writes (preflight fails). The standalone server allows only the
   origins in `CORS_ORIGIN`.
-- `POST /v2/apps`, `PUT` and `DELETE /v2/apps/:app_id` are **unauthenticated** — any local process
-  can register an app, including its URL and engine binding. Auth is planned;
-  until then, treat directory
-  records as untrusted input when launching.
+- `POST /v2/apps`, `PUT` and `DELETE /v2/apps/:app_id` need `Authorization: Bearer
+<token>`, checked in a middleware before the body is parsed (`ot_appdirectory::auth`,
+  constant-time compare). Reads stay open.
+  - **Embedded** (Desktop Agent): a random 256-bit token per run. The management UI
+    gets it in the URL **fragment** when the agent opens it, so fetching the page doesn't
+    reveal it. The `new-widget` wizard reads it from `appd-token` in the user's config
+    folder (mode `0600` on Unix; per-user `%APPDATA%` on Windows), removed on exit.
+  - **Standalone** (`app-directory-server`, binds `0.0.0.0`): `APPD_WRITE_TOKEN`; unset
+    means **read-only** (`403`). Never ship an open-write mode.
+  - Any process running as the user can still read the token file, so treat directory
+    records as untrusted input when launching.
 
 ## Process spawning
 

@@ -3,6 +3,7 @@
 //! Mounted in-process by `desktop-agent` and served standalone by
 //! `apps/app-directory-server`.
 
+pub mod auth;
 pub mod data;
 pub mod engines;
 pub mod filter;
@@ -11,6 +12,7 @@ pub mod samples;
 pub mod types;
 pub mod ui;
 
+pub use auth::{AuthError, WriteAuth};
 pub use data::AppStore;
 pub use router::router;
 
@@ -18,6 +20,6 @@ pub use router::router;
 /// plus the embedded React admin UI served as a catch-all fallback. Used by
 /// both `desktop-agent`'s in-process mount and the standalone
 /// `app-directory-server` binary.
-pub fn router_with_ui(store: AppStore) -> axum::Router {
-    ui::serve_ui(router(store).merge(samples::router()))
+pub fn router_with_ui(store: AppStore, auth: WriteAuth) -> axum::Router {
+    ui::serve_ui(router(store, auth).merge(samples::router()))
 }
