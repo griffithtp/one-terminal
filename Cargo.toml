@@ -46,7 +46,7 @@ reqwest = { version = "0.12", default-features = false, features = ["json", "rus
 sha2 = "0.10"
 hex  = "0.4"
 # Widget telemetry tokens (packages/ot-telemetry, feature `ingress`).
-hmac = "0.12"
+hmac = "0.13"
 zip  = { version = "9.6", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 
 # Logging, tracing and OpenTelemetry (packages/ot-telemetry). The opentelemetry*
