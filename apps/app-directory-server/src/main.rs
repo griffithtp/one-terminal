@@ -3,7 +3,7 @@
 //! the retired `apps/app-directory/src/index.ts` Node/Express entrypoint.
 
 use axum::http::{HeaderValue, Method};
-use ot_appdirectory::{router_with_ui, AppStore};
+use ot_appdirectory::{router_with_ui, AppStore, WriteAuth};
 use tower_http::cors::CorsLayer;
 
 fn main() {
@@ -56,7 +56,17 @@ async fn serve() {
             axum::http::header::AUTHORIZATION,
         ]);
 
-    let app = router_with_ui(AppStore::new()).layer(cors);
+    // Writes (POST/PUT/DELETE /v2/apps) need `Authorization: Bearer
+    // $APPD_WRITE_TOKEN`; with no token set the directory is read-only. This
+    // server listens on every interface, so open writes would let anyone on
+    // the network change which apps OneTerminal launches.
+    let auth = WriteAuth::from_token(std::env::var("APPD_WRITE_TOKEN").ok());
+    if auth.writes_enabled() {
+        tracing::info!("writes enabled (bearer token from APPD_WRITE_TOKEN)");
+    } else {
+        tracing::warn!("read-only: set APPD_WRITE_TOKEN to allow POST/PUT/DELETE /v2/apps");
+    }
+    let app = router_with_ui(AppStore::new(), auth).layer(cors);
 
     let listener = tokio::net::TcpListener::bind(("0.0.0.0", port))
         .await

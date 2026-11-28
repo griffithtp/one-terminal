@@ -1,4 +1,5 @@
 pub mod app_dir;
+mod appd_token;
 pub mod broker;
 mod children;
 mod config;
@@ -238,8 +239,14 @@ fn cda_get_app_dir_url(cfg: State<'_, AgentConfig>) -> String {
 
 /// Open the App Directory management UI in the system browser.
 #[tauri::command]
-fn cda_open_app_directory(cfg: State<'_, AgentConfig>) -> Result<(), String> {
-    tauri_plugin_opener::open_url(&cfg.app_directory_url, None::<&str>)
+fn cda_open_app_directory(app: AppHandle, cfg: State<'_, AgentConfig>) -> Result<(), String> {
+    // The embedded directory's UI needs this run's write token; it travels
+    // in the URL fragment, which the browser never sends to the server.
+    let url = match app.try_state::<appd_token::AppdToken>() {
+        Some(t) => appd_token::ui_url(&cfg.app_directory_url, &t.0),
+        None => cfg.app_directory_url.clone(),
+    };
+    tauri_plugin_opener::open_url(url, None::<&str>)
         .map_err(|e| format!("Failed to open App Directory: {e}"))
 }
 
@@ -796,6 +803,25 @@ pub fn run() {
                 let appd_cfg = app.state::<AgentConfig>().inner().clone();
                 if appd_cfg.appd_embedded {
                     let port = config::port_from_url(&appd_cfg.app_directory_url);
+                    // Writes to the embedded directory need this run's token
+                    // (see `appd_token`): the management UI gets it in the
+                    // URL fragment, the scaffolder from the token file.
+                    let token = appd_token::generate();
+                    match appd_token::token_path() {
+                        Some(path) => {
+                            if let Err(e) = appd_token::write_file(&path, &token) {
+                                tracing::warn!(
+                                    "App Directory write token not saved to {}: {e}",
+                                    path.display()
+                                );
+                            }
+                        }
+                        None => tracing::warn!(
+                            "App Directory write token not saved: no per-user config folder"
+                        ),
+                    }
+                    app.manage(appd_token::AppdToken(token.clone()));
+                    let auth = ot_appdirectory::WriteAuth::from_token(Some(token));
                     tauri::async_runtime::spawn(async move {
                         match tokio::net::TcpListener::bind(("127.0.0.1", port)).await {
                             Ok(listener) => {
@@ -804,6 +830,7 @@ pub fn run() {
                                 );
                                 let router = ot_appdirectory::router_with_ui(
                                     ot_appdirectory::AppStore::new(),
+                                    auth,
                                 );
                                 if let Err(e) = axum::serve(listener, router).await {
                                     tracing::error!("App Directory server error: {e}");
@@ -978,6 +1005,12 @@ pub fn run() {
     app.run(move |app, event| {
         if let tauri::RunEvent::Exit = event {
             kill_app_hosts(app);
+            // The token dies with this run; don't leave it on disk.
+            if app.try_state::<appd_token::AppdToken>().is_some() {
+                if let Some(path) = appd_token::token_path() {
+                    let _ = std::fs::remove_file(path);
+                }
+            }
             telemetry.shutdown();
         }
     });

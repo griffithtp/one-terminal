@@ -21,10 +21,6 @@
       "overlay": "enterprise"
     },
     {
-      "path": "apps/app-directory/ui/dist/index.html",
-      "overlay": "enterprise"
-    },
-    {
       "path": "apps/app-directory/ui/index.html",
       "overlay": "enterprise"
     },
@@ -53,6 +49,10 @@
       "overlay": "enterprise"
     },
     {
+      "path": "apps/app-directory/ui/src/writeAuth.ts",
+      "overlay": "enterprise"
+    },
+    {
       "path": "apps/app-directory/vite.config.ts",
       "overlay": "enterprise"
     },
@@ -70,6 +70,10 @@
     },
     {
       "path": "apps/desktop-agent/src-tauri/src/app_dir/mod.rs",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/desktop-agent/src-tauri/src/appd_token.rs",
       "overlay": "enterprise"
     },
     {
@@ -718,6 +722,10 @@
     },
     {
       "path": "packages/ot-appdirectory/Cargo.toml",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "packages/ot-appdirectory/src/auth.rs",
       "overlay": "enterprise"
     },
     {
