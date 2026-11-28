@@ -14,7 +14,7 @@ ot-core     = { workspace = true }
 rust-embed = { version = "8", features = ["mime-guess", "include-exclude"] }
 
 [dev-dependencies]
-tower = { version = "0.4", features = ["util"] }
+tower = { version = "0.5", features = ["util"] }
 http-body-util = "0.1"
 
 [lints]

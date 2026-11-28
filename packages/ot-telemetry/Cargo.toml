@@ -57,7 +57,7 @@ rand  = { workspace = true, optional = true }
 opentelemetry_sdk = { workspace = true, features = ["testing"] }
 # Emit `log`-crate records in tests (tao/wry/tauri log through it).
 log = "0.4"
-tower = { version = "0.4", features = ["util"] }
+tower = { version = "0.5", features = ["util"] }
 tokio = { workspace = true }
 
 [lints]

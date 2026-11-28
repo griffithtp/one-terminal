@@ -34,7 +34,7 @@ rust-embed = { version = "8", features = ["mime-guess", "include-exclude"] }
 axum       = { workspace = true }
 
 [dev-dependencies]
-tower = { version = "0.4", features = ["util"] }
+tower = { version = "0.5", features = ["util"] }
 ot-telemetry = { workspace = true, features = ["otlp", "testing"] }
 
 [lints]
