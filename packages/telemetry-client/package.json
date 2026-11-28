@@ -27,7 +27,7 @@
   "devDependencies": {
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
-    "esbuild": "^0.25.0",
+    "esbuild": "^0.28.2",
     "jsdom": "^31.0.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",

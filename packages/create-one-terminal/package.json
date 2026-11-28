@@ -35,7 +35,7 @@
   "devDependencies": {
     "@types/ejs": "^3.1.5",
     "@types/node": "^22",
-    "tsx": "^4.19.4",
+    "tsx": "^4.23.15",
     "typescript": "~5.8.3"
   },
   "engines": {
