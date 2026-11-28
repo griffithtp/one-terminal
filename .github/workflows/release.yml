@@ -118,7 +118,7 @@ jobs:
         run: npm run build:app-directory
 
       - name: Release one-terminal (standalone installer)
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@v1
         with:
           projectPath: apps/one-terminal
           releaseId: ${{ needs.create-release.outputs.release_id }}
@@ -147,7 +147,7 @@ jobs:
         # actually exercised here (host-triple fallback is what runs) —
         # that path is unverified until a genuinely cross-compiling target
         # (e.g. universal macOS) is added.
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@v1
         with:
           projectPath: apps/desktop-agent
           releaseId: ${{ needs.create-release.outputs.release_id }}
