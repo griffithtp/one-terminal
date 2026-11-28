@@ -196,6 +196,9 @@ injected by the Terminal into each webview it hosts.
   and `npm audit --omit=dev --audit-level=high`. A new advisory fails it even on unrelated
   PRs — upgrade the dependency, or add a `deny.toml` `ignore` entry whose reason shows the
   advisory doesn't apply. Never disable the job.
+- `.github/dependabot.yml` opens grouped weekly update PRs (npm, Cargo, GitHub Actions)
+  and grouped security-fix PRs. A bump to a dependency that ships to scaffolded
+  workspaces must go through the framework-upgrade workflow before it merges.
 - Workspace crates are `publish = false`; that's what lets the license check skip them.
 
 ## Open questions
