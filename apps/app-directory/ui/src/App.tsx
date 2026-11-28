@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import type { AppD } from "./types";
 import AppList from "./components/AppList";
 import AppForm from "./components/AppForm";
+import { writeFetch, writeRefusal } from "./writeAuth";
 
 type View = "list" | "register" | "edit";
 
@@ -49,8 +50,8 @@ export default function App() {
 
   const handleDelete = async (appId: string) => {
     try {
-      const res = await fetch(`/v2/apps/${appId}`, { method: "DELETE" });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const res = await writeFetch(`/v2/apps/${appId}`, { method: "DELETE" });
+      if (!res.ok) throw new Error(writeRefusal(res.status) ?? `HTTP ${res.status}`);
       showToast("Application removed.");
       void fetchApps();
     } catch (e: unknown) {

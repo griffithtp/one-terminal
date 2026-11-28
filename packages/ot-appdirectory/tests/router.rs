@@ -4,10 +4,12 @@ use http_body_util::BodyExt;
 use serde_json::{json, Value};
 use tower::ServiceExt;
 
-use ot_appdirectory::{router, AppStore};
+use ot_appdirectory::{router, AppStore, WriteAuth};
+
+const TOKEN: &str = "test-token";
 
 fn app() -> axum::Router {
-    router(AppStore::new())
+    router(AppStore::new(), WriteAuth::from_token(Some(TOKEN.into())))
 }
 
 async fn body_json(resp: axum::response::Response) -> Value {
@@ -97,6 +99,7 @@ async fn create_get_update_delete_roundtrip() {
         .oneshot(
             Request::builder()
                 .method("POST")
+                .header("authorization", format!("Bearer {TOKEN}"))
                 .uri("/v2/apps")
                 .header("content-type", "application/json")
                 .body(Body::from(new_app.to_string()))
@@ -112,6 +115,7 @@ async fn create_get_update_delete_roundtrip() {
         .oneshot(
             Request::builder()
                 .method("POST")
+                .header("authorization", format!("Bearer {TOKEN}"))
                 .uri("/v2/apps")
                 .header("content-type", "application/json")
                 .body(Body::from(new_app.to_string()))
@@ -146,6 +150,7 @@ async fn create_get_update_delete_roundtrip() {
         .oneshot(
             Request::builder()
                 .method("PUT")
+                .header("authorization", format!("Bearer {TOKEN}"))
                 .uri("/v2/apps/test-app")
                 .header("content-type", "application/json")
                 .body(Body::from(updated.to_string()))
@@ -163,6 +168,7 @@ async fn create_get_update_delete_roundtrip() {
         .oneshot(
             Request::builder()
                 .method("DELETE")
+                .header("authorization", format!("Bearer {TOKEN}"))
                 .uri("/v2/apps/test-app")
                 .body(Body::empty())
                 .unwrap(),
@@ -200,6 +206,7 @@ async fn invalid_engine_binding_rejected() {
         .oneshot(
             Request::builder()
                 .method("POST")
+                .header("authorization", format!("Bearer {TOKEN}"))
                 .uri("/v2/apps")
                 .header("content-type", "application/json")
                 .body(Body::from(new_app.to_string()))
@@ -231,6 +238,7 @@ async fn post_app(body: Value) -> (StatusCode, Value) {
         .oneshot(
             Request::builder()
                 .method("POST")
+                .header("authorization", format!("Bearer {TOKEN}"))
                 .uri("/v2/apps")
                 .header("content-type", "application/json")
                 .body(Body::from(body.to_string()))
@@ -318,6 +326,7 @@ async fn update_with_a_local_origin_url_is_rejected() {
         .oneshot(
             Request::builder()
                 .method("PUT")
+                .header("authorization", format!("Bearer {TOKEN}"))
                 .uri("/v2/apps/chart-viewer")
                 .header("content-type", "application/json")
                 .body(Body::from(
@@ -365,4 +374,77 @@ async fn online_native_apps_get_the_widget_url_policy() {
     }))
     .await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+async fn write_status(app: axum::Router, auth: Option<&str>) -> StatusCode {
+    let mut req = Request::builder()
+        .method("POST")
+        .uri("/v2/apps")
+        .header("content-type", "application/json");
+    if let Some(a) = auth {
+        req = req.header("authorization", a);
+    }
+    let body = json!({
+        "appId": "auth-test",
+        "title": "Auth test",
+        "type": "web",
+        "details": { "url": "http://localhost:9999" }
+    });
+    app.oneshot(req.body(Body::from(body.to_string())).unwrap())
+        .await
+        .unwrap()
+        .status()
+}
+
+#[tokio::test]
+async fn writes_need_the_bearer_token() {
+    assert_eq!(write_status(app(), None).await, StatusCode::UNAUTHORIZED);
+    assert_eq!(
+        write_status(app(), Some("Bearer wrong")).await,
+        StatusCode::UNAUTHORIZED
+    );
+    assert_eq!(
+        write_status(app(), Some(&format!("Bearer {TOKEN}"))).await,
+        StatusCode::CREATED
+    );
+}
+
+#[tokio::test]
+async fn deletes_and_updates_need_the_token_too() {
+    for (method, uri) in [
+        ("DELETE", "/v2/apps/chart-viewer"),
+        ("PUT", "/v2/apps/chart-viewer"),
+    ] {
+        let resp = app()
+            .oneshot(
+                Request::builder()
+                    .method(method)
+                    .uri(uri)
+                    .header("content-type", "application/json")
+                    .body(Body::from("{}"))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED, "{method}");
+    }
+}
+
+#[tokio::test]
+async fn a_read_only_directory_refuses_writes_but_serves_reads() {
+    let ro = || router(AppStore::new(), WriteAuth::ReadOnly);
+    assert_eq!(
+        write_status(ro(), Some(&format!("Bearer {TOKEN}"))).await,
+        StatusCode::FORBIDDEN
+    );
+    let resp = ro()
+        .oneshot(
+            Request::builder()
+                .uri("/v2/apps")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(resp.status(), StatusCode::OK);
 }

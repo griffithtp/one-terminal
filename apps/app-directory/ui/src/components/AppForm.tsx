@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { writeFetch, writeRefusal } from "../writeAuth";
 import type { AppD, AppType, EngineBinding, EngineCatalog, EngineFamily, OsKey } from "../types";
 
 function detectCurrentOs(): OsKey {
@@ -385,13 +386,15 @@ export default function AppForm({ existingApp, onSave, onCancel }: Props) {
       const method = isEdit ? "PUT" : "POST";
       const url = existingApp ? `/v2/apps/${existingApp.appId}` : "/v2/apps";
 
-      const res = await fetch(url, {
+      const res = await writeFetch(url, {
         method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
 
       if (!res.ok) {
+        const refusal = writeRefusal(res.status);
+        if (refusal) throw new Error(refusal);
         const data = await res.json().catch(() => ({}));
         throw new Error((data as { message?: string }).message ?? `HTTP ${res.status}`);
       }
