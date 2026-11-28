@@ -1,0 +1,87 @@
+# Dependabot version and security updates.
+#
+# Grouped so there is about one PR per ecosystem per week, plus one per ecosystem for
+# security fixes, instead of one PR per package. Major versions stay separate: they can
+# need code changes and deserve their own review.
+#
+# A bump to a dependency that ships to scaffolded workspaces fails the template-drift check
+# until the templates are refreshed. Check out the PR branch and follow the
+# framework-upgrade workflow (.ai/skills/framework-upgrade/SKILL.md). The same goes for
+# fdc3-plugin.js / ot-telemetry.js when their bundled dependencies move: regenerate them.
+#
+# Commit prefixes follow commitlint.config.js (Conventional Commits, scope `deps`).
+
+version: 2
+
+updates:
+  - package-ecosystem: "npm"
+    # The root lockfile covers every workspace (apps/*, packages/*).
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "05:00"
+      timezone: "Etc/UTC"
+    # Wait a week before proposing a new release (supply-chain hygiene). Security
+    # updates are not delayed.
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "fix(deps)"
+      prefix-development: "chore(deps)"
+    groups:
+      npm-security:
+        applies-to: security-updates
+        patterns: ["*"]
+      # Tauri's JS packages must match the Rust crates' minor version.
+      tauri:
+        patterns: ["@tauri-apps/*"]
+        update-types: ["minor", "patch"]
+      npm-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: "cargo"
+    # The workspace Cargo.lock at the root covers every crate.
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "05:00"
+      timezone: "Etc/UTC"
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: "fix(deps)"
+    groups:
+      cargo-security:
+        applies-to: security-updates
+        patterns: ["*"]
+      tauri:
+        patterns: ["tauri", "tauri-*", "wry", "tao"]
+        update-types: ["minor", "patch"]
+      cargo-minor-patch:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "05:00"
+      timezone: "Etc/UTC"
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: "ci(deps)"
+    ignore:
+      # Its tag is the pinned Rust toolchain version, not the action's version; the
+      # toolchain is bumped deliberately (rust-version, CI and release together).
+      - dependency-name: "dtolnay/rust-toolchain"
+    groups:
+      actions:
+        patterns: ["*"]
