@@ -263,6 +263,8 @@ The `type` field controls how the CDA Launcher opens the application when the us
 | `citrix`       | Opens `details.url` via the system opener                               | Citrix-hosted virtual applications                                                                          |
 | `other`        | Opens `details.url` via the system opener                               | Catch-all for non-standard deployment types                                                                 |
 
+> **What the system opener may open:** `http(s)` URLs always open, in the browser. A `file://` URL or a custom scheme (`zoommtg:`, `ms-teams:`) opens only if the Desktop Agent's `nativeApps.allow` lists it: the scheme as `"zoommtg:"`, or a folder that contains the file. Use `OT_NATIVE_APP_ALLOW` to override, with entries separated by `;`. The list is empty by default, so such launches are refused with a message naming what to add.
+
 > **`onlineNative` in practice**
 >
 > When the CDA launches an `onlineNative` app it creates a dedicated `tauri::WebviewWindow` at the app's `details.url`. The window is labelled `app-<appId>` so subsequent launch requests re-focus the existing window instead of opening a second instance. The initial size is 1280 × 800 px and the title is set from `title` (falling back to `name`). The same behaviour applies when a `fdc3:open` message arrives from the FDC3 Bus.

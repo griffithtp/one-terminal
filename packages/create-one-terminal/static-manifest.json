@@ -21,10 +21,6 @@
       "overlay": "enterprise"
     },
     {
-      "path": "apps/app-directory/ui/dist/index.html",
-      "overlay": "enterprise"
-    },
-    {
       "path": "apps/app-directory/ui/index.html",
       "overlay": "enterprise"
     },
@@ -134,6 +130,10 @@
     },
     {
       "path": "apps/desktop-agent/src-tauri/src/metrics.rs",
+      "overlay": "enterprise"
+    },
+    {
+      "path": "apps/desktop-agent/src-tauri/src/native_launch.rs",
       "overlay": "enterprise"
     },
     {
