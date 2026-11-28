@@ -6,6 +6,7 @@ mod config;
 mod engines;
 pub mod fdc3_bus;
 mod metrics;
+mod native_launch;
 mod telemetry_cmd;
 
 use app_dir::{AppDirectoryCache, AppRecord};
@@ -63,6 +64,23 @@ impl fdc3_bus::BusHost for TauriBusHost {
     }
 }
 
+/// Hand an app's URL to the OS opener, if `nativeApps.allow` permits it
+/// (`native_launch`: http(s) always; `file:` paths and other schemes only
+/// when listed). App Directory records are untrusted input.
+fn open_with_os(app: &AppHandle, app_id: &str, url: &str) -> Result<(), String> {
+    let allow = &app.state::<AgentConfig>().native_apps.allow;
+    if let Err(reason) = native_launch::check(url, allow) {
+        tracing::warn!(
+            app_id = %broker::clip_untrusted(app_id),
+            "refused to open app URL: {}",
+            broker::clip_untrusted(&reason)
+        );
+        return Err(format!("Not launching '{app_id}': {reason}"));
+    }
+    tauri_plugin_opener::open_url(url, None::<&str>)
+        .map_err(|e| format!("Failed to launch app: {e}"))
+}
+
 /// Launch a new instance of `app` for `fdc3.open` or intent resolution. Each
 /// call gets its own window, unlike the launcher, which focuses an existing one.
 /// Returns the window label only for windows this process owns and can close.
@@ -75,8 +93,7 @@ async fn launch_new_instance(
     let url = app.details.as_ref().and_then(|d| d.url.clone());
     if app.app_type != "onlineNative" {
         let url = url.ok_or_else(|| format!("App '{}' has no launch URL", app.app_id))?;
-        tauri_plugin_opener::open_url(url, None::<&str>)
-            .map_err(|e| format!("Failed to launch app: {e}"))?;
+        open_with_os(&app_handle, &app.app_id, &url)?;
         return Ok(None);
     }
 
@@ -296,8 +313,7 @@ async fn cda_launch_app(
     use engines::router::{plan_launch, resolve_binding, LaunchContext};
 
     if app_type != "onlineNative" {
-        return tauri_plugin_opener::open_url(app_url, None::<&str>)
-            .map_err(|e| format!("Failed to launch app: {e}"));
+        return open_with_os(&app, &app_id, &app_url);
     }
 
     // Focus an existing standalone window for this app if we already opened one.

@@ -141,6 +141,10 @@
       "overlay": "enterprise"
     },
     {
+      "path": "apps/desktop-agent/src-tauri/src/native_launch.rs",
+      "overlay": "enterprise"
+    },
+    {
       "path": "apps/desktop-agent/src-tauri/src/telemetry_cmd.rs",
       "overlay": "enterprise"
     },
