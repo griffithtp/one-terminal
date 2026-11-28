@@ -66,7 +66,7 @@ npx create-one-terminal new-widget my-widget
 Either entrypoint asks for a title, picks the next free port (starting at 3010), and:
 
 - On **Standalone** — appends an entry to `widgets.config.json`. Restart the Terminal to see it in the launcher.
-- On **Enterprise** — prints a `curl` command to register the widget with the App Directory. If `OT_APPD_TOKEN` and `OT_APP_DIR_URL` are set, the wizard makes the call for you.
+- On **Enterprise** — registers the widget with the App Directory when it has a write token: `OT_APPD_TOKEN`, or the running Desktop Agent's per-run token (the `appd-token` file next to the user's `agent.config.json`). It posts to `OT_APP_DIR_URL` (default `http://localhost:3005/v2/apps`). Without a token it prints the `curl` command instead.
 
 ### Default ports
 
