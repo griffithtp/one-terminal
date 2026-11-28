@@ -76,6 +76,13 @@ If no file is found, built-in defaults are used (identical to the sample below).
     { "id": "Purple", "displayName": "Purple", "color": "#9B59B6" },
     { "id": "Pink", "displayName": "Pink", "color": "#EC407A" },
   ],
+
+  // What App Directory launches may hand to the OS opener besides http(s):
+  // URL schemes ("zoommtg:") and absolute folders whose files may be opened
+  // as file:// URLs. Empty by default: native / deep-link apps are refused.
+  "nativeApps": {
+    "allow": [],
+  },
 }
 ```
 
@@ -83,12 +90,13 @@ If no file is found, built-in defaults are used (identical to the sample below).
 
 All `OT_*` variables are applied on top of the file values after loading.
 
-| Variable           | Overrides          | Default                       |
-| ------------------ | ------------------ | ----------------------------- |
-| `OT_TITLE`         | `title`            | `"OneTerminal Desktop Agent"` |
-| `OT_APP_DIR_URL`   | `appDirectoryUrl`  | `http://localhost:3005`       |
-| `OT_CATALOG_URL`   | `engineCatalogUrl` | `http://localhost:3005`       |
-| `OT_FDC3_BUS_PORT` | `ports.fdc3Bus`    | `7891`                        |
+| Variable              | Overrides                                     | Default                       |
+| --------------------- | --------------------------------------------- | ----------------------------- |
+| `OT_TITLE`            | `title`                                       | `"OneTerminal Desktop Agent"` |
+| `OT_APP_DIR_URL`      | `appDirectoryUrl`                             | `http://localhost:3005`       |
+| `OT_CATALOG_URL`      | `engineCatalogUrl`                            | `http://localhost:3005`       |
+| `OT_FDC3_BUS_PORT`    | `ports.fdc3Bus`                               | `7891`                        |
+| `OT_NATIVE_APP_ALLOW` | `nativeApps.allow` (entries separated by `;`) | empty                         |
 
 ### Port conflict detection
 

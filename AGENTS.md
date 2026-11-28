@@ -145,35 +145,36 @@ Telemetry also honours the standard OpenTelemetry variables (`OTEL_EXPORTER_OTLP
 exported unless an endpoint is set. What is recorded, log locations and the widget API: [docs/telemetry.md](docs/telemetry.md).
 The standalone App Directory server (`apps/app-directory-server`) reads its vars from the process environment (Docker, shell, or `.env`).
 
-| Variable                     | Component     | Purpose                                                                                                                                                                |
-| ---------------------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `OT_FDC3_BUS_PORT`           | Desktop Agent | FDC3 Bus WS port (default 7891)                                                                                                                                        |
-| `OT_APP_DIR_URL`             | both          | App Directory URL (default `http://localhost:3005`)                                                                                                                    |
-| `OT_CATALOG_URL`             | both          | Engine catalog URL (default `http://localhost:3005`)                                                                                                                   |
-| `OT_APPD_EMBEDDED`           | Desktop Agent | `0` = don't mount the in-process App Directory                                                                                                                         |
-| `OT_WEBVIEW_POOL_SIZE`       | one-terminal  | Pre-warm pool size (default 1; 0 = disabled)                                                                                                                           |
-| `OT_NEW_TERMINAL`            | one-terminal  | Open one blank Terminal instead of restoring the saved session (set by the Desktop Agent's Open / tray)                                                                |
-| `OT_ENGINE_CACHE_ROOT`       | both          | Override engine cache root directory                                                                                                                                   |
-| `OT_TITLE`                   | both          | Window title override (also set by OneTerminal for engine host windows)                                                                                                |
-| `OT_FDC3_AGENT_URL`          | one-terminal  | FDC3 agent URL injected into widgets; overrides the saved Desktop Agent selection                                                                                      |
-| `OT_WIDGETS_CONFIG_PATH`     | one-terminal  | Path to the local `widgets.config.json`                                                                                                                                |
-| `OT_WIDGET_SOURCE`           | one-terminal  | Deprecated: parsed for back-compat only; the catalog always combines App Directory and local widgets                                                                   |
-| `OT_WINDOW_WIDTH`            | one-terminal  | Initial Terminal window width (px)                                                                                                                                     |
-| `OT_WINDOW_HEIGHT`           | one-terminal  | Initial Terminal window height (px)                                                                                                                                    |
-| `OT_FRESH_START`             | one-terminal  | Deprecated alias of `OT_NEW_TERMINAL`                                                                                                                                  |
-| `OT_ENGINE_FAMILY`           | one-terminal  | Pin the Terminal host's engine family (e.g. `webview2`; see `npm run dev:terminal:pin`)                                                                                |
-| `OT_ENGINE_VERSION`          | one-terminal  | Pin the Terminal host's engine version (with `OT_ENGINE_FAMILY`)                                                                                                       |
-| `OT_ENGINE_RUNTIME_OVERRIDE` | both          | Debug builds only: use this unzipped runtime directory instead of downloading one                                                                                      |
-| `OT_HOST_BINARY`             | both          | Dev override: path to the `tauri-webview-host` binary                                                                                                                  |
-| `OT_WM_BINARY`               | Desktop Agent | Dev override: path to the `one-terminal` binary                                                                                                                        |
-| `OT_ELECTRON_HOST_OVERRIDE`  | both          | Dev override: `apps/electron-host` directory (used by `npm run dev:*:electron`)                                                                                        |
-| `OT_ELECTRON_BIN`            | both          | Dev override: path to the Electron binary, bypassing the engine cache                                                                                                  |
-| `OT_LOG`                     | all binaries  | Log filter: a level plus `target=level` pairs, e.g. `info,desktop_agent_lib=debug`; overrides `RUST_LOG` and `telemetry.logLevel`                                      |
-| `OT_LOG_DIR`                 | all binaries  | Log file directory; overrides `telemetry.logDir` (default: macOS `~/Library/Logs/one-terminal`, Windows `%LOCALAPPDATA%\one-terminal\logs`)                            |
-| `OT_OTLP_ENDPOINT`           | all binaries  | OTLP/HTTP collector base URL (e.g. `http://localhost:4318`). Turns export on; overrides the standard `OTEL_EXPORTER_OTLP_*ENDPOINT` vars and `telemetry.otlp.endpoint` |
-| `OT_APPD_TOKEN`              | scaffolder    | Bearer token the `new-widget` wizard sends when registering a widget (the server doesn't check it yet)                                                                 |
-| `PORT`                       | App Directory | Standalone server listen port (default 3005)                                                                                                                           |
-| `CORS_ORIGIN`                | App Directory | Comma-separated allowed origins                                                                                                                                        |
+| Variable                     | Component     | Purpose                                                                                                                                                                    |
+| ---------------------------- | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `OT_FDC3_BUS_PORT`           | Desktop Agent | FDC3 Bus WS port (default 7891)                                                                                                                                            |
+| `OT_APP_DIR_URL`             | both          | App Directory URL (default `http://localhost:3005`)                                                                                                                        |
+| `OT_CATALOG_URL`             | both          | Engine catalog URL (default `http://localhost:3005`)                                                                                                                       |
+| `OT_APPD_EMBEDDED`           | Desktop Agent | `0` = don't mount the in-process App Directory                                                                                                                             |
+| `OT_NATIVE_APP_ALLOW`        | Desktop Agent | `;`-separated URL schemes (`zoommtg:`) and absolute folders the OS opener may open for App Directory launches besides http(s); replaces `nativeApps.allow` (default empty) |
+| `OT_WEBVIEW_POOL_SIZE`       | one-terminal  | Pre-warm pool size (default 1; 0 = disabled)                                                                                                                               |
+| `OT_NEW_TERMINAL`            | one-terminal  | Open one blank Terminal instead of restoring the saved session (set by the Desktop Agent's Open / tray)                                                                    |
+| `OT_ENGINE_CACHE_ROOT`       | both          | Override engine cache root directory                                                                                                                                       |
+| `OT_TITLE`                   | both          | Window title override (also set by OneTerminal for engine host windows)                                                                                                    |
+| `OT_FDC3_AGENT_URL`          | one-terminal  | FDC3 agent URL injected into widgets; overrides the saved Desktop Agent selection                                                                                          |
+| `OT_WIDGETS_CONFIG_PATH`     | one-terminal  | Path to the local `widgets.config.json`                                                                                                                                    |
+| `OT_WIDGET_SOURCE`           | one-terminal  | Deprecated: parsed for back-compat only; the catalog always combines App Directory and local widgets                                                                       |
+| `OT_WINDOW_WIDTH`            | one-terminal  | Initial Terminal window width (px)                                                                                                                                         |
+| `OT_WINDOW_HEIGHT`           | one-terminal  | Initial Terminal window height (px)                                                                                                                                        |
+| `OT_FRESH_START`             | one-terminal  | Deprecated alias of `OT_NEW_TERMINAL`                                                                                                                                      |
+| `OT_ENGINE_FAMILY`           | one-terminal  | Pin the Terminal host's engine family (e.g. `webview2`; see `npm run dev:terminal:pin`)                                                                                    |
+| `OT_ENGINE_VERSION`          | one-terminal  | Pin the Terminal host's engine version (with `OT_ENGINE_FAMILY`)                                                                                                           |
+| `OT_ENGINE_RUNTIME_OVERRIDE` | both          | Debug builds only: use this unzipped runtime directory instead of downloading one                                                                                          |
+| `OT_HOST_BINARY`             | both          | Dev override: path to the `tauri-webview-host` binary                                                                                                                      |
+| `OT_WM_BINARY`               | Desktop Agent | Dev override: path to the `one-terminal` binary                                                                                                                            |
+| `OT_ELECTRON_HOST_OVERRIDE`  | both          | Dev override: `apps/electron-host` directory (used by `npm run dev:*:electron`)                                                                                            |
+| `OT_ELECTRON_BIN`            | both          | Dev override: path to the Electron binary, bypassing the engine cache                                                                                                      |
+| `OT_LOG`                     | all binaries  | Log filter: a level plus `target=level` pairs, e.g. `info,desktop_agent_lib=debug`; overrides `RUST_LOG` and `telemetry.logLevel`                                          |
+| `OT_LOG_DIR`                 | all binaries  | Log file directory; overrides `telemetry.logDir` (default: macOS `~/Library/Logs/one-terminal`, Windows `%LOCALAPPDATA%\one-terminal\logs`)                                |
+| `OT_OTLP_ENDPOINT`           | all binaries  | OTLP/HTTP collector base URL (e.g. `http://localhost:4318`). Turns export on; overrides the standard `OTEL_EXPORTER_OTLP_*ENDPOINT` vars and `telemetry.otlp.endpoint`     |
+| `OT_APPD_TOKEN`              | scaffolder    | Bearer token the `new-widget` wizard sends when registering a widget (the server doesn't check it yet)                                                                     |
+| `PORT`                       | App Directory | Standalone server listen port (default 3005)                                                                                                                               |
+| `CORS_ORIGIN`                | App Directory | Comma-separated allowed origins                                                                                                                                            |
 
 ### Internal variables
 
@@ -188,7 +189,7 @@ Set by OneTerminal for its own child processes. Don't set them by hand.
 | `OT_TELEMETRY_TOKEN`  | Terminal, Desktop Agent → `tauri-webview-host`, `electron-host` | The host window's token for that endpoint (HMAC-signed by the spawning process; never the key). Never passed to plugin binaries                                                            |
 | `OT_SPAWNED_BY_AGENT` | Desktop Agent → one-terminal                                    | Marks a Terminal the Desktop Agent spawned. Under `tauri dev`, a Terminal without it keeps running with no windows                                                                         |
 
-Not yet implemented (planned): `OT_NATIVE_APP_ALLOW_PATHS`, `APPD_DB_PATH`, `APPD_JWT_SECRET`, `APPD_ALLOW_ANONYMOUS_READ`, `APPD_AUTH_PLUGIN_URL` (Auth Provider plugin on 4477, OIDC redirect on 4476). The App Directory store is in-memory, seeded from `packages/ot-appdirectory/src/data.rs`.
+Not yet implemented (planned): `APPD_DB_PATH`, `APPD_JWT_SECRET`, `APPD_ALLOW_ANONYMOUS_READ`, `APPD_AUTH_PLUGIN_URL` (Auth Provider plugin on 4477, OIDC redirect on 4476). The App Directory store is in-memory, seeded from `packages/ot-appdirectory/src/data.rs`.
 
 ## FDC3 architecture (summary)
 

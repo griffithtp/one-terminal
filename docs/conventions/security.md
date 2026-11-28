@@ -125,8 +125,9 @@ injected by the Terminal into each webview it hosts.
   http(s) with a host or is a local origin on any OS, `*.localhost` included
   (`400`, `Invalid details.url: …`); the
   Desktop Agent re-checks in `plan_launch`, since records may predate the check. `native`,
-  `citrix` and `other` URLs go to the OS opener unchecked (deep links, `file://`) — any
-  local process can register one, so this stays open until writes are authenticated.
+  `citrix` and `other` URLs reach the OS opener only through the `nativeApps.allow`
+  check (see Process spawning): `file:` paths and custom schemes are refused unless
+  listed.
 - The embedded App Directory binds to `127.0.0.1` and has no CORS layer, so browsers block
   cross-origin JSON writes (preflight fails). The standalone server allows only the
   origins in `CORS_ORIGIN`.
@@ -169,8 +170,12 @@ injected by the Terminal into each webview it hosts.
   per app id and 32 in total, because any FDC3 client can request launches. Processes are
   tracked by PID, reaped when they exit and killed when the Desktop Agent exits. A new
   spawn path must reserve a slot and `track` its child — never drop the `Child`.
-- Native app launch (planned) must be allow-list based
-  (`OT_NATIVE_APP_ALLOW_PATHS`).
+- App Directory launches that go to the OS opener (`web`, `native`, `citrix`, `other`)
+  pass `native_launch::check` first. http(s) always opens, in the browser. A `file:`
+  target must exist and its canonical path must sit inside a folder listed in
+  `nativeApps.allow` / `OT_NATIVE_APP_ALLOW`. Any other scheme must be listed as
+  `<scheme>:`. Bare paths are refused. The list is empty by default. Never call
+  `tauri_plugin_opener::open_url` with an App Directory URL directly.
 
 ## Secrets and dependencies
 
