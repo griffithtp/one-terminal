@@ -84,6 +84,20 @@ pub struct AgentConfig {
     /// `ot_telemetry::resolve`, not here.
     #[serde(default)]
     pub telemetry: TelemetryConfig,
+    /// What App Directory launches may hand to the OS opener besides
+    /// http(s) (see `native_launch`). `OT_NATIVE_APP_ALLOW` replaces it.
+    #[serde(default)]
+    pub native_apps: NativeAppsConfig,
+}
+
+/// `nativeApps` in `agent.config.json`.
+#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NativeAppsConfig {
+    /// URL schemes (`"zoommtg:"`) and absolute folder paths whose files may
+    /// be opened. Empty: only http(s).
+    #[serde(default)]
+    pub allow: Vec<String>,
 }
 
 fn default_appd_embedded() -> bool {
@@ -188,7 +202,7 @@ impl AgentConfig {
             None => {}
         }
         let src = |key: &str| sources.get(key).map(String::as_str).unwrap_or("default");
-        let rows: [(&str, String); 6] = [
+        let rows: [(&str, String); 7] = [
             ("title", self.title.clone()),
             (
                 "appDirectoryUrl",
@@ -204,6 +218,7 @@ impl AgentConfig {
                 "userChannels",
                 format!("{} channels", self.user_channels.len()),
             ),
+            ("nativeApps.allow", format!("{:?}", self.native_apps.allow)),
         ];
         for (key, value) in rows {
             report.info(format!("config {key} = {value} ({})", src(key)));
@@ -221,6 +236,7 @@ impl AgentConfig {
             user_channels: Self::default_channels(),
             appd_embedded: true,
             telemetry: TelemetryConfig::default(),
+            native_apps: NativeAppsConfig::default(),
         }
     }
 
@@ -332,6 +348,10 @@ impl AgentConfig {
         if let Ok(v) = std::env::var("OT_APPD_EMBEDDED") {
             cfg.appd_embedded = !matches!(v.as_str(), "0" | "false" | "FALSE" | "False");
             set("appdEmbedded", "OT_APPD_EMBEDDED");
+        }
+        if let Ok(v) = std::env::var("OT_NATIVE_APP_ALLOW") {
+            cfg.native_apps.allow = crate::native_launch::parse_env(&v);
+            set("nativeApps.allow", "OT_NATIVE_APP_ALLOW");
         }
         cfg
     }
@@ -591,6 +611,28 @@ mod tests {
         cfg.log_effective(&sources, None, Some(&user), &mut report);
         let text = format!("{:?}", report.lines);
         assert!(!text.contains("pw") && !text.contains("t0k"), "{text}");
+    }
+
+    #[test]
+    fn native_apps_allow_defaults_empty_and_loads_from_user_config() {
+        let (cfg, _) = AgentConfig::load_layers(None, None, &mut LoadReport::default());
+        assert!(cfg.native_apps.allow.is_empty());
+
+        let d = tmp_dir("native");
+        let user = write(
+            &d,
+            "u.json",
+            r#"{"nativeApps":{"allow":["zoommtg:","/opt/tools"]}}"#,
+        );
+        let mut report = LoadReport::default();
+        let (cfg, sources) = AgentConfig::load_layers(None, Some(&user), &mut report);
+        assert_eq!(cfg.native_apps.allow, vec!["zoommtg:", "/opt/tools"]);
+        assert_eq!(sources["nativeApps.allow"], "user config");
+        assert!(
+            report.lines.iter().all(|(s, _)| *s == Severity::Info),
+            "nativeApps is a known key: {:?}",
+            report.lines
+        );
     }
 
     #[test]
